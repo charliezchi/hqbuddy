@@ -5,6 +5,7 @@ import sys
 
 from . import __version__
 from .hqprj_parser import extract_filelist
+from .flow import run_flow
 
 
 def show_help():
@@ -19,11 +20,16 @@ Options:
                   The $WORK_DIR$ placeholder is resolved to the .hqprj directory
                   Output is saved to filelist.f in the same directory as the .hqprj
                   Use -o to specify a custom output path
+  -flow <file>    Run hqprj2tcl flow via hqlauncher
+                  Generates run_hqprj.tcl in the .hqprj directory by default
+                  Use -o to specify a custom output TCL file
 
 Examples:
   hqbuddy -v
   hqbuddy -filelist example/ddrc_native_demo.hqprj
   hqbuddy -filelist example/ddrc_native_demo.hqprj -o custom.f
+  hqbuddy -flow example/ddrc_native_demo.hqprj
+  hqbuddy -flow example/ddrc_native_demo.hqprj -o my_output.tcl
 """)
 
 
@@ -64,6 +70,25 @@ def cmd_filelist(args):
     print(f"Filelist saved to: {os.path.abspath(output_file)} ({len(files)} files)")
 
 
+def cmd_flow(args):
+    """Run hqprj2tcl flow via hqlauncher."""
+    if not args:
+        print("Error: -flow requires an .hqprj file path")
+        sys.exit(1)
+
+    hqprj_path = args[0]
+
+    # Check for -o output option
+    output_tcl = None
+    if len(args) >= 3 and args[1] == '-o':
+        output_tcl = args[2]
+    elif len(args) >= 2 and args[1].startswith('-o'):
+        # Handle -o<file> without space
+        output_tcl = args[1][2:]
+
+    run_flow(hqprj_path, output_tcl)
+
+
 def main():
     """Main entry point."""
     args = sys.argv[1:]
@@ -85,6 +110,11 @@ def main():
     # Filelist
     if args[0] == '-filelist':
         cmd_filelist(args[1:])
+        return
+
+    # Flow
+    if args[0] == '-flow':
+        cmd_flow(args[1:])
         return
 
     print(f"Error: unknown option: {args[0]}")
