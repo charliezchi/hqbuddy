@@ -4,13 +4,14 @@
 
 ## 当前版本
 
-0.0.2
+0.0.3
 
 ## 功能特点
 
 - **提取 filelist**：从 `.hqprj` 工程文件中提取 `FILE_SRC` 源文件列表
 - **路径解析**：自动将 `$WORK_DIR$` 替换为 `.hqprj` 文件所在目录的绝对路径
 - **Flow 执行**：通过 hqlauncher 调用 `hqprj2tcl` 生成 TCL 脚本
+- **自动检测**：`-filelist` 和 `-flow` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
 - **零依赖运行**：提供独立 `exe`，无 Python 环境也能开箱即用
 
 ## 开箱即用
@@ -35,15 +36,19 @@ hqbuddy -v
 ### 提取 filelist
 
 ```bat
+hqbuddy -filelist                          # 自动检测当前目录的 .hqprj
 hqbuddy -filelist example/ddrc_native_demo.hqprj
 hqbuddy -filelist example/ddrc_native_demo.hqprj -o filelist.f
+hqbuddy -filelist -o filelist.f            # 自动检测 + 自定义输出
 ```
 
 ### 执行 Flow（生成 TCL）
 
 ```bat
+hqbuddy -flow                              # 自动检测当前目录的 .hqprj
 hqbuddy -flow example/ddrc_native_demo.hqprj
 hqbuddy -flow example/ddrc_native_demo.hqprj -o my_output.tcl
+hqbuddy -flow -o my_output.tcl             # 自动检测 + 自定义输出
 ```
 
 **依赖**：`-flow` 需要 [hqlauncher](https://github.com/charliezchi/hqlauncher) 已安装并在 PATH 中。
@@ -60,10 +65,10 @@ hqbuddy -h              # 显示帮助
 |------|------|
 | `-h` | 显示帮助 |
 | `-v` | 显示版本 |
-| `-filelist <file>` | 从 `.hqprj` 提取 FILE_SRC filelist |
-| `-filelist <file> -o <out>` | 将 filelist 输出到指定文件 |
-| `-flow <file>` | 通过 hqlauncher 执行 hqprj2tcl，默认生成 `run_hqprj.tcl` |
-| `-flow <file> -o <out>` | 指定生成的 TCL 文件名 |
+| `-filelist [<file>]` | 从 `.hqprj` 提取 FILE_SRC filelist，省略时自动检测 |
+| `-filelist [<file>] -o <out>` | 将 filelist 输出到指定文件 |
+| `-flow [<file>]` | 通过 hqlauncher 执行 hqprj2tcl，省略时自动检测，默认生成 `run_hqprj.tcl` |
+| `-flow [<file>] -o <out>` | 指定生成的 TCL 文件名 |
 
 ## 开发与打包
 
