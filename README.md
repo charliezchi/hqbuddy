@@ -4,14 +4,16 @@
 
 ## 当前版本
 
-0.0.3
+0.0.4
 
 ## 功能特点
 
 - **提取 filelist**：从 `.hqprj` 工程文件中提取 `FILE_SRC` 源文件列表
 - **路径解析**：自动将 `$WORK_DIR$` 替换为 `.hqprj` 文件所在目录的绝对路径
 - **Flow 执行**：通过 hqlauncher 调用 `hqprj2tcl` 生成 TCL 脚本
-- **自动检测**：`-filelist` 和 `-flow` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
+- **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式
+- **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件
+- **自动检测**：`-filelist`、`-flow`、`-xpn` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
 - **零依赖运行**：提供独立 `exe`，无 Python 环境也能开箱即用
 
 ## 开箱即用
@@ -53,6 +55,43 @@ hqbuddy -flow -o my_output.tcl             # 自动检测 + 自定义输出
 
 **依赖**：`-flow` 需要 [hqlauncher](https://github.com/charliezchi/hqlauncher) 已安装并在 PATH 中。
 
+### 生成 XPN（普通模式）
+
+从 `hq_run/hq_temp/_step_run_route.dump` 生成 XPN 文件。
+
+```bat
+hqbuddy -xpn                               # 自动检测，默认生成 hq.xpn
+hqbuddy -xpn example/ddrc_native_demo.hqprj
+hqbuddy -xpn -o my_design.xpn              # 自动检测，生成 my_design.xpn
+hqbuddy -xpn example/ddrc_native_demo.hqprj -o my_design.xpn
+```
+
+### 生成 XPN（hqinsight 模式）
+
+从 `hqins_run/hq_import/hqins_impl/hq_temp/_step_run_route.dump` 生成 XPN 文件。
+
+```bat
+hqbuddy -xpn -ins                          # 自动检测，默认生成 hq_ins.xpn
+hqbuddy -xpn -ins example/ddrc_native_demo.hqprj
+hqbuddy -xpn -ins -o my_ins_design.xpn     # 自动检测，生成 my_ins_design.xpn
+hqbuddy -xpn -ins example/ddrc_native_demo.hqprj -o my_ins_design.xpn
+```
+
+**依赖**：`-xpn` 和 `-xpn -ins` 需要 [hqlauncher](https://github.com/charliezchi/hqlauncher) 已安装并在 PATH 中。
+
+### XPN 转 BIN
+
+将 `.xpn` 文件转换为 `.bin` 比特流文件。
+
+```bat
+hqbuddy -xpn2bin                           # 自动检测当前目录的 .xpn
+hqbuddy -xpn2bin debug.xpn                 # 默认生成 debug.bin
+hqbuddy -xpn2bin -o my_bitstream.bin       # 自动检测 + 自定义输出
+hqbuddy -xpn2bin debug.xpn -o my_bitstream.bin
+```
+
+**依赖**：`-xpn2bin` 需要 [hqlauncher](https://github.com/charliezchi/hqlauncher) 已安装并在 PATH 中。
+
 ### 其他命令
 
 ```bat
@@ -69,6 +108,9 @@ hqbuddy -h              # 显示帮助
 | `-filelist [<file>] -o <out>` | 将 filelist 输出到指定文件 |
 | `-flow [<file>]` | 通过 hqlauncher 执行 hqprj2tcl，省略时自动检测，默认生成 `run_hqprj.tcl` |
 | `-flow [<file>] -o <out>` | 指定生成的 TCL 文件名 |
+| `-xpn [<file>] [-o <file>]` | 生成 XPN（普通模式），省略时自动检测，默认生成 `hq.xpn` |
+| `-xpn -ins [<file>] [-o <file>]` | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成 `hq_ins.xpn` |
+| `-xpn2bin [<file>] [-o <file>]` | 将 XPN 转换为 BIN，省略时自动检测，默认生成 `<input>.bin` |
 
 ## 开发与打包
 
@@ -107,7 +149,9 @@ hqbuddy/
 │   ├── __init__.py       # 版本号
 │   ├── __main__.py       # CLI 入口
 │   ├── hqprj_parser.py   # .hqprj 解析核心
-│   └── flow.py           # Flow 执行（hqlauncher 调用）
+│   ├── flow.py           # Flow 执行（hqlauncher 调用）
+│   ├── xpn.py            # XPN 生成（普通模式 + hqinsight 模式）
+│   └── xpn2bin.py        # XPN 转 BIN
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
 ├── build.ps1             # 构建 / 清理统一管理，build 成功后自动注册 PATH
 ├── .gitignore
