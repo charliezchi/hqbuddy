@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import sys
+import webbrowser
 
 
 def _check_hqlauncher() -> str | None:
@@ -125,3 +126,16 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
             os.remove(temp_tcl)
             print(f"")
             print(f"Cleaned up temp TCL: {temp_tcl}")
+
+    # Auto-open the generated XPN file
+    output_abs = os.path.join(work_dir, output_xpn)
+    if os.path.isfile(output_abs):
+        print(f"")
+        print(f"Opening XPN file: {output_abs}")
+        try:
+            webbrowser.open(f"file:///{output_abs.replace(os.sep, '/')}")
+        except Exception as e:
+            print(f"Warning: failed to open XPN file: {e}")
+    else:
+        print(f"")
+        print(f"Warning: XPN file was not generated: {output_abs}")

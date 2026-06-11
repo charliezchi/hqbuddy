@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-0.0.4
+0.0.5
 
 ## 功能特点
 
@@ -57,7 +57,7 @@ hqbuddy -flow -o my_output.tcl             # 自动检测 + 自定义输出
 
 ### 生成 XPN（普通模式）
 
-从 `hq_run/hq_temp/_step_run_route.dump` 生成 XPN 文件。
+从 `hq_run/hq_temp/_step_run_route.dump` 生成 XPN 文件。生成完成后会自动打开 XPN 文件。
 
 ```bat
 hqbuddy -xpn                               # 自动检测，默认生成 hq.xpn
@@ -68,7 +68,7 @@ hqbuddy -xpn example/ddrc_native_demo.hqprj -o my_design.xpn
 
 ### 生成 XPN（hqinsight 模式）
 
-从 `hqins_run/hq_import/hqins_impl/hq_temp/_step_run_route.dump` 生成 XPN 文件。
+从 `hqins_run/hq_import/hqins_impl/hq_temp/_step_run_route.dump` 生成 XPN 文件。生成完成后会自动打开 XPN 文件。
 
 ```bat
 hqbuddy -xpn -ins                          # 自动检测，默认生成 hq_ins.xpn
