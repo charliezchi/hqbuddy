@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-0.0.5
+1.0.0
 
 ## 功能特点
 
@@ -13,7 +13,9 @@
 - **Flow 执行**：通过 hqlauncher 调用 `hqprj2tcl` 生成 TCL 脚本
 - **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件
-- **自动检测**：`-filelist`、`-flow`、`-xpn` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
+- **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性）
+- **IP 罗列**：列出工程中使用的 `.hqip` IP 配置文件
+- **自动检测**：`-filelist`、`-flow`、`-xpn`、`-device`、`-ip` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
 - **零依赖运行**：提供独立 `exe`，无 Python 环境也能开箱即用
 
 ## 开箱即用
@@ -92,6 +94,33 @@ hqbuddy -xpn2bin debug.xpn -o my_bitstream.bin
 
 **依赖**：`-xpn2bin` 需要 [hqlauncher](https://github.com/charliezchi/hqlauncher) 已安装并在 PATH 中。
 
+### 查看/修改器件
+
+查看 `.hqprj` 当前使用的器件型号（格式：DIE-SPEED-PACKAGE-CONDITION）。
+
+```bat
+hqbuddy -device                            # 自动检测当前目录的 .hqprj
+hqbuddy -device example/ddrc_native_demo.hqprj
+```
+
+修改 `.hqprj` 的器件型号，修改前会通过 `hqlauncher -ls -device` 验证器件是否合法。修改 `.hqprj` 的同时，会自动同步修改工程中直接使用的 `.hqip` IP 配置文件中的 `device=` 字段。
+
+**注意**：此功能仅支持直接加入到工程中的文件（即 `.hqprj` 的 `FILE_SRC` 中列出的文件），不支持通过 `include` 等方式间接引用的文件。
+
+```bat
+hqbuddy -device -set SA5T-100-D0-7F676CI
+hqbuddy -device -set SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
+```
+
+### 列出 IP 配置文件
+
+列出工程中所有使用的 `.hqip` 文件。对每个 `FILE_SRC` 源文件，检查同目录下是否存在同名 `.hqip` 文件。
+
+```bat
+hqbuddy -ip -ls                            # 自动检测当前目录的 .hqprj
+hqbuddy -ip -ls example/ddrc_native_demo.hqprj
+```
+
 ### 其他命令
 
 ```bat
@@ -111,6 +140,9 @@ hqbuddy -h              # 显示帮助
 | `-xpn [<file>] [-o <file>]` | 生成 XPN（普通模式），省略时自动检测，默认生成 `hq.xpn` |
 | `-xpn -ins [<file>] [-o <file>]` | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成 `hq_ins.xpn` |
 | `-xpn2bin [<file>] [-o <file>]` | 将 XPN 转换为 BIN，省略时自动检测，默认生成 `<input>.bin` |
+| `-device [<file>]` | 查看 `.hqprj` 使用的器件型号 |
+| `-device -set <part> [<file>]` | 修改 `.hqprj` 及关联 `.hqip` 的器件型号，并验证合法性 |
+| `-ip -ls [<file>]` | 列出工程中使用的 `.hqip` 文件 |
 
 ## 开发与打包
 
@@ -151,7 +183,9 @@ hqbuddy/
 │   ├── hqprj_parser.py   # .hqprj 解析核心
 │   ├── flow.py           # Flow 执行（hqlauncher 调用）
 │   ├── xpn.py            # XPN 生成（普通模式 + hqinsight 模式）
-│   └── xpn2bin.py        # XPN 转 BIN
+│   ├── xpn2bin.py        # XPN 转 BIN
+│   ├── device.py         # 器件查看/修改
+│   └── ipmgr.py          # IP 配置文件管理
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
 ├── build.ps1             # 构建 / 清理统一管理，build 成功后自动注册 PATH
 ├── .gitignore

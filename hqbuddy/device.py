@@ -1,0 +1,274 @@
+"""Device part management: get/set device from .hqprj and .hqip files."""
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+from .ipmgr import list_ip_files
+
+
+# Regex to parse device part strings like SA5T-200-D0-7H676CI
+_DEVICE_PART_RE = re.compile(
+    r"^(?P<die>.+)-(?P<speed>\d)(?P<package>[A-Za-z]\d+)(?P<condition>[A-Za-z]+)$"
+)
+
+
+def _parse_key_value(line: str) -> tuple[str, str] | None:
+    """
+    Parse a key=value line from .hqprj.
+
+    Returns:
+        Tuple of (key, value) or None if not a valid key=value line.
+    """
+    if "=" not in line:
+        return None
+    key, value = line.split("=", 1)
+    return key.strip(), value.strip()
+
+
+def _check_hqlauncher() -> str | None:
+    """Check if hqlauncher is available in PATH."""
+    return shutil.which("hqlauncher")
+
+
+def _get_valid_devices() -> set[str]:
+    """
+    Query hqlauncher for the list of valid device part numbers.
+
+    Returns:
+        A set of valid device part strings.
+    """
+    hqlauncher_path = _check_hqlauncher()
+    if not hqlauncher_path:
+        print("Error: hqlauncher is not found in PATH.")
+        print("")
+        print("HqBuddy requires hqlauncher to validate device parts.")
+        print("Please install hqlauncher first:")
+        print("  https://github.com/charliezchi/hqlauncher")
+        print("")
+        print("After installation, restart your terminal and try again.")
+        sys.exit(1)
+
+    try:
+        result = subprocess.run(
+            [hqlauncher_path, "-ls", "-device"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        devices = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+        return devices
+    except subprocess.CalledProcessError as e:
+        print(f"Error: failed to query device list from hqlauncher.")
+        print(f"  {e}")
+        if e.stderr:
+            print(f"  {e.stderr.strip()}")
+        sys.exit(1)
+
+
+
+
+
+def get_device(hqprj_path: str) -> str:
+    """
+    Get the current device part from an .hqprj file.
+
+    The device part is composed as DIE-SPEEDPACKAGE-CONDITION.
+
+    Args:
+        hqprj_path: Path to the .hqprj file.
+
+    Returns:
+        The device part string.
+    """
+    if not os.path.isfile(hqprj_path):
+        print(f"Error: file not found: {hqprj_path}")
+        sys.exit(1)
+
+    die = None
+    speed = None
+    package = None
+    condition = None
+
+    with open(hqprj_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            parsed = _parse_key_value(line)
+            if not parsed:
+                continue
+            key, value = parsed
+            if key == "DIE":
+                die = value
+            elif key == "SPEEDS":
+                speed = value
+            elif key == "PACKAGES":
+                package = value
+            elif key == "CONDITION":
+                condition = value
+
+    if not all([die, speed, package, condition]):
+        missing = [k for k, v in {
+            "DIE": die, "SPEEDS": speed, "PACKAGES": package, "CONDITION": condition
+        }.items() if not v]
+        print(f"Error: missing device field(s) in .hqprj: {', '.join(missing)}")
+        sys.exit(1)
+
+    return f"{die}-{speed}{package}{condition}"
+
+
+def _update_hqprj_device(hqprj_path: str, part: str, die: str, speed: str, package: str, condition: str) -> None:
+    """Update device fields in the .hqprj file."""
+    with open(hqprj_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    updated = False
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        parsed = _parse_key_value(stripped)
+        if parsed:
+            key, _ = parsed
+            if key == "DIE":
+                new_lines.append(f"DIE={die}\n")
+                updated = True
+                continue
+            elif key == "SPEEDS":
+                new_lines.append(f"SPEEDS={speed}\n")
+                updated = True
+                continue
+            elif key == "PACKAGES":
+                new_lines.append(f"PACKAGES={package}\n")
+                updated = True
+                continue
+            elif key == "CONDITION":
+                new_lines.append(f"CONDITION={condition}\n")
+                updated = True
+                continue
+        new_lines.append(line)
+
+    if not updated:
+        print("Error: no device fields found to update in .hqprj.")
+        sys.exit(1)
+
+    with open(hqprj_path, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+
+    print(f"Device updated to: {part}")
+    print(f"File: {os.path.abspath(hqprj_path)}")
+
+
+def _update_hqip_device(hqip_path: str, part: str) -> bool:
+    """
+    Update the device field in a single .hqip file.
+
+    Args:
+        hqip_path: Path to the .hqip file.
+        part: New device part string.
+
+    Returns:
+        True if updated, False otherwise.
+    """
+    if not os.path.isfile(hqip_path):
+        return False
+
+    with open(hqip_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    # Find [IP] section and update device= under it
+    in_ip_section = False
+    updated = False
+    new_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Section header
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_ip_section = (stripped == "[IP]")
+            new_lines.append(line)
+            continue
+
+        # Update device= only in [IP] section
+        if in_ip_section and stripped.startswith("device="):
+            new_lines.append(f"device={part}\n")
+            updated = True
+            continue
+
+        new_lines.append(line)
+
+    if updated:
+        with open(hqip_path, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+
+    return updated
+
+
+def set_device(hqprj_path: str, part: str, update_ip: bool = True) -> None:
+    """
+    Set the device part in an .hqprj file after validating it.
+
+    Optionally also updates the device field in all related .hqip files.
+
+    Args:
+        hqprj_path: Path to the .hqprj file.
+        part: The new device part string (e.g. SA5T-200-D0-7H676CI).
+        update_ip: If True, also update related .hqip files.
+    """
+    if not os.path.isfile(hqprj_path):
+        print(f"Error: file not found: {hqprj_path}")
+        sys.exit(1)
+
+    # Validate part format: DIE-SPEEDPACKAGE-CONDITION
+    match = _DEVICE_PART_RE.match(part)
+    if not match:
+        print("Error: device part must be in format DIE-SPEEDPACKAGE-CONDITION")
+        print(f"  Example: SA5T-200-D0-7H676CI")
+        sys.exit(1)
+
+    die = match.group("die")
+    speed = match.group("speed")
+    package = match.group("package")
+    condition = match.group("condition")
+
+    # Validate against hqlauncher device list
+    valid_devices = _get_valid_devices()
+    if part not in valid_devices:
+        print(f"Error: invalid device part: {part}")
+        print(f"")
+        print(f"Please use a valid device part from 'hqlauncher -ls -device'.")
+        sys.exit(1)
+
+    # Update .hqprj
+    _update_hqprj_device(hqprj_path, part, die, speed, package, condition)
+
+    # Update related .hqip files
+    if update_ip:
+        print(f"")
+        print("Updating related .hqip files...")
+        ip_files = list_ip_files(hqprj_path)
+        updated_count = 0
+        for hqip_path in ip_files:
+            if _update_hqip_device(hqip_path, part):
+                print(f"  [OK] {os.path.abspath(hqip_path)}")
+                updated_count += 1
+            else:
+                print(f"  [SKIP] No device field in [IP] section: {os.path.abspath(hqip_path)}")
+        print(f"")
+        print(f"Updated {updated_count} .hqip file(s).")
+
+
+def run_device(hqprj_path: str, part: str | None = None) -> None:
+    """
+    Get or set the device part for an .hqprj file.
+
+    Args:
+        hqprj_path: Path to the .hqprj file.
+        part: Optional new device part to set. If None, print current part.
+    """
+    if part:
+        set_device(hqprj_path, part)
+    else:
+        current = get_device(hqprj_path)
+        print(f"Device: {current}")

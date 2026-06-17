@@ -9,6 +9,8 @@ from .hqprj_parser import extract_filelist
 from .flow import run_flow
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
+from .device import run_device
+from .ipmgr import print_ip_files
 
 
 def show_help():
@@ -44,6 +46,19 @@ Options:
                   If <file> is omitted, auto-detects the first .xpn in current directory
                   Default output: <input>.bin in the same directory as the .xpn
                   Use -o to specify a custom output file (e.g. my_output.bin)
+  -device [<file>]
+                  Show the device part used by the .hqprj project
+                  If <file> is omitted, auto-detects the first .hqprj in current directory
+                  Device format: DIE-SPEED-PACKAGE-CONDITION
+  -device -set <part> [<file>]
+                  Set the device part for the .hqprj project
+                  Validates <part> against hqlauncher -ls -device
+                  If <file> is omitted, auto-detects the first .hqprj in current directory
+  -ip -ls [<file>]
+                  List all .hqip files used by the project
+                  Searches for .hqip files with the same base name in the same directory
+                  as each FILE_SRC entry in the .hqprj
+                  If <file> is omitted, auto-detects the first .hqprj in current directory
 
 Examples:
   hqbuddy -v
@@ -63,6 +78,12 @@ Examples:
   hqbuddy -xpn2bin debug.xpn
   hqbuddy -xpn2bin -o my_output.bin
   hqbuddy -xpn2bin debug.xpn -o my_output.bin
+  hqbuddy -device
+  hqbuddy -device example/ddrc_native_demo.hqprj
+  hqbuddy -device -set SA5T-100-D0-7F676CI
+  hqbuddy -device -set SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
+  hqbuddy -ip -ls
+  hqbuddy -ip -ls example/ddrc_native_demo.hqprj
 """)
 
 
@@ -204,6 +225,39 @@ def cmd_xpn2bin(args):
     run_xpn2bin(xpn_path, bin_path)
 
 
+def cmd_device(args):
+    """Get or set device part for .hqprj."""
+    # Check for -set flag first
+    if args and args[0] == '-set':
+        if len(args) < 2:
+            print("Error: -set requires a device part")
+            sys.exit(1)
+        part = args[1]
+        remaining = args[2:]
+        hqprj_path = _resolve_hqprj(remaining[0] if remaining else None)
+        run_device(hqprj_path, part)
+    else:
+        hqprj_path = _resolve_hqprj(args[0] if args else None)
+        run_device(hqprj_path, None)
+
+
+def cmd_ip(args):
+    """IP management commands."""
+    if not args:
+        print("Error: -ip requires a subcommand (e.g. -ls)")
+        sys.exit(1)
+
+    if args[0] == '-ls':
+        hqprj_path = _resolve_hqprj(args[1] if len(args) > 1 else None)
+        if not os.path.isfile(hqprj_path):
+            print(f"Error: file not found: {hqprj_path}")
+            sys.exit(1)
+        print_ip_files(hqprj_path)
+    else:
+        print(f"Error: unknown -ip subcommand: {args[0]}")
+        sys.exit(1)
+
+
 def main():
     """Main entry point."""
     args = sys.argv[1:]
@@ -240,6 +294,16 @@ def main():
     # XPN to BIN
     if args[0] == '-xpn2bin':
         cmd_xpn2bin(args[1:])
+        return
+
+    # Device
+    if args[0] == '-device':
+        cmd_device(args[1:])
+        return
+
+    # IP
+    if args[0] == '-ip':
+        cmd_ip(args[1:])
         return
 
     print(f"Error: unknown option: {args[0]}")
