@@ -11,6 +11,7 @@ from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .device import run_device
 from .ipmgr import print_ip_files
+from .simlib import run_simlib
 
 
 def show_help():
@@ -59,6 +60,11 @@ Options:
                   Searches for .hqip files with the same base name in the same directory
                   as each FILE_SRC entry in the .hqprj
                   If <file> is omitted, auto-detects the first .hqprj in current directory
+  -simlib [<dir>]
+                  Compile XiST simulation library into ModelSim/QuestaSim
+                  If <dir> is omitted, auto-detects HQFPGA root via hqlauncher -env
+                  Copies bundled compile_xist.tcl to XIST directory and runs vsim -c -do
+                  Updates ModelSim/QuestaSim modelsim.ini with XiST library mapping
 
 Examples:
   hqbuddy -v
@@ -84,6 +90,8 @@ Examples:
   hqbuddy -device -set SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
   hqbuddy -ip -ls
   hqbuddy -ip -ls example/ddrc_native_demo.hqprj
+  hqbuddy -simlib
+  hqbuddy -simlib C:/hqv3_xist_3.1.1_FT053026_win64
 """)
 
 
@@ -258,6 +266,14 @@ def cmd_ip(args):
         sys.exit(1)
 
 
+def cmd_simlib(args):
+    """Compile XiST simulation library."""
+    hqfpga_root = None
+    if args:
+        hqfpga_root = args[0]
+    run_simlib(hqfpga_root)
+
+
 def main():
     """Main entry point."""
     args = sys.argv[1:]
@@ -304,6 +320,11 @@ def main():
     # IP
     if args[0] == '-ip':
         cmd_ip(args[1:])
+        return
+
+    # Simlib
+    if args[0] == '-simlib':
+        cmd_simlib(args[1:])
         return
 
     print(f"Error: unknown option: {args[0]}")

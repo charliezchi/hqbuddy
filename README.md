@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-1.0.0
+1.1.0
 
 ## 功能特点
 
@@ -15,6 +15,7 @@
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性）
 - **IP 罗列**：列出工程中使用的 `.hqip` IP 配置文件
+- **仿真库编译**：自动将 XiST 原语仿真库编译到 ModelSim/QuestaSim 中
 - **自动检测**：`-filelist`、`-flow`、`-xpn`、`-device`、`-ip` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
 - **零依赖运行**：提供独立 `exe`，无 Python 环境也能开箱即用
 
@@ -112,7 +113,7 @@ hqbuddy -device -set SA5T-100-D0-7F676CI
 hqbuddy -device -set SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
 ```
 
-### 列出 IP 配置文件
+:### 列出 IP 配置文件
 
 列出工程中所有使用的 `.hqip` 文件。对每个 `FILE_SRC` 源文件，检查同目录下是否存在同名 `.hqip` 文件。
 
@@ -120,6 +121,22 @@ hqbuddy -device -set SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
 hqbuddy -ip -ls                            # 自动检测当前目录的 .hqprj
 hqbuddy -ip -ls example/ddrc_native_demo.hqprj
 ```
+
+### 编译 XiST 仿真库
+
+自动将 XiST 原语仿真库编译到 ModelSim/QuestaSim 中。默认通过 `hqlauncher -env` 自动检测最新版 HqFPGA 根目录，也可以手动指定。
+
+```bat
+hqbuddy -simlib                            # 通过 hqlauncher -env 自动检测
+hqbuddy -simlib C:/hqv3_xist_3.1.1_FT053026_win64
+```
+
+**过程：**
+1. 复制 `scripts/compile_xist.tcl` 到 `<HQ>/build/common/sim/verilog/XIST/`
+2. 运行 `vsim -c -do compile_xist.tcl`
+3. 自动修改 ModelSim/QuestaSim 根目录的 `modelsim.ini`，将 `XiST` 映射改为 `XiST = $MODEL_TECH/../XiST`
+
+**依赖**：需要 `vsim` 在 PATH 中。如果 `modelsim.ini` 是只读文件，脚本会尝试自动解除只读；若失败会提示手动处理。
 
 ### 其他命令
 
@@ -143,6 +160,7 @@ hqbuddy -h              # 显示帮助
 | `-device [<file>]` | 查看 `.hqprj` 使用的器件型号 |
 | `-device -set <part> [<file>]` | 修改 `.hqprj` 及关联 `.hqip` 的器件型号，并验证合法性 |
 | `-ip -ls [<file>]` | 列出工程中使用的 `.hqip` 文件 |
+| `-simlib [<dir>]` | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时通过 `hqlauncher -env` 自动检测 |
 
 ## 开发与打包
 
@@ -185,7 +203,10 @@ hqbuddy/
 │   ├── xpn.py            # XPN 生成（普通模式 + hqinsight 模式）
 │   ├── xpn2bin.py        # XPN 转 BIN
 │   ├── device.py         # 器件查看/修改
-│   └── ipmgr.py          # IP 配置文件管理
+│   ├── ipmgr.py          # IP 配置文件管理
+│   └── simlib.py         # XiST 仿真库编译
+├── scripts/
+│   └── compile_xist.tcl  # XiST 仿真库编译脚本（手动或自动均使用此脚本）
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
 ├── build.ps1             # 构建 / 清理统一管理，build 成功后自动注册 PATH
 ├── .gitignore

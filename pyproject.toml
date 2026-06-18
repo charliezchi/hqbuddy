@@ -20,3 +20,6 @@ hqbuddy = "hqbuddy.__main__:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["hqbuddy*"]
+
+[tool.setuptools.package-data]
+scripts = ["*.tcl"]
