@@ -2,15 +2,17 @@
 
 import glob
 import os
+import subprocess
 import sys
+import webbrowser
 
 from . import __version__
+from . import config, launcher, build_selector
 from .hqprj_parser import extract_filelist
 from .flow import run_flow
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .device import run_device
-from .ipmgr import print_ip_files
 from .simlib import run_simlib
 
 
@@ -21,77 +23,36 @@ def show_help():
 Options:
   -h              Show this help message
   -v              Show version
-  -filelist [<file>] [-o <file>]
+  -build          Interactive HqFPGA version selection
+  -install        Register .hqprj file association with hqbuddy
+
+  -filelist [<.hqprj>] [-o <file>]
                   Extract FILE_SRC filelist from an .hqprj file
-                  If <file> is omitted, auto-detects the first .hqprj in current directory
-                  The $WORK_DIR$ placeholder is resolved to the .hqprj directory
-                  Default output: filelist.f in the .hqprj directory
-                  Use -o to specify a custom output file (e.g. custom.f)
-  -flow [<file>] [-o <file>]
-                  Run hqprj2tcl flow via hqlauncher
-                  If <file> is omitted, auto-detects the first .hqprj in current directory
-                  Default output: run_hqprj.tcl in the .hqprj directory
-                  Use -o to specify a custom output file (e.g. my_output.tcl)
-  -xpn [<file>] [-o <file>]
+  -flow [<.hqprj>] [-o <file>]
+                  Generate TCL script via hqprj2tcl
+  -xpn [<.hqprj>] [-o <file>]
                   Generate XPN file from routed design (normal mode)
-                  If <file> is omitted, auto-detects the first .hqprj in current directory
-                  Default output: hq.xpn in the .hqprj directory
-                  Use -o to specify a custom output file (e.g. my_design.xpn)
-  -xpn -ins [<file>] [-o <file>]
-                  Generate XPN file from routed design (hqinsight mode)
-                  If <file> is omitted, auto-detects the first .hqprj in current directory
-                  Default output: hq_ins.xpn in the .hqprj directory
-                  Use -o to specify a custom output file (e.g. my_ins_design.xpn)
-  -xpn2bin [<file>] [-o <file>]
-                  Convert XPN file to BIN file via hqlauncher
-                  If <file> is omitted, auto-detects the first .xpn in current directory
-                  Default output: <input>.bin in the same directory as the .xpn
-                  Use -o to specify a custom output file (e.g. my_output.bin)
-  -device [<file>]
-                  Show the device part used by the .hqprj project
-                  If <file> is omitted, auto-detects the first .hqprj in current directory
-                  Device format: DIE-SPEED-PACKAGE-CONDITION
-  -device -set <part> [<file>]
-                  Set the device part for the .hqprj project
-                  Validates <part> against hqlauncher -ls -device
-                  If <file> is omitted, auto-detects the first .hqprj in current directory
-  -ip -ls [<file>]
-                  List all .hqip files used by the project
-                  Searches for .hqip files with the same base name in the same directory
-                  as each FILE_SRC entry in the .hqprj
-                  If <file> is omitted, auto-detects the first .hqprj in current directory
+  -xpn -ins [<.hqprj>] [-o <file>]
+                  Generate XPN file (hqinsight mode)
+  -xpn2bin [<.xpn>] [-o <file>]
+                  Convert XPN file to BIN bitstream
+  -device [<.hqprj>]
+                  Show device part used by the .hqprj project
+  -device -set <part> [<.hqprj>]
+                  Set device part for the .hqprj project
   -simlib [<dir>]
                   Compile XiST simulation library into ModelSim/QuestaSim
-                  If <dir> is omitted, auto-detects HQFPGA root via hqlauncher -env
-                  Copies bundled compile_xist.tcl to XIST directory and runs vsim -c -do
-                  Updates ModelSim/QuestaSim modelsim.ini with XiST library mapping
 
-Examples:
-  hqbuddy -v
-  hqbuddy -filelist
-  hqbuddy -filelist example/ddrc_native_demo.hqprj
-  hqbuddy -filelist example/ddrc_native_demo.hqprj -o custom.f
-  hqbuddy -flow
-  hqbuddy -flow example/ddrc_native_demo.hqprj
-  hqbuddy -flow example/ddrc_native_demo.hqprj -o my_output.tcl
-  hqbuddy -xpn
-  hqbuddy -xpn example/ddrc_native_demo.hqprj
-  hqbuddy -xpn -o my_design.xpn
-  hqbuddy -xpn -ins
-  hqbuddy -xpn -ins example/ddrc_native_demo.hqprj
-  hqbuddy -xpn -ins -o my_ins_design.xpn
-  hqbuddy -xpn2bin
-  hqbuddy -xpn2bin debug.xpn
-  hqbuddy -xpn2bin -o my_output.bin
-  hqbuddy -xpn2bin debug.xpn -o my_output.bin
-  hqbuddy -device
-  hqbuddy -device example/ddrc_native_demo.hqprj
-  hqbuddy -device -set SA5T-100-D0-7F676CI
-  hqbuddy -device -set SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
-  hqbuddy -ip -ls
-  hqbuddy -ip -ls example/ddrc_native_demo.hqprj
-  hqbuddy -simlib
-  hqbuddy -simlib C:/hqv3_xist_3.1.1_FT053026_win64
+  -gui [<.hqprj>]
+                  Launch HqFPGA GUI (hqui), optionally open a project
+  -cmd <file>     Launch hqfpga CLI with a TCL script
+  -dl [-f <file>]
+                  Launch hqdnload downloader
+  -cable [args]   Launch cable.exe, pass through all arguments
+
+  -cfg [action]   Manage configuration
+                  Actions: show, set-root <path>, remove-root <path>,
+                           init, auto
 """)
 
 
@@ -167,7 +128,6 @@ def cmd_filelist(args):
     files = extract_filelist(hqprj_path)
 
     if not output_file:
-        # Default: filelist.f in the same directory as the .hqprj
         work_dir = os.path.dirname(os.path.abspath(hqprj_path))
         output_file = os.path.join(work_dir, "filelist.f")
 
@@ -178,14 +138,13 @@ def cmd_filelist(args):
 
 
 def cmd_flow(args):
-    """Run hqprj2tcl flow via hqlauncher."""
+    """Run hqprj2tcl flow via hqfpga."""
     hqprj_path, output_tcl = _parse_args_with_output(args)
     run_flow(hqprj_path, output_tcl)
 
 
 def cmd_xpn(args):
     """Generate XPN file from routed design."""
-    # Check for -ins flag first
     hqinsight = False
     if args and args[0] == '-ins':
         hqinsight = True
@@ -235,7 +194,6 @@ def cmd_xpn2bin(args):
 
 def cmd_device(args):
     """Get or set device part for .hqprj."""
-    # Check for -set flag first
     if args and args[0] == '-set':
         if len(args) < 2:
             print("Error: -set requires a device part")
@@ -249,23 +207,6 @@ def cmd_device(args):
         run_device(hqprj_path, None)
 
 
-def cmd_ip(args):
-    """IP management commands."""
-    if not args:
-        print("Error: -ip requires a subcommand (e.g. -ls)")
-        sys.exit(1)
-
-    if args[0] == '-ls':
-        hqprj_path = _resolve_hqprj(args[1] if len(args) > 1 else None)
-        if not os.path.isfile(hqprj_path):
-            print(f"Error: file not found: {hqprj_path}")
-            sys.exit(1)
-        print_ip_files(hqprj_path)
-    else:
-        print(f"Error: unknown -ip subcommand: {args[0]}")
-        sys.exit(1)
-
-
 def cmd_simlib(args):
     """Compile XiST simulation library."""
     hqfpga_root = None
@@ -274,60 +215,258 @@ def cmd_simlib(args):
     run_simlib(hqfpga_root)
 
 
+def cmd_build():
+    """Interactive build selection."""
+    build_selector.run_build_selector()
+
+
+def cmd_gui(args):
+    """Launch hqfpga GUI (hqui)."""
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA versions found.")
+        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        sys.exit(1)
+    launcher.launch_tool(version, 'hqui', args)
+
+
+def cmd_launch_cmd(args):
+    """Launch hqfpga CLI with a TCL script."""
+    if not args:
+        print("Error: -cmd requires a TCL script file")
+        sys.exit(1)
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA versions found.")
+        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        sys.exit(1)
+    launcher.launch_tool(version, 'hqfpga', ['-cmd'] + args)
+
+
+def cmd_dl(args):
+    """Launch hqdnload downloader."""
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA versions found.")
+        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        sys.exit(1)
+
+    # Build hqdnload args
+    extra_args = []
+    if args:
+        extra_args = list(args)
+    else:
+        # Auto-detect latest .bin in current directory
+        bin_files = [f for f in os.listdir('.') if f.lower().endswith('.bin')]
+        if bin_files:
+            bin_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+            latest_bin = bin_files[0]
+            print(f"Auto-selected download file: {latest_bin}")
+            extra_args = ['-f', latest_bin]
+
+    launcher.launch_tool(version, 'hqdnload', extra_args)
+
+
+def cmd_cable(args):
+    """Launch cable.exe with passthrough arguments."""
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA versions found.")
+        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        sys.exit(1)
+    launcher.launch_tool(version, 'cable', args)
+
+
+def cmd_config(args):
+    """Configuration management."""
+    cfg = config.load_config()
+    cfg_path = config.get_config_path()
+
+    action = args[0] if args else 'show'
+    value = args[1] if len(args) > 1 else None
+
+    if action == 'show':
+        import json
+        print(f"Config file: {cfg_path}")
+        print(json.dumps(cfg, indent=2, ensure_ascii=False))
+
+    elif action == 'set-root':
+        if not value:
+            print("Usage: hqbuddy -cfg set-root <path>")
+            sys.exit(1)
+        path = os.path.abspath(value)
+        if 'scan_roots' not in cfg:
+            cfg['scan_roots'] = []
+        if path not in cfg['scan_roots']:
+            cfg['scan_roots'].append(path)
+        config.save_config(cfg)
+        print(f"Config file: {cfg_path}")
+        print(f"Added scan root: {path}")
+
+    elif action == 'remove-root':
+        if not value:
+            print("Usage: hqbuddy -cfg remove-root <path>")
+            sys.exit(1)
+        path = value
+        if 'scan_roots' in cfg and path in cfg['scan_roots']:
+            cfg['scan_roots'].remove(path)
+            config.save_config(cfg)
+            print(f"Config file: {cfg_path}")
+            print(f"Removed scan root: {path}")
+        else:
+            print(f"Config file: {cfg_path}")
+            print(f"Root not found in config: {path}")
+
+    elif action == 'init':
+        config.save_config(config.DEFAULT_CONFIG)
+        print(f"Config file: {cfg_path}")
+        print("Configuration reset to defaults.")
+
+    elif action == 'auto':
+        # Scan all roots, auto-select latest as selected_build
+        from .scanner import scan_all
+        versions = scan_all(cfg)
+        if not versions:
+            print("No HqFPGA versions found. Please check scan roots.")
+            sys.exit(1)
+        latest = versions[0]
+        cfg['selected_build'] = latest['build']
+        config.save_config(cfg)
+        print(f"Config file: {cfg_path}")
+        print(f"Auto-configured: selected v{latest['semver']} (build {latest['build']})")
+
+    else:
+        print(f"Unknown config action: {action}")
+        print("Valid actions: show, set-root, remove-root, init, auto")
+        sys.exit(1)
+
+
+def cmd_install():
+    """Register .hqprj file association with hqbuddy."""
+    import winreg
+
+    exe_path = os.path.abspath(sys.argv[0])
+    if not exe_path.lower().endswith('.exe'):
+        print("Warning: hqbuddy is running as a script, not an .exe.")
+        print("File association will work only after building with 'build.ps1 build'.")
+
+    try:
+        # Register under HKCU (no admin required)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,
+                              r'Software\Classes\.hqprj') as key:
+            winreg.SetValue(key, '', winreg.REG_SZ, 'HqBuddy.hqprj')
+
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,
+                              r'Software\Classes\HqBuddy.hqprj') as key:
+            winreg.SetValue(key, '', winreg.REG_SZ, 'HqFPGA Project File')
+
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,
+                              r'Software\Classes\HqBuddy.hqprj\shell\open\command') as key:
+            winreg.SetValue(key, '', winreg.REG_SZ, f'"{exe_path}" "%1"')
+
+        print(f"File association registered: .hqprj -> {exe_path}")
+        print("Double-clicking a .hqprj file will open it with hqbuddy.")
+    except Exception as e:
+        print(f"Error: failed to register file association: {e}")
+        sys.exit(1)
+
+
 def main():
     """Main entry point."""
     args = sys.argv[1:]
 
+    # No arguments: print HqFPGA root path
     if not args:
-        show_help()
+        root = launcher.resolve_hqfpga_root()
+        if root:
+            print(root)
+        else:
+            print("Error: no HqFPGA versions found.")
+            print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        return
+
+    # Handle file association: first arg is a .hqprj file path
+    first = args[0]
+    if not first.startswith('-') and first.lower().endswith('.hqprj') and os.path.isfile(first):
+        cmd_gui([first])
         return
 
     # Help
-    if args[0] == '-h':
+    if first == '-h':
         show_help()
         return
 
     # Version
-    if args[0] == '-v':
+    if first == '-v':
         show_version()
         return
 
+    # Build selector
+    if first == '-build':
+        cmd_build()
+        return
+
+    # Install file association
+    if first == '-install':
+        cmd_install()
+        return
+
+    # Config management
+    if first == '-cfg':
+        cmd_config(args[1:])
+        return
+
     # Filelist
-    if args[0] == '-filelist':
+    if first == '-filelist':
         cmd_filelist(args[1:])
         return
 
     # Flow
-    if args[0] == '-flow':
+    if first == '-flow':
         cmd_flow(args[1:])
         return
 
     # XPN (normal and hqinsight modes)
-    if args[0] == '-xpn':
+    if first == '-xpn':
         cmd_xpn(args[1:])
         return
 
     # XPN to BIN
-    if args[0] == '-xpn2bin':
+    if first == '-xpn2bin':
         cmd_xpn2bin(args[1:])
         return
 
     # Device
-    if args[0] == '-device':
+    if first == '-device':
         cmd_device(args[1:])
         return
 
-    # IP
-    if args[0] == '-ip':
-        cmd_ip(args[1:])
-        return
-
     # Simlib
-    if args[0] == '-simlib':
+    if first == '-simlib':
         cmd_simlib(args[1:])
         return
 
-    print(f"Error: unknown option: {args[0]}")
+    # GUI
+    if first == '-gui':
+        cmd_gui(args[1:])
+        return
+
+    # Cmd
+    if first == '-cmd':
+        cmd_launch_cmd(args[1:])
+        return
+
+    # Downloader
+    if first == '-dl':
+        cmd_dl(args[1:])
+        return
+
+    # Cable
+    if first == '-cable':
+        cmd_cable(args[1:])
+        return
+
+    print(f"Error: unknown option: {first}")
     show_help()
     sys.exit(1)
 
