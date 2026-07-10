@@ -15,7 +15,6 @@ def _clear_lines(n: int):
 
 def _draw_menu(versions: list, selected_idx: int, current_build: str | None):
     """Draw the version selection menu."""
-    lines = len(versions) + 2  # header + versions + prompt
     print("Available HqFPGA versions:")
     print("")
     for i, v in enumerate(versions):
@@ -61,7 +60,7 @@ def run_build_selector() -> str | None:
                 _clear_lines(len(versions) + 2)
                 _draw_menu(versions, selected_idx, current_build)
             elif key == b'P':  # Down
-                selected_idx = min(len(versions) - 1, selected_idx)
+                selected_idx = min(len(versions) - 1, selected_idx + 1)
                 _clear_lines(len(versions) + 2)
                 _draw_menu(versions, selected_idx, current_build)
         elif key == b'\r':  # Enter
