@@ -1,14 +1,10 @@
-"""XPN to BIN conversion: generate temp TCL and launch hqlauncher -cmd."""
+"""XPN to BIN conversion: generate temp TCL and launch hqfpga -cmd."""
 
 import os
-import shutil
 import subprocess
 import sys
 
-
-def _check_hqlauncher() -> str | None:
-    """Check if hqlauncher is available in PATH."""
-    return shutil.which("hqlauncher")
+from . import launcher
 
 
 def _generate_xpn2bin_tcl(work_dir: str, xpn_name: str, bin_name: str) -> str:
@@ -59,17 +55,13 @@ def run_xpn2bin(xpn_path: str, bin_path: str | None = None) -> None:
 
     bin_name = os.path.basename(bin_abs)
 
-    # Check hqlauncher availability
-    hqlauncher_path = _check_hqlauncher()
-    if not hqlauncher_path:
-        print("Error: hqlauncher is not found in PATH.")
-        print("")
-        print("HqBuddy requires hqlauncher to run the xpn2bin command.")
-        print("Please install hqlauncher first:")
-        print("  https://github.com/charliezchi/hqlauncher")
-        print("")
-        print("After installation, restart your terminal and try again.")
+    # Resolve hqfpga (selected or latest version)
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA versions found.")
+        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
         sys.exit(1)
+    hqfpga_path = version['hqfpga_path']
 
     # Generate temporary TCL
     temp_tcl = _generate_xpn2bin_tcl(work_dir, xpn_name, bin_name)
@@ -79,13 +71,13 @@ def run_xpn2bin(xpn_path: str, bin_path: str | None = None) -> None:
         print(f"Input:  {xpn_abs}")
         print(f"Output: {bin_abs}")
 
-        # Build command: hqlauncher -cmd <temp_tcl>
-        cmd = [hqlauncher_path, "-cmd", temp_tcl]
+        # Build command: hqfpga -cmd <temp_tcl>
+        cmd = [hqfpga_path, "-cmd", temp_tcl]
 
         print(f"Launching: {' '.join(cmd)}")
         print("")
 
-        # Run hqlauncher in the .xpn directory
+        # Run hqfpga in the .xpn directory
         proc = subprocess.Popen(cmd, cwd=work_dir)
         try:
             proc.wait()
@@ -100,7 +92,7 @@ def run_xpn2bin(xpn_path: str, bin_path: str | None = None) -> None:
 
         if proc.returncode != 0:
             print(f"")
-            print(f"Warning: hqlauncher exited with code {proc.returncode}")
+            print(f"Warning: hqfpga exited with code {proc.returncode}")
 
     finally:
         # Clean up temporary TCL file
