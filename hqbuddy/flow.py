@@ -1,14 +1,10 @@
-"""Flow execution: generate temp TCL and launch hqlauncher -cmd."""
+"""Flow execution: generate temp TCL and launch hqfpga -cmd."""
 
 import os
-import shutil
 import subprocess
 import sys
 
-
-def _check_hqlauncher() -> str | None:
-    """Check if hqlauncher is available in PATH."""
-    return shutil.which("hqlauncher")
+from . import launcher
 
 
 def _generate_temp_tcl(hqprj_path: str, output_tcl: str | None = None) -> str:
@@ -44,7 +40,7 @@ def _generate_temp_tcl(hqprj_path: str, output_tcl: str | None = None) -> str:
 
 def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
     """
-    Run the flow command: generate temp TCL and execute via hqlauncher.
+    Run the flow command: generate temp TCL and execute via hqfpga.
 
     Args:
         hqprj_path: Path to the .hqprj file.
@@ -56,17 +52,13 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
 
     work_dir = os.path.dirname(os.path.abspath(hqprj_path))
 
-    # Check hqlauncher availability
-    hqlauncher_path = _check_hqlauncher()
-    if not hqlauncher_path:
-        print("Error: hqlauncher is not found in PATH.")
-        print("")
-        print("HqBuddy requires hqlauncher to run the flow command.")
-        print("Please install hqlauncher first:")
-        print("  https://github.com/charliezchi/hqlauncher")
-        print("")
-        print("After installation, restart your terminal and try again.")
+    # Resolve hqfpga (selected or latest version)
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA versions found.")
+        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
         sys.exit(1)
+    hqfpga_path = version['hqfpga_path']
 
     # Generate temporary TCL
     temp_tcl = _generate_temp_tcl(hqprj_path, output_tcl)
@@ -74,13 +66,13 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
     try:
         print(f"Generated temp TCL: {temp_tcl}")
 
-        # Build command: hqlauncher -cmd <temp_tcl>
-        cmd = [hqlauncher_path, "-cmd", temp_tcl]
+        # Build command: hqfpga -cmd <temp_tcl>
+        cmd = [hqfpga_path, "-cmd", temp_tcl]
 
         print(f"Launching: {' '.join(cmd)}")
         print("")
 
-        # Run hqlauncher in the .hqprj directory so output TCL is generated there
+        # Run hqfpga in the .hqprj directory so output TCL is generated there
         proc = subprocess.Popen(cmd, cwd=work_dir)
         try:
             proc.wait()
@@ -95,7 +87,7 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
 
         if proc.returncode != 0:
             print(f"")
-            print(f"Warning: hqlauncher exited with code {proc.returncode}")
+            print(f"Warning: hqfpga exited with code {proc.returncode}")
 
     finally:
         # Clean up temporary TCL file
