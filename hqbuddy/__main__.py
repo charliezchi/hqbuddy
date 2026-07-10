@@ -1,10 +1,11 @@
 """CLI entry point for hqbuddy."""
 
 import glob
+import json
 import os
 import subprocess
 import sys
-import webbrowser
+
 
 from . import __version__
 from . import config, launcher, build_selector
@@ -286,7 +287,6 @@ def cmd_config(args):
     value = args[1] if len(args) > 1 else None
 
     if action == 'show':
-        import json
         print(f"Config file: {cfg_path}")
         print(json.dumps(cfg, indent=2, ensure_ascii=False))
 
@@ -307,15 +307,19 @@ def cmd_config(args):
         if not value:
             print("Usage: hqbuddy -cfg remove-root <path>")
             sys.exit(1)
-        path = value
-        if 'scan_roots' in cfg and path in cfg['scan_roots']:
-            cfg['scan_roots'].remove(path)
-            config.save_config(cfg)
-            print(f"Config file: {cfg_path}")
-            print(f"Removed scan root: {path}")
-        else:
-            print(f"Config file: {cfg_path}")
-            print(f"Root not found in config: {path}")
+        path = os.path.abspath(value)
+        if 'scan_roots' in cfg:
+            norm_roots = [os.path.normpath(os.path.normcase(r)) for r in cfg['scan_roots']]
+            norm_path = os.path.normpath(os.path.normcase(path))
+            if norm_path in norm_roots:
+                idx = norm_roots.index(norm_path)
+                cfg['scan_roots'].pop(idx)
+                config.save_config(cfg)
+                print(f"Config file: {cfg_path}")
+                print(f"Removed scan root: {path}")
+                return
+        print(f"Config file: {cfg_path}")
+        print(f"Root not found in config: {path}")
 
     elif action == 'init':
         config.save_config(config.DEFAULT_CONFIG)

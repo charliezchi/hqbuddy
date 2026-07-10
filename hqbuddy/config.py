@@ -30,8 +30,8 @@ def load_config() -> dict:
                 return json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             print(f"Warning: Failed to load config ({e}), using defaults.", file=sys.stderr)
-            return DEFAULT_CONFIG.copy()
-    return DEFAULT_CONFIG.copy()
+            return {"scan_roots": ["C:\\"], "selected_build": None}
+    return {"scan_roots": ["C:\\"], "selected_build": None}
 
 
 def save_config(cfg: dict) -> None:
