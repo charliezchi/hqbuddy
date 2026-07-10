@@ -6,10 +6,7 @@ import subprocess
 import sys
 import importlib.resources as pkg_resources
 
-
-def _check_hqlauncher() -> str | None:
-    """Check if hqlauncher is available in PATH."""
-    return shutil.which("hqlauncher")
+from . import launcher
 
 
 def _check_vsim() -> str | None:
@@ -34,26 +31,12 @@ def _get_hqfpga_root(user_root: str | None = None) -> str:
             sys.exit(1)
         return root
 
-    # Try hqlauncher -env to get the latest version
-    hqlauncher_path = _check_hqlauncher()
-    if hqlauncher_path:
-        try:
-            result = subprocess.run(
-                [hqlauncher_path, "-env"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            # Last non-empty line is the path
-            lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-            if lines:
-                root = lines[-1]
-                if os.path.isdir(root):
-                    return os.path.abspath(root)
-        except subprocess.CalledProcessError:
-            pass
+    # Use internal scanner/launcher to find the selected version
+    root = launcher.resolve_hqfpga_root()
+    if root:
+        return os.path.abspath(root)
 
-    # Try common environment variables
+    # Try common environment variables as fallback
     for env_var in ["HQ", "XIST", "HQFPGA_ROOT"]:
         env_root = os.environ.get(env_var)
         if env_root and os.path.isdir(env_root):
@@ -64,7 +47,7 @@ def _get_hqfpga_root(user_root: str | None = None) -> str:
     print("Please specify the HQFPGA installation root directory:")
     print("  hqbuddy -simlib C:/hqv3_xist_3.1.1_FT053026_win64")
     print("")
-    print("Or ensure hqlauncher is in PATH (supports 'hqlauncher -env').")
+    print("Or use 'hqbuddy -cfg auto' to configure scan roots.")
     sys.exit(1)
 
 
