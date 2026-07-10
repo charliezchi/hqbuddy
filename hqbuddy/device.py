@@ -2,11 +2,12 @@
 
 import os
 import re
-import shutil
-import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
+from . import config
 from .ipmgr import list_ip_files
+from .scanner import scan_all, get_selected_version
 
 
 # Regex to parse device part strings like SA5T-200-D0-7H676CI
@@ -28,47 +29,47 @@ def _parse_key_value(line: str) -> tuple[str, str] | None:
     return key.strip(), value.strip()
 
 
-def _check_hqlauncher() -> str | None:
-    """Check if hqlauncher is available in PATH."""
-    return shutil.which("hqlauncher")
-
-
 def _get_valid_devices() -> set[str]:
     """
-    Query hqlauncher for the list of valid device part numbers.
+    Query the selected HqFPGA version's dv_list.xml for valid device part numbers.
 
     Returns:
         A set of valid device part strings.
     """
-    hqlauncher_path = _check_hqlauncher()
-    if not hqlauncher_path:
-        print("Error: hqlauncher is not found in PATH.")
-        print("")
-        print("HqBuddy requires hqlauncher to validate device parts.")
-        print("Please install hqlauncher first:")
-        print("  https://github.com/charliezchi/hqlauncher")
-        print("")
-        print("After installation, restart your terminal and try again.")
+    cfg = config.load_config()
+    versions = scan_all(cfg)
+    if not versions:
+        print("Error: no HqFPGA versions found.")
+        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        sys.exit(1)
+
+    version = get_selected_version(versions, cfg.get("selected_build"))
+    dv_list_path = os.path.join(
+        version['path'], 'build', 'common', 'device', 'dv_list.xml'
+    )
+
+    if not os.path.exists(dv_list_path):
+        print(f"Error: Device list not found: {dv_list_path}")
         sys.exit(1)
 
     try:
-        result = subprocess.run(
-            [hqlauncher_path, "-ls", "-device"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        devices = {line.strip() for line in result.stdout.splitlines() if line.strip()}
-        return devices
-    except subprocess.CalledProcessError as e:
-        print(f"Error: failed to query device list from hqlauncher.")
-        print(f"  {e}")
-        if e.stderr:
-            print(f"  {e.stderr.strip()}")
+        tree = ET.parse(dv_list_path)
+        root = tree.getroot()
+    except Exception as e:
+        print(f"Error parsing device list: {e}")
         sys.exit(1)
 
+    devices: set[str] = set()
+    for family in root.findall('.//family'):
+        order_parts = family.find('order_parts')
+        if order_parts is None:
+            continue
+        for part in order_parts.findall('part'):
+            name = part.get('name')
+            if name:
+                devices.add(name)
 
-
+    return devices
 
 
 def get_device(hqprj_path: str) -> str:
@@ -232,12 +233,10 @@ def set_device(hqprj_path: str, part: str, update_ip: bool = True) -> None:
     package = match.group("package")
     condition = match.group("condition")
 
-    # Validate against hqlauncher device list
+    # Validate against selected build's device list
     valid_devices = _get_valid_devices()
     if part not in valid_devices:
         print(f"Error: invalid device part: {part}")
-        print(f"")
-        print(f"Please use a valid device part from 'hqlauncher -ls -device'.")
         sys.exit(1)
 
     # Update .hqprj
