@@ -21,39 +21,28 @@ def show_help():
     """Print help message."""
     print("""Usage: hqbuddy [options]
 
-Options:
-  -h              Show this help message
-  -v              Show version
-  -build          Interactive HqFPGA version selection
-  -install        Register .hqprj file association with hqbuddy
+Global:
+  -h                      Show this help message
+  -v                      Show version
+  -build                  Interactive HqFPGA version selection
+  -install                Register .hqprj file association with hqbuddy
+  -cfg [action]           Manage configuration (show/set-root/remove-root/init/auto)
 
-  -filelist [<.hqprj>] [-o <file>]
-                  Extract FILE_SRC filelist from an .hqprj file
-  -flow [<.hqprj>] [-o <file>]
-                  Generate TCL script via hqprj2tcl
-  -xpn [<.hqprj>] [-o <file>]
-                  Generate XPN file from routed design (normal mode)
-  -xpn -ins [<.hqprj>] [-o <file>]
-                  Generate XPN file (hqinsight mode)
-  -xpn2bin [<.xpn>] [-o <file>]
-                  Convert XPN file to BIN bitstream
-  -device [<.hqprj>]
-                  Show device part used by the .hqprj project
-  -device -set <part> [<.hqprj>]
-                  Set device part for the .hqprj project
-  -simlib [<dir>]
-                  Compile XiST simulation library into ModelSim/QuestaSim
+Project:
+  -filelist [<.hqprj>] [-o <file>]     Extract FILE_SRC filelist
+  -flow [<.hqprj>] [-o <file>]         Generate TCL via hqprj2tcl
+  -xpn [<.hqprj>] [-o <file>]          Generate XPN (normal mode)
+    -ins                                Generate XPN (hqinsight mode)
+  -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN
+  -device [<.hqprj>]                   Show device part
+    -set <part> [<.hqprj>]             Set device part
+  -simlib [<dir>]                      Compile XiST simulation library
 
-  -gui [<.hqprj>]
-                  Launch HqFPGA GUI (hqui), optionally open a project
-  -cmd <file>     Launch hqfpga CLI with a TCL script
-  -dl [-f <file>]
-                  Launch hqdnload downloader
-  -cable [args]   Launch cable.exe, pass through all arguments
-
-  -cfg [action]   Manage configuration
-                  Actions: show, set-root <path>, remove-root <path>,
-                           init, auto
+Tools:
+  -gui [<.hqprj>]                      Launch HqFPGA GUI (hqui)
+  -cmd <file>                          Launch hqfpga CLI with TCL script
+  -dl [-f <file>]                      Launch hqdnload downloader
+  -cable [args...]                     Launch cable.exe
 """)
 
 
