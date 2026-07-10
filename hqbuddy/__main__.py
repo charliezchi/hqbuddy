@@ -10,7 +10,7 @@ import sys
 from . import __version__
 from . import config, launcher, build_selector
 from .hqprj_parser import extract_filelist
-from .flow import run_flow
+from .flow import run_flow, run_flow_looptdo
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .device import run_device
@@ -31,6 +31,7 @@ Global:
 Project:
   -filelist [<.hqprj>] [-o <file>]     Extract FILE_SRC filelist
   -flow [<.hqprj>] [-o <file>]         Generate TCL via hqprj2tcl
+    -looptdo                            Looptdo mode (synthesis + looptdo)
   -xpn [<.hqprj>] [-o <file>]          Generate XPN (normal mode)
     -ins                                Generate XPN (hqinsight mode)
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN
@@ -129,8 +130,18 @@ def cmd_filelist(args):
 
 def cmd_flow(args):
     """Run hqprj2tcl flow via hqfpga."""
-    hqprj_path, output_tcl = _parse_args_with_output(args)
-    run_flow(hqprj_path, output_tcl)
+    # Check for looptdo mode
+    looptdo = False
+    if args and args[0] == '-looptdo':
+        looptdo = True
+        args = args[1:]
+
+    if looptdo:
+        hqprj_path, output_tcl = _parse_args_with_output(args)
+        run_flow_looptdo(hqprj_path, output_tcl)
+    else:
+        hqprj_path, output_tcl = _parse_args_with_output(args)
+        run_flow(hqprj_path, output_tcl)
 
 
 def cmd_xpn(args):
