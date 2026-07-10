@@ -1,15 +1,11 @@
-"""XPN generation: generate temp TCL and launch hqlauncher -cmd."""
+"""XPN generation: generate temp TCL and launch hqfpga -cmd."""
 
 import os
-import shutil
 import subprocess
 import sys
 import webbrowser
 
-
-def _check_hqlauncher() -> str | None:
-    """Check if hqlauncher is available in PATH."""
-    return shutil.which("hqlauncher")
+from . import launcher
 
 
 def _generate_xpn_tcl(work_dir: str, dump_path: str, output_xpn: str) -> str:
@@ -76,17 +72,13 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
         print(f"Please ensure the design has been routed before generating XPN.")
         sys.exit(1)
 
-    # Check hqlauncher availability
-    hqlauncher_path = _check_hqlauncher()
-    if not hqlauncher_path:
-        print("Error: hqlauncher is not found in PATH.")
-        print("")
-        print("HqBuddy requires hqlauncher to run the xpn command.")
-        print("Please install hqlauncher first:")
-        print("  https://github.com/charliezchi/hqlauncher")
-        print("")
-        print("After installation, restart your terminal and try again.")
+    # Resolve hqfpga (selected or latest version)
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA versions found.")
+        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
         sys.exit(1)
+    hqfpga_path = version['hqfpga_path']
 
     # Generate temporary TCL
     temp_tcl = _generate_xpn_tcl(work_dir, dump_path, output_xpn)
@@ -97,13 +89,13 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
         print(f"Dump: {dump_path}")
         print(f"Output: {output_xpn}")
 
-        # Build command: hqlauncher -cmd <temp_tcl>
-        cmd = [hqlauncher_path, "-cmd", temp_tcl]
+        # Build command: hqfpga -cmd <temp_tcl>
+        cmd = [hqfpga_path, "-cmd", temp_tcl]
 
         print(f"Launching: {' '.join(cmd)}")
         print("")
 
-        # Run hqlauncher in the work directory
+        # Run hqfpga in the work directory
         proc = subprocess.Popen(cmd, cwd=work_dir)
         try:
             proc.wait()
@@ -118,7 +110,7 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
 
         if proc.returncode != 0:
             print(f"")
-            print(f"Warning: hqlauncher exited with code {proc.returncode}")
+            print(f"Warning: hqfpga exited with code {proc.returncode}")
 
     finally:
         # Clean up temporary TCL file
