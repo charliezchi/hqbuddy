@@ -24,6 +24,7 @@ def show_help():
 Global:
   -h                      Show this help message
   -v                      Show version
+  -root                   Print HqFPGA root directory path
   -build                  Interactive HqFPGA version selection
   -install                Register .hqprj file association with hqbuddy
   -cfg [action]           Manage configuration (show/set-root/remove-root/init/auto)
@@ -40,7 +41,6 @@ Project:
   -simlib [<dir>]                      Compile XiST simulation library
 
 Tools:
-  -gui [<.hqprj>]                      Launch HqFPGA GUI (hqui)
   -cmd <file>                          Launch hqfpga CLI with TCL script
   -dl [-f <file>]                      Launch hqdnload downloader
   -cable [args...]                     Launch cable.exe
@@ -379,14 +379,9 @@ def main():
     """Main entry point."""
     args = sys.argv[1:]
 
-    # No arguments: print HqFPGA root path
+    # No arguments: launch HqFPGA GUI
     if not args:
-        root = launcher.resolve_hqfpga_root()
-        if root:
-            print(root)
-        else:
-            print("Error: no HqFPGA versions found.")
-            print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        cmd_gui([])
         return
 
     # Handle file association: first arg is a .hqprj file path
@@ -403,6 +398,16 @@ def main():
     # Version
     if first == '-v':
         show_version()
+        return
+
+    # Root path
+    if first == '-root':
+        root = launcher.resolve_hqfpga_root()
+        if root:
+            print(root)
+        else:
+            print("Error: no HqFPGA versions found.")
+            print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
         return
 
     # Build selector
@@ -448,11 +453,6 @@ def main():
     # Simlib
     if first == '-simlib':
         cmd_simlib(args[1:])
-        return
-
-    # GUI
-    if first == '-gui':
-        cmd_gui(args[1:])
         return
 
     # Cmd
