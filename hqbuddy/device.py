@@ -13,7 +13,7 @@ from .scanner import scan_all, get_selected_version
 
 # Regex to parse device part strings like SA5T-200-D0-7H676CI
 _DEVICE_PART_RE = re.compile(
-    r"^(?P<die>.+)-(?P<speed>\d)(?P<package>[A-Za-z]\d+)(?P<condition>[A-Za-z]+)$"
+    r"^(?P<die>.+)-(?P<speed>\d)(?P<package>[A-Za-z]+\d+)(?P<condition>[A-Za-z]+)$"
 )
 
 
