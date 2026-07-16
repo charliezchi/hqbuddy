@@ -443,7 +443,7 @@ def cmd_add(args):
                 if not os.path.isfile(resolved):
                     errors.append(f"file not found: {fpath}")
                     continue
-                rel = os.path.relpath(resolved, os.getcwd())
+                rel = os.path.relpath(resolved, os.getcwd()).replace("\\", "/")
                 entry = f"FILE_SRC=$WORK_DIR${rel}"
                 if add_src(entry):
                     added_src.append(rel)
@@ -452,7 +452,7 @@ def cmd_add(args):
             if not os.path.isfile(src_path):
                 errors.append(f"file not found: {file_arg}")
                 continue
-            rel = os.path.relpath(src_path, os.getcwd())
+            rel = os.path.relpath(src_path, os.getcwd()).replace("\\", "/")
             entry = f"FILE_SRC=$WORK_DIR${rel}"
             if add_src(entry):
                 added_src.append(rel)
@@ -461,7 +461,7 @@ def cmd_add(args):
             if not os.path.isfile(sdc_path):
                 errors.append(f"file not found: {file_arg}")
                 continue
-            rel = os.path.relpath(sdc_path, os.getcwd())
+            rel = os.path.relpath(sdc_path, os.getcwd()).replace("\\", "/")
             if set_tc(f"FILE_TC=$WORK_DIR${rel}"):
                 added_tc = rel
         elif ext == '.upc':
@@ -469,7 +469,7 @@ def cmd_add(args):
             if not os.path.isfile(upc_path):
                 errors.append(f"file not found: {file_arg}")
                 continue
-            rel = os.path.relpath(upc_path, os.getcwd())
+            rel = os.path.relpath(upc_path, os.getcwd()).replace("\\", "/")
             if set_pc(f"FILE_PC=$WORK_DIR${rel}"):
                 added_pc = rel
         else:
