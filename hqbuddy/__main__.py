@@ -12,7 +12,7 @@ import time
 from . import __version__
 from . import config, launcher, build_selector
 from .hqprj_parser import extract_filelist
-from .flow import run_flow, run_flow_looptdo
+from .flow import run_flow, run_flow_bin_only, run_flow_looptdo
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .device import run_device
@@ -34,6 +34,7 @@ Project:
   -filelist [<.hqprj>] [-o <file>]     Extract FILE_SRC filelist
   -flow [<.hqprj>] [-o <file>]         Generate TCL via hqprj2tcl
     -looptdo                            Looptdo mode (synthesis + looptdo)
+    -bin_only <name>                    Bin-only mode (synthesis -> bitgen, no intermediate files)
   -xpn [<.hqprj>] [-o <file>]          Generate XPN (normal mode)
     -ins                                Generate XPN (hqinsight mode)
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN
@@ -135,17 +136,36 @@ def cmd_filelist(args):
 
 def cmd_flow(args):
     """Run hqprj2tcl flow via hqfpga."""
-    # Check for looptdo mode
+    # Scan for mode flags (recognized anywhere after -flow)
     looptdo = False
-    if args and args[0] == '-looptdo':
-        looptdo = True
-        args = args[1:]
+    bin_only_name = None
+    filtered = []
+    i = 0
+    while i < len(args):
+        if args[i] == '-looptdo':
+            looptdo = True
+            i += 1
+        elif args[i] == '-bin_only':
+            if i + 1 >= len(args):
+                print("Error: -bin_only requires a bin name")
+                sys.exit(1)
+            bin_only_name = args[i + 1]
+            i += 2
+        else:
+            filtered.append(args[i])
+            i += 1
+
+    if looptdo and bin_only_name:
+        print("Error: -looptdo and -bin_only cannot be used together")
+        sys.exit(1)
+
+    hqprj_path, output_tcl = _parse_args_with_output(filtered)
 
     if looptdo:
-        hqprj_path, output_tcl = _parse_args_with_output(args)
         run_flow_looptdo(hqprj_path, output_tcl)
+    elif bin_only_name:
+        run_flow_bin_only(hqprj_path, bin_only_name, output_tcl)
     else:
-        hqprj_path, output_tcl = _parse_args_with_output(args)
         run_flow(hqprj_path, output_tcl)
 
 
