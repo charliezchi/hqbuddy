@@ -148,7 +148,7 @@ def get_device(hqprj_path: str) -> str:
     return f"{die}-{speed}{package}{condition}"
 
 
-def _update_hqprj_device(hqprj_path: str, part: str, die: str, speed: str, package: str, condition: str) -> None:
+def _update_hqprj_device(hqprj_path: str, part: str, die: str, speed: str, package: str, condition: str, family: str | None = None) -> None:
     """Update device fields in the .hqprj file."""
     with open(hqprj_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -160,7 +160,11 @@ def _update_hqprj_device(hqprj_path: str, part: str, die: str, speed: str, packa
         parsed = _parse_key_value(stripped)
         if parsed:
             key, _ = parsed
-            if key == "DIE":
+            if key == "FAMILY" and family is not None:
+                new_lines.append(f"FAMILY={family}\n")
+                updated = True
+                continue
+            elif key == "DIE":
                 new_lines.append(f"DIE={die}\n")
                 updated = True
                 continue
@@ -268,8 +272,9 @@ def set_device(hqprj_path: str, part: str, update_ip: bool = True) -> None:
         print(f"Error: invalid device part: {part}")
         sys.exit(1)
 
-    # Update .hqprj
-    _update_hqprj_device(hqprj_path, part, die, speed, package, condition)
+    # Look up family and update .hqprj
+    family = get_family_for_device(part)
+    _update_hqprj_device(hqprj_path, part, die, speed, package, condition, family)
 
     # Update related .hqip files
     if update_ip:
