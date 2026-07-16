@@ -121,7 +121,7 @@ main()
     # Build
     Write-Host ""
     Write-Host "Building hqbuddy.exe..."
-    python -m PyInstaller --onefile --name hqbuddy --add-data "scripts;scripts" "$entryFile"
+    python -m PyInstaller --onefile --name hqbuddy --add-data "scripts;scripts" --add-data "templates;templates" "$entryFile"
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Host "[FAIL] Build failed." -ForegroundColor Red

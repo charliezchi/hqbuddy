@@ -1,5 +1,6 @@
 """Device part management: get/set device from .hqprj and .hqip files."""
 
+import msvcrt
 import os
 import re
 import sys
@@ -29,13 +30,8 @@ def _parse_key_value(line: str) -> tuple[str, str] | None:
     return key.strip(), value.strip()
 
 
-def _get_valid_devices() -> set[str]:
-    """
-    Query the selected HqFPGA version's dv_list.xml for valid device part numbers.
-
-    Returns:
-        A set of valid device part strings.
-    """
+def _get_device_list_xml() -> ET.Element:
+    """Parse and return the dv_list.xml root element from the selected HqFPGA version."""
     cfg = config.load_config()
     versions = scan_all(cfg)
     if not versions:
@@ -54,11 +50,20 @@ def _get_valid_devices() -> set[str]:
 
     try:
         tree = ET.parse(dv_list_path)
-        root = tree.getroot()
+        return tree.getroot()
     except Exception as e:
         print(f"Error parsing device list: {e}")
         sys.exit(1)
 
+
+def _get_valid_devices() -> set[str]:
+    """
+    Query the selected HqFPGA version's dv_list.xml for valid device part numbers.
+
+    Returns:
+        A set of valid device part strings.
+    """
+    root = _get_device_list_xml()
     devices: set[str] = set()
     for family in root.findall('.//family'):
         order_parts = family.find('order_parts')
@@ -68,8 +73,32 @@ def _get_valid_devices() -> set[str]:
             name = part.get('name')
             if name:
                 devices.add(name)
-
     return devices
+
+
+def get_family_for_device(device: str) -> str | None:
+    """
+    Look up the family name for a given device part number.
+
+    Args:
+        device: Device part string (e.g. SA5T-100-D0-7H676CI).
+
+    Returns:
+        Family name (e.g. SEAL), or None if not found.
+    """
+    try:
+        root = _get_device_list_xml()
+    except SystemExit:
+        return None
+    for family in root.findall('.//family'):
+        family_name = family.get('name', '').upper()
+        order_parts = family.find('order_parts')
+        if order_parts is None:
+            continue
+        for part in order_parts.findall('part'):
+            if part.get('name') == device:
+                return family_name
+    return None
 
 
 def get_device(hqprj_path: str) -> str:
@@ -256,6 +285,103 @@ def set_device(hqprj_path: str, part: str, update_ip: bool = True) -> None:
                 print(f"  [SKIP] No device field in [IP] section: {os.path.abspath(hqip_path)}")
         print(f"")
         print(f"Updated {updated_count} .hqip file(s).")
+
+
+def _clear_lines(n: int):
+    """Move cursor up n lines and clear them."""
+    for _ in range(n):
+        sys.stdout.write('\033[F\033[K')
+    sys.stdout.flush()
+
+
+def _draw_device_list(devices: list[str], selected_idx: int, search: str,
+                       current_device: str | None) -> int:
+    """Draw the device selector UI. Returns number of lines printed."""
+    lines = 0
+    print(f"Type to search: {search}")
+    lines += 1
+    total = len(devices)
+    start = max(0, selected_idx - 10)
+    end = min(total, start + 20)
+    if end - start < 20 and start > 0:
+        start = max(0, end - 20)
+    for i in range(start, end):
+        cursor = " \u25b6" if i == selected_idx else "  "
+        marker = ">" if devices[i] == current_device else " "
+        print(f"{cursor} {marker} {devices[i]}")
+        lines += 1
+    if total > end:
+        print(f"  ... and {total - end} more")
+        lines += 1
+    if total == 0:
+        print("  (no matches)")
+        lines += 1
+    sys.stdout.flush()
+    return lines
+
+
+def pick_device_interactive(current_device: str | None = None) -> str | None:
+    """
+    Interactive device selector with keyboard navigation and search.
+
+    Returns:
+        Selected device part string, or None if cancelled.
+    """
+    all_devices = sorted(_get_valid_devices())
+    if not all_devices:
+        print("Error: no devices found in dv_list.xml.")
+        return None
+
+    filtered = list(all_devices)
+    selected_idx = 0
+    search = ""
+
+    lines_printed = _draw_device_list(filtered, selected_idx, search, current_device)
+
+    while True:
+        key = msvcrt.getch()
+
+        if key == b'\xe0':  # Arrow keys
+            key = msvcrt.getch()
+            if key == b'H':  # Up
+                selected_idx = max(0, selected_idx - 1)
+            elif key == b'P':  # Down
+                selected_idx = min(len(filtered) - 1, selected_idx + 1)
+            _clear_lines(lines_printed)
+            lines_printed = _draw_device_list(filtered, selected_idx, search, current_device)
+
+        elif key == b'\r':  # Enter
+            if filtered:
+                _clear_lines(lines_printed)
+                return filtered[selected_idx]
+
+        elif key == b'\x08':  # Backspace
+            if search:
+                search = search[:-1]
+                filtered = [d for d in all_devices if search.upper() in d.upper()]
+                selected_idx = 0
+            _clear_lines(lines_printed)
+            lines_printed = _draw_device_list(filtered, selected_idx, search, current_device)
+
+        elif key == b'\x1b':  # Esc
+            _clear_lines(lines_printed)
+            return None
+
+        elif key == b'\x03':  # Ctrl+C
+            print("")
+            return None
+
+        else:  # Regular character (for search)
+            try:
+                ch = key.decode('utf-8')
+                if ch.isprintable():
+                    search += ch
+                    filtered = [d for d in all_devices if search.upper() in d.upper()]
+                    selected_idx = 0
+                _clear_lines(lines_printed)
+                lines_printed = _draw_device_list(filtered, selected_idx, search, current_device)
+            except UnicodeDecodeError:
+                pass
 
 
 def run_device(hqprj_path: str, part: str | None = None) -> None:

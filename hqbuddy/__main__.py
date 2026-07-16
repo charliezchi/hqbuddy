@@ -3,8 +3,10 @@
 import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
+import time
 
 
 from . import __version__
@@ -25,8 +27,7 @@ Global:
   -h                      Show this help message
   -v                      Show version
   -root                   Print HqFPGA root directory path
-  -build                  Interactive HqFPGA version selection
-  -install                Register .hqprj file association with hqbuddy
+  -build_sel              Interactive HqFPGA version selection
   -cfg [action]           Manage configuration (show/set-root/remove-root/init/auto)
 
 Project:
@@ -37,13 +38,17 @@ Project:
     -ins                                Generate XPN (hqinsight mode)
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN
   -device [<.hqprj>]                   Show device part
-    -set <part> [<.hqprj>]             Set device part
-  -simlib [<dir>]                      Compile XiST simulation library
+    -set [<part>] [<.hqprj>]           Set device part (interactive if no part)
+  -new_prj <name> [-device <part>]     Create .hqprj project from template
+  -add <file1> [<file2> ...]           Add source/constraint files to project
+  -set_top <name>                      Set top module name
+  -clean                                Delete all non-.hqprj files in current dir
 
 Tools:
-  -cmd <file>                          Launch hqfpga CLI with TCL script
-  -dl [-f <file>]                      Launch hqdnload downloader
-  -cable [args...]                     Launch cable.exe
+  -simlib [<dir>]                       Compile XiST simulation library
+  -cmd <file>                           Launch hqfpga CLI with TCL script
+  -dl [-f <file>]                       Launch hqdnload downloader
+  -cable [args...]                      Launch cable.exe
 """)
 
 
@@ -144,6 +149,393 @@ def cmd_flow(args):
         run_flow(hqprj_path, output_tcl)
 
 
+def cmd_clean():
+    """Clean current directory: delete all files and dirs except .hqprj files."""
+    cwd = os.getcwd()
+
+    # Check if .hqprj exists
+    hqprj_files = glob.glob(os.path.join(cwd, "*.hqprj"))
+    if not hqprj_files:
+        print(f"Error: no .hqprj file found in {cwd}")
+        print("Tip: -clean only works in a project directory with .hqprj files.")
+        sys.exit(1)
+
+    # List all entries except .hqprj files
+    all_entries = os.listdir(cwd)
+    to_delete = []
+    for entry in sorted(all_entries):
+        if entry.lower().endswith('.hqprj'):
+            continue
+        to_delete.append(entry)
+
+    if not to_delete:
+        print("Nothing to clean — only .hqprj files found.")
+        return
+
+    print(f"The following will be deleted from {cwd}:")
+    for entry in to_delete:
+        full_path = os.path.join(cwd, entry)
+        if os.path.isdir(full_path):
+            print(f"  [DIR]  {entry}")
+        else:
+            print(f"  [FILE] {entry}")
+
+    try:
+        confirm = input(f"\nDelete {len(to_delete)} item(s)? (y/N): ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("")
+        print("Cancelled.")
+        return
+
+    if confirm != 'y':
+        print("Cancelled.")
+        return
+
+    deleted = 0
+    for entry in to_delete:
+        full_path = os.path.join(cwd, entry)
+        try:
+            if os.path.isdir(full_path):
+                shutil.rmtree(full_path)
+            else:
+                os.remove(full_path)
+            deleted += 1
+        except Exception as e:
+            print(f"  [FAIL] {entry}: {e}")
+
+    print(f"Deleted {deleted}/{len(to_delete)} item(s).")
+
+    # Reset STEP_CURR and STEP_STATUS in .hqprj files
+    for hqprj in hqprj_files:
+        with open(hqprj, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        changed = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("STEP_CURR="):
+                lines[i] = "STEP_CURR=\n"
+                changed = True
+            elif stripped.startswith("STEP_STATUS="):
+                lines[i] = "STEP_STATUS=\n"
+                changed = True
+        if changed:
+            with open(hqprj, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+            print(f"Reset step status in: {os.path.basename(hqprj)}")
+
+
+def cmd_new_prj(args):
+    """Create a new .hqprj project from template."""
+    if not args:
+        print("Error: -new_prj requires a project name")
+        print("Usage: hqbuddy -new_prj <name> [-device <part>]")
+        sys.exit(1)
+
+    name = args[0]
+    if name.startswith('-'):
+        print("Error: project name cannot start with '-'")
+        sys.exit(1)
+    if name.lower().endswith('.hqprj'):
+        name = name[:-6]
+
+    # Check for -device option
+    device = None
+    i = 1
+    while i < len(args):
+        if args[i] == '-device' and i + 1 < len(args):
+            device = args[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    # If no device specified, launch interactive picker
+    if not device:
+        from .device import pick_device_interactive
+        device = pick_device_interactive()
+        if not device:
+            return
+
+    # Validate and parse device part
+    from .device import _DEVICE_PART_RE, get_family_for_device
+    from .device import set_device as validate_device
+    match = _DEVICE_PART_RE.match(device)
+    if not match:
+        print(f"Error: invalid device part: {device}")
+        print("Format: DIE-SPEEDPACKAGE-CONDITION (e.g. SA5T-100-D0-7H676CI)")
+        sys.exit(1)
+
+    die = match.group("die")
+    speed = match.group("speed")
+    package = match.group("package")
+    condition = match.group("condition")
+
+    # Look up family from dv_list.xml
+    family = get_family_for_device(device)
+    if not family:
+        print(f"Error: device not found: {device}")
+        print("Please use a valid device from 'hqbuddy -device -set'")
+        sys.exit(1)
+
+    # Read template
+    template_path = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "templates", "project.hqprj")
+    try:
+        with open(template_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except FileNotFoundError:
+        print(f"Error: template not found: {template_path}")
+        sys.exit(1)
+
+    # Replace fields
+    content = content.replace("PROJ_NAME=hqfpga_project", f"PROJ_NAME={name}")
+    content = content.replace("FAMILY=SEAL", f"FAMILY={family}")
+    content = content.replace("DIE=SA5Z-30-D0", f"DIE={die}")
+    content = content.replace("PACKAGES=U324", f"PACKAGES={package}")
+    content = content.replace("SPEEDS=8", f"SPEEDS={speed}")
+    content = content.replace("CONDITION=C", f"CONDITION={condition}")
+
+    # Write file
+    output = os.path.join(os.getcwd(), f"{name}.hqprj")
+    if os.path.exists(output):
+        try:
+            confirm = input(f"Overwrite {output}? (y/N): ").strip().lower()
+            if confirm != 'y':
+                print("Cancelled.")
+                return
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            print("Cancelled.")
+            return
+
+    with open(output, "w", encoding="utf-8") as f:
+        f.write(content)
+    print(f"Project created: {output} (device: {device})")
+
+
+def cmd_add(args):
+    """Add source/constraint files to the .hqprj project."""
+    if not args:
+        print("Error: -add requires at least one file")
+        print("Usage: hqbuddy -add <file1> [<file2> ...]")
+        print("  .v / .vh / .f  → add to FILE_SRC")
+        print("  .sdc           → set FILE_TC")
+        print("  .upc           → set FILE_PC")
+        sys.exit(1)
+
+    hqprj_path = _find_hqprj()
+    if not hqprj_path:
+        print("Error: no .hqprj file found in current directory.")
+        sys.exit(1)
+    hqprj_abs = os.path.abspath(hqprj_path)
+
+    added_src = []
+    added_tc = None
+    added_pc = None
+
+    # Read existing file
+    with open(hqprj_abs, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    existing_src = set()
+    existing_tc = None
+    existing_pc = None
+    tc_line_idx = -1
+    pc_line_idx = -1
+    src_none_idx = -1
+    tc_none_idx = -1
+    pc_none_idx = -1
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("FILE_SRC="):
+            existing_src.add(stripped)
+            if stripped == "FILE_SRC=NONE":
+                src_none_idx = i
+        elif stripped.startswith("FILE_TC="):
+            existing_tc = stripped
+            tc_line_idx = i
+            if stripped == "FILE_TC=NONE":
+                tc_none_idx = i
+        elif stripped.startswith("FILE_PC="):
+            existing_pc = stripped
+            pc_line_idx = i
+            if stripped == "FILE_PC=NONE":
+                pc_none_idx = i
+
+    now = str(int(time.time()))
+    ft_lines = []
+
+    def add_src(entry):
+        nonlocal src_none_idx
+        if entry in existing_src:
+            return False
+        if src_none_idx >= 0:
+            lines[src_none_idx] = entry + "\n"
+            existing_src.discard("FILE_SRC=NONE")
+            existing_src.add(entry)
+            src_none_idx = -1
+            return True
+        lines.append(entry + "\n")
+        existing_src.add(entry)
+        return True
+
+    def set_tc(entry):
+        nonlocal tc_line_idx, existing_tc, tc_none_idx
+        if existing_tc == entry:
+            return False
+        if tc_none_idx >= 0:
+            lines[tc_none_idx] = entry + "\n"
+            existing_tc = entry
+            tc_none_idx = -1
+            return True
+        if tc_line_idx >= 0:
+            lines[tc_line_idx] = entry + "\n"
+        else:
+            lines.append(entry + "\n")
+        existing_tc = entry
+        return True
+
+    def set_pc(entry):
+        nonlocal pc_line_idx, existing_pc, pc_none_idx
+        if existing_pc == entry:
+            return False
+        if pc_none_idx >= 0:
+            lines[pc_none_idx] = entry + "\n"
+            existing_pc = entry
+            pc_none_idx = -1
+            return True
+        if pc_line_idx >= 0:
+            lines[pc_line_idx] = entry + "\n"
+        else:
+            lines.append(entry + "\n")
+        existing_pc = entry
+        return True
+
+    supported_src = ('.v', '.vh')
+    errors = []
+
+    # Process each file argument
+    for file_arg in args:
+        ext = os.path.splitext(file_arg)[1].lower()
+
+        if ext == '.f':
+            # Filelist: read and expand
+            flist_path = os.path.abspath(file_arg) if os.path.isabs(file_arg) else os.path.abspath(file_arg)
+            if not os.path.isfile(flist_path):
+                errors.append(f"filelist not found: {file_arg}")
+                continue
+            flist_dir = os.path.dirname(flist_path)
+            try:
+                with open(flist_path, "r", encoding="utf-8") as f:
+                    flines = f.readlines()
+            except Exception as e:
+                errors.append(f"cannot read filelist {file_arg}: {e}")
+                continue
+            for fline in flines:
+                fpath = fline.strip()
+                if not fpath or fpath.startswith('#'):
+                    continue
+                fext = os.path.splitext(fpath)[1].lower()
+                if fext not in supported_src:
+                    errors.append(f"unsupported suffix in filelist: {fpath}")
+                    continue
+                # Resolve relative to filelist directory
+                resolved = fpath if os.path.isabs(fpath) else os.path.normpath(os.path.join(flist_dir, fpath))
+                if not os.path.isfile(resolved):
+                    errors.append(f"file not found: {fpath}")
+                    continue
+                rel = os.path.relpath(resolved, os.getcwd())
+                entry = f"FILE_SRC=$WORK_DIR${rel}"
+                if add_src(entry):
+                    added_src.append(rel)
+        elif ext in supported_src:
+            src_path = os.path.abspath(file_arg) if os.path.isabs(file_arg) else os.path.abspath(file_arg)
+            if not os.path.isfile(src_path):
+                errors.append(f"file not found: {file_arg}")
+                continue
+            rel = os.path.relpath(src_path, os.getcwd())
+            entry = f"FILE_SRC=$WORK_DIR${rel}"
+            if add_src(entry):
+                added_src.append(rel)
+        elif ext == '.sdc':
+            sdc_path = os.path.abspath(file_arg) if os.path.isabs(file_arg) else os.path.abspath(file_arg)
+            if not os.path.isfile(sdc_path):
+                errors.append(f"file not found: {file_arg}")
+                continue
+            rel = os.path.relpath(sdc_path, os.getcwd())
+            if set_tc(f"FILE_TC=$WORK_DIR${rel}"):
+                added_tc = rel
+        elif ext == '.upc':
+            upc_path = os.path.abspath(file_arg) if os.path.isabs(file_arg) else os.path.abspath(file_arg)
+            if not os.path.isfile(upc_path):
+                errors.append(f"file not found: {file_arg}")
+                continue
+            rel = os.path.relpath(upc_path, os.getcwd())
+            if set_pc(f"FILE_PC=$WORK_DIR${rel}"):
+                added_pc = rel
+        else:
+            errors.append(f"unsupported file type: {file_arg}")
+
+    # Append FILE_TIME lines (after all FILE_SRC) and FILE_TIME_CST lines (at bottom)
+    for _ in added_src:
+        lines.append(f"FILE_TIME={now}\n")
+    if added_tc:
+        lines.append(f"FILE_TIME_CST={now}\n")
+    if added_pc:
+        lines.append(f"FILE_TIME_CST={now}\n")
+
+    # Write back
+    with open(hqprj_abs, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    # Report
+    for f in added_src:
+        print(f"  [ADD] FILE_SRC: {f}")
+    if added_tc:
+        print(f"  [ADD] FILE_TC: {added_tc}")
+    if added_pc:
+        print(f"  [ADD] FILE_PC: {added_pc}")
+    for e in errors:
+        print(f"  [WARN] {e}")
+    if not added_src and not added_tc and not added_pc and not errors:
+        print("Nothing to add.")
+    elif added_src or added_tc or added_pc:
+        print(f"Updated: {hqprj_abs}")
+
+
+def cmd_set_top(args):
+    """Set TOP_MODULE in the .hqprj project."""
+    if not args:
+        print("Error: -set_top requires a module name")
+        sys.exit(1)
+    top = args[0]
+    if top.startswith('-'):
+        print("Error: module name cannot start with '-'")
+        sys.exit(1)
+
+    hqprj_path = _find_hqprj()
+    if not hqprj_path:
+        print("Error: no .hqprj file found in current directory.")
+        sys.exit(1)
+    hqprj_abs = os.path.abspath(hqprj_path)
+
+    with open(hqprj_abs, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    found = False
+    for i, line in enumerate(lines):
+        if line.strip().startswith("TOP_MODULE="):
+            lines[i] = f"TOP_MODULE={top}\n"
+            found = True
+            break
+    if not found:
+        lines.append(f"TOP_MODULE={top}\n")
+
+    with open(hqprj_abs, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    print(f"  [SET] TOP_MODULE={top}")
+    print(f"Updated: {hqprj_abs}")
+
+
 def cmd_xpn(args):
     """Generate XPN file from routed design."""
     hqinsight = False
@@ -197,12 +589,27 @@ def cmd_device(args):
     """Get or set device part for .hqprj."""
     if args and args[0] == '-set':
         if len(args) < 2:
-            print("Error: -set requires a device part")
-            sys.exit(1)
-        part = args[1]
-        remaining = args[2:]
-        hqprj_path = _resolve_hqprj(remaining[0] if remaining else None)
-        run_device(hqprj_path, part)
+            # No part given: launch interactive device picker
+            from .device import pick_device_interactive, get_device
+            # Detect current device from auto-detected .hqprj
+            current = None
+            try:
+                hqprj = _find_hqprj()
+                if hqprj:
+                    current = get_device(hqprj)
+            except SystemExit:
+                pass
+            part = pick_device_interactive(current)
+            if part is None:
+                return
+            remaining = args[1:]
+            hqprj_path = _resolve_hqprj(remaining[0] if remaining else None)
+            run_device(hqprj_path, part)
+        else:
+            part = args[1]
+            remaining = args[2:]
+            hqprj_path = _resolve_hqprj(remaining[0] if remaining else None)
+            run_device(hqprj_path, part)
     else:
         hqprj_path = _resolve_hqprj(args[0] if args else None)
         run_device(hqprj_path, None)
@@ -345,36 +752,6 @@ def cmd_config(args):
         sys.exit(1)
 
 
-def cmd_install():
-    """Register .hqprj file association with hqbuddy."""
-    import winreg
-
-    exe_path = os.path.abspath(sys.argv[0])
-    if not exe_path.lower().endswith('.exe'):
-        print("Warning: hqbuddy is running as a script, not an .exe.")
-        print("File association will work only after building with 'build.ps1 build'.")
-
-    try:
-        # Register under HKCU (no admin required)
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,
-                              r'Software\Classes\.hqprj') as key:
-            winreg.SetValue(key, '', winreg.REG_SZ, 'HqBuddy.hqprj')
-
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,
-                              r'Software\Classes\HqBuddy.hqprj') as key:
-            winreg.SetValue(key, '', winreg.REG_SZ, 'HqFPGA Project File')
-
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER,
-                              r'Software\Classes\HqBuddy.hqprj\shell\open\command') as key:
-            winreg.SetValue(key, '', winreg.REG_SZ, f'"{exe_path}" "%1"')
-
-        print(f"File association registered: .hqprj -> {exe_path}")
-        print("Double-clicking a .hqprj file will open it with hqbuddy.")
-    except Exception as e:
-        print(f"Error: failed to register file association: {e}")
-        sys.exit(1)
-
-
 def main():
     """Main entry point."""
     args = sys.argv[1:]
@@ -411,13 +788,28 @@ def main():
         return
 
     # Build selector
-    if first == '-build':
+    if first == '-build_sel':
         cmd_build()
         return
 
-    # Install file association
-    if first == '-install':
-        cmd_install()
+    # Clean
+    if first == '-clean':
+        cmd_clean()
+        return
+
+    # New project
+    if first == '-new_prj':
+        cmd_new_prj(args[1:])
+        return
+
+    # Add files
+    if first == '-add':
+        cmd_add(args[1:])
+        return
+
+    # Set top module
+    if first == '-set_top':
+        cmd_set_top(args[1:])
         return
 
     # Config management

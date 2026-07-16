@@ -38,7 +38,6 @@
 #         改用 `catch {vmap $lib_name}` 查询特定库，通过返回码判断库是否存在。
 #       - 更新使用方法
 #   1.2.beta (2026/6/17)  HqBuddy
-#       - 增加 shark 目录支持
 #       - 缺失源目录时改为跳过而非退出，提升兼容性
 #   1.3.beta (2026/6/17)  HqBuddy
 #       - 支持 ModelSim 和 QuestaSim
@@ -62,7 +61,6 @@ set xist_dir [pwd]
 set src_dirs {
     seal
     sealion
-    shark
 }
 
 # -----------------------------
@@ -92,7 +90,7 @@ vlib $lib_name
 vmap $lib_name $lib_name
 
 # -----------------------------
-# 5. 编译 seal / sealion / shark 下所有 .v
+# 5. 编译 seal / sealion 下所有 .v
 # -----------------------------
 foreach dir $src_dirs {
     set abs_dir [file join $xist_dir $dir]
