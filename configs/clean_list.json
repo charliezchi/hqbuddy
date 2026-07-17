@@ -9,6 +9,7 @@
         "hqprjUI.json",
         "*.rpt",
         "*.log",
-        "*.save"
+        "*.save",
+        "org_vs_imp.fsmap"
     ]
 }
