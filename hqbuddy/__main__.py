@@ -43,7 +43,7 @@ Project:
   -new_prj <name> [-device <part>]     Create .hqprj project from template
   -add <file1> [<file2> ...]           Add source/constraint files to project
   -set_top <name>                      Set top module name
-  -clean                                Delete all non-.hqprj files in current dir
+  -clean                                Clean files/dirs listed in configs/clean_list.json
 
 Tools:
   -simlib [<dir>]                       Compile XiST simulation library
@@ -172,8 +172,14 @@ def cmd_flow(args):
         run_flow(hqprj_path, output_tcl)
 
 
+def _get_resource_path(relative_path):
+    """Locate a bundled resource file relative to the hqbuddy package root."""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, relative_path)
+
+
 def cmd_clean():
-    """Clean current directory: delete all files and dirs except .hqprj files."""
+    """Clean current directory using configs/clean_list.json."""
     cwd = os.getcwd()
 
     # Check if .hqprj exists
@@ -183,16 +189,35 @@ def cmd_clean():
         print("Tip: -clean only works in a project directory with .hqprj files.")
         sys.exit(1)
 
-    # List all entries except .hqprj files
-    all_entries = os.listdir(cwd)
+    # Load clean list
+    clean_list_path = _get_resource_path(os.path.join("configs", "clean_list.json"))
+    try:
+        with open(clean_list_path, "r", encoding="utf-8") as f:
+            clean_list = json.load(f)
+    except Exception as e:
+        print(f"Error: cannot load clean list from {clean_list_path}: {e}")
+        sys.exit(1)
+
+    dirs_to_clean = clean_list.get("dir", [])
+    file_patterns = clean_list.get("file", [])
+
     to_delete = []
-    for entry in sorted(all_entries):
-        if entry.lower().endswith('.hqprj'):
-            continue
-        to_delete.append(entry)
+
+    # Match directories
+    for entry in sorted(os.listdir(cwd)):
+        full_path = os.path.join(cwd, entry)
+        if os.path.isdir(full_path) and entry in dirs_to_clean:
+            to_delete.append(entry)
+
+    # Match files by glob pattern
+    for pattern in file_patterns:
+        for match in glob.glob(os.path.join(cwd, pattern)):
+            entry = os.path.basename(match)
+            if os.path.isfile(match) and entry not in to_delete:
+                to_delete.append(entry)
 
     if not to_delete:
-        print("Nothing to clean — only .hqprj files found.")
+        print("Nothing to clean — no matching files or directories found.")
         return
 
     print(f"The following will be deleted from {cwd}:")
@@ -227,24 +252,6 @@ def cmd_clean():
             print(f"  [FAIL] {entry}: {e}")
 
     print(f"Deleted {deleted}/{len(to_delete)} item(s).")
-
-    # Reset STEP_CURR and STEP_STATUS in .hqprj files
-    for hqprj in hqprj_files:
-        with open(hqprj, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        changed = False
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith("STEP_CURR="):
-                lines[i] = "STEP_CURR=\n"
-                changed = True
-            elif stripped.startswith("STEP_STATUS="):
-                lines[i] = "STEP_STATUS=\n"
-                changed = True
-        if changed:
-            with open(hqprj, "w", encoding="utf-8") as f:
-                f.writelines(lines)
-            print(f"Reset step status in: {os.path.basename(hqprj)}")
 
 
 def cmd_new_prj(args):
@@ -300,8 +307,7 @@ def cmd_new_prj(args):
         sys.exit(1)
 
     # Read template
-    template_path = os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "templates", "project.hqprj")
+    template_path = _get_resource_path(os.path.join("templates", "project.hqprj"))
     try:
         with open(template_path, "r", encoding="utf-8") as f:
             content = f.read()

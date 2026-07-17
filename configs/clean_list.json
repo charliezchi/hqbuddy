@@ -1,0 +1,14 @@
+{
+    "dir" : [
+        ".ipcr",
+        "hq_run",
+        "hqins_run"
+    ],
+    "file" : [
+        "cut_merge.do",
+        "hqprjUI.json",
+        "*.rpt",
+        "*.log",
+        "*.save"
+    ]
+}
