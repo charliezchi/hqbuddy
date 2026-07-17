@@ -425,11 +425,11 @@ Expected: release page is published with the executable attached.
 ## Self-Review
 
 **Spec coverage:**
-- CLI `hqbuddy -flow [<.hqprj>] -bin_only <name> [-o <file>]` → Task 3
+- CLI `hqbuddy -flow [<.hqprj>] -bin_only [<name>] [-o <file>]` → Task 3
 - Reuse `run_flow()` to generate full TCL → Task 2
-- Remove `nl.write`, `nl.report`, `xpn.write`, `ta.fmax.report` → Task 1
+- Remove `nl.write`, `nl.report`, `xpn.write`, `ta.report`, `ta.fmax.report` → Task 1
 - Keep `design.pack/place/route` → Task 1
-- Replace `design.bitgen` target with user name + original extension → Task 1
+- Replace `design.bitgen` target with user name + original extension, preserving extra arguments → Task 1
 - Help text update → Task 4
 - Build, test, version bump, push, release → Tasks 5-6
 
@@ -437,5 +437,16 @@ Expected: release page is published with the executable attached.
 - No TBD/TODO/"implement later"/"similar to Task N" found.
 
 **Type consistency:**
-- `run_flow_bin_only(hqprj_path: str, bin_name: str, output_tcl: str | None = None) -> None` matches `_make_bin_only_tcl(full_tcl_path: str, bin_name: str) -> None`.
+- `run_flow_bin_only(hqprj_path: str, bin_name: str | None = None, output_tcl: str | None = None) -> None` matches `_make_bin_only_tcl(full_tcl_path: str, bin_name: str | None = None) -> None`.
 - Import order in `__main__.py` is alphabetical: `run_flow, run_flow_bin_only, run_flow_looptdo`.
+
+---
+
+## Follow-up Changes (2026-07-17)
+
+After initial implementation, the following adjustments were made based on testing with real projects:
+
+1. **Optional bin name**: `-bin_only` no longer requires a name. If omitted, the original `design.bitgen` target from `hqprj2tcl` is kept.
+2. **Remove `ta.report`**: Real projects emit `ta.report -n 100 -o> pl_ta.rpt` / `final_ta.rpt`; these are now filtered out.
+3. **Preserve bitgen extra arguments**: When replacing the bitgen target, extra arguments after the original target (e.g. `-compress -bin`) are preserved via regex substitution instead of line rewrite.
+4. **Flag position robustness**: `-looptdo` and `-bin_only` are now recognized anywhere after `-flow`, not only when they appear before the `.hqprj` path.

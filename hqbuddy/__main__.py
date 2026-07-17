@@ -34,7 +34,7 @@ Project:
   -filelist [<.hqprj>] [-o <file>]     Extract FILE_SRC filelist
   -flow [<.hqprj>] [-o <file>]         Generate TCL via hqprj2tcl
     -looptdo                            Looptdo mode (synthesis + looptdo)
-    -bin_only <name>                    Bin-only mode (synthesis -> bitgen, no intermediate files)
+    -bin_only [<name>]                  Bin-only mode (synthesis -> bitgen, no intermediate files)
   -xpn [<.hqprj>] [-o <file>]          Generate XPN (normal mode)
     -ins                                Generate XPN (hqinsight mode)
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN
@@ -138,6 +138,7 @@ def cmd_flow(args):
     """Run hqprj2tcl flow via hqfpga."""
     # Scan for mode flags (recognized anywhere after -flow)
     looptdo = False
+    bin_only_mode = False
     bin_only_name = None
     filtered = []
     i = 0
@@ -146,16 +147,18 @@ def cmd_flow(args):
             looptdo = True
             i += 1
         elif args[i] == '-bin_only':
-            if i + 1 >= len(args):
-                print("Error: -bin_only requires a bin name")
-                sys.exit(1)
-            bin_only_name = args[i + 1]
-            i += 2
+            bin_only_mode = True
+            # Optional bin name: only consume if next arg does not look like a flag
+            if i + 1 < len(args) and not args[i + 1].startswith('-'):
+                bin_only_name = args[i + 1]
+                i += 2
+            else:
+                i += 1
         else:
             filtered.append(args[i])
             i += 1
 
-    if looptdo and bin_only_name:
+    if looptdo and bin_only_mode:
         print("Error: -looptdo and -bin_only cannot be used together")
         sys.exit(1)
 
@@ -163,7 +166,7 @@ def cmd_flow(args):
 
     if looptdo:
         run_flow_looptdo(hqprj_path, output_tcl)
-    elif bin_only_name:
+    elif bin_only_mode:
         run_flow_bin_only(hqprj_path, bin_only_name, output_tcl)
     else:
         run_flow(hqprj_path, output_tcl)
