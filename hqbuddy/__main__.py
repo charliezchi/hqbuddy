@@ -16,6 +16,7 @@ from .flow import run_flow, run_flow_bin_only, run_flow_looptdo
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .device import run_device
+from .ipgen import run_ipgen
 from .simlib import run_simlib
 
 
@@ -46,6 +47,7 @@ Project:
   -clean                                Clean files/dirs listed in configs/clean_list.json
 
 Tools:
+  -ipgen [<.hqip>] [-lang <lang>]       Generate IP netlist via ipgen
   -simlib [<dir>]                       Compile XiST simulation library
   -cmd <file>                           Launch hqfpga CLI with TCL script
   -dl [-f <file>]                       Launch hqdnload downloader
@@ -869,6 +871,23 @@ def main():
     # Device
     if first == '-device':
         cmd_device(args[1:])
+        return
+
+    # IP generation
+    if first == '-ipgen':
+        hqip_arg = None
+        lang = "chs"
+        i = 1
+        while i < len(args):
+            if args[i] == '-lang' and i + 1 < len(args):
+                lang = args[i + 1]
+                i += 2
+            elif not args[i].startswith('-') and hqip_arg is None:
+                hqip_arg = args[i]
+                i += 1
+            else:
+                i += 1
+        run_ipgen(hqip_arg, lang)
         return
 
     # Simlib
