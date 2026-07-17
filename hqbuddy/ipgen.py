@@ -54,21 +54,56 @@ def _resolve_local_xml(hqfpga_root: str, rel: str) -> str:
     return xml_path.replace("\\", "/")
 
 
-def _parse_ipgen_desc(xml_dir: str) -> str:
-    """Parse _ipgen_.desc in the XML directory and return the raw EXE line."""
+def _parse_ipgen_desc(xml_dir: str) -> tuple[str, bool]:
+    """
+    Parse _ipgen_.desc in the XML directory.
+
+    Returns:
+        Tuple of (raw EXE line, hqfpga_required). hqfpga_required is True
+        when the desc contains HQFPGA=YES.
+    """
     desc_path = os.path.join(xml_dir, "_ipgen_.desc")
     if not os.path.isfile(desc_path):
         print(f"Error: _ipgen_.desc not found in {xml_dir}")
         sys.exit(1)
 
+    exe_line = None
+    hqfpga_required = False
+
     with open(desc_path, "r", encoding="utf-8") as f:
         for line in f:
             stripped = line.strip()
             if stripped.startswith("EXE="):
-                return stripped[len("EXE="):]
+                exe_line = stripped[len("EXE="):]
+            elif stripped == "HQFPGA=YES":
+                hqfpga_required = True
 
-    print(f"Error: no EXE= found in {desc_path}")
-    sys.exit(1)
+    if exe_line is None:
+        print(f"Error: no EXE= found in {desc_path}")
+        sys.exit(1)
+
+    return exe_line, hqfpga_required
+
+
+def _resolve_ipgen_exe(exe_line: str, xml_dir: str, hqfpga_root: str) -> str:
+    """
+    Resolve the ipgen executable path from the raw EXE line.
+
+    Handles two forms:
+    - <ROOT>/ipgen_xxx.exe   -> <hqfpga_root>/build/ipcreator/ipgen_xxx.exe
+    - ../_ipgen_*/xxx.exe    -> resolved relative to the XML directory
+    """
+    if exe_line.startswith("<ROOT>"):
+        ipcreator_root = os.path.join(hqfpga_root, "build", "ipcreator").replace("\\", "/")
+        resolved = exe_line.replace("<ROOT>", ipcreator_root)
+    else:
+        # Relative path: resolve against the XML directory
+        resolved = os.path.normpath(os.path.join(xml_dir, exe_line)).replace("\\", "/")
+
+    if not os.path.isfile(resolved):
+        print(f"Error: ipgen executable not found: {resolved}")
+        sys.exit(1)
+    return resolved
 
 
 def _resolve_hqfpga_exe(hqfpga_root: str) -> str:
@@ -80,9 +115,13 @@ def _resolve_hqfpga_exe(hqfpga_root: str) -> str:
     return exe.replace("\\", "/")
 
 
-def _run_ipgen_cmd(ipgen_exe: str, xml: str, hqip: str, hq_exe: str, lang: str, cwd: str) -> None:
+def _run_ipgen_cmd(ipgen_exe: str, xml: str, hqip: str, hq_exe: str | None, lang: str, cwd: str) -> None:
     """Run the IP generator."""
-    cmd = [ipgen_exe, "-meta_xml", xml, "-ini_file", hqip, "-hq_exe", hq_exe, "-lang", lang]
+    cmd = [ipgen_exe, "-meta_xml", xml, "-ini_file", hqip]
+    if hq_exe is not None:
+        cmd += ["-hq_exe", hq_exe]
+    cmd += ["-lang", lang]
+
     print(f"Launching: {' '.join(cmd)}")
     print("")
 
@@ -130,15 +169,11 @@ def run_ipgen(hqip_path: str | None = None, lang: str = "chs") -> None:
     xml_dir = os.path.dirname(xml_path)
 
     # Resolve ipgen executable from _ipgen_.desc
-    exe_line = _parse_ipgen_desc(xml_dir)
-    ipcreator_root = os.path.join(hqfpga_root, "build", "ipcreator").replace("\\", "/")
-    ipgen_exe = exe_line.replace("<ROOT>", ipcreator_root)
-    if not os.path.isfile(ipgen_exe):
-        print(f"Error: ipgen executable not found: {ipgen_exe}")
-        sys.exit(1)
+    exe_line, hqfpga_required = _parse_ipgen_desc(xml_dir)
+    ipgen_exe = _resolve_ipgen_exe(exe_line, xml_dir, hqfpga_root)
 
-    # Resolve hqfpga.exe
-    hq_exe = _resolve_hqfpga_exe(hqfpga_root)
+    # Resolve hqfpga.exe only when the IP generator requires it
+    hq_exe = _resolve_hqfpga_exe(hqfpga_root) if hqfpga_required else None
 
     # Execute
     _run_ipgen_cmd(ipgen_exe, xml_path, hqip_abs, hq_exe, lang, hqip_dir)
