@@ -18,6 +18,7 @@ from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .device import run_device
 from .ipgen import run_ipgen
+from .ipmgr import list_ip_files
 from .simlib import run_simlib
 
 
@@ -49,6 +50,7 @@ Project:
 
 Tools:
   -ipgen [<.hqip>] [-lang <lang>]       Generate IP netlist via ipgen
+  -update_ip [<.hqprj>]                 Regenerate all IP netlists for project
   -simlib [<dir>]                       Compile XiST simulation library
   -cmd <file>                           Launch hqfpga CLI with TCL script
   -dl [-f <file>]                       Launch hqdnload downloader
@@ -283,6 +285,44 @@ def cmd_clean(force: bool = False):
     empty_deleted = _remove_empty_dirs(cwd)
     if empty_deleted:
         print(f"Deleted {empty_deleted} empty directory/directories.")
+
+
+def cmd_update_ip(args):
+    """Regenerate IP netlists for all .hqip files referenced by the project."""
+    hqprj_path = _resolve_hqprj(args[0] if args else None)
+
+    if not os.path.isfile(hqprj_path):
+        print(f"Error: file not found: {hqprj_path}")
+        sys.exit(1)
+
+    ip_files = list_ip_files(hqprj_path)
+    if not ip_files:
+        print("No .hqip files referenced by this project.")
+        return
+
+    print(f"Updating {len(ip_files)} IP file(s) for: {os.path.abspath(hqprj_path)}")
+    print("")
+    sys.stdout.flush()
+
+    failed = 0
+    for i, hqip_path in enumerate(ip_files, 1):
+        print(f"[{i}/{len(ip_files)}] {os.path.abspath(hqip_path)}")
+        sys.stdout.flush()
+        try:
+            run_ipgen(hqip_path)
+        except SystemExit as e:
+            # run_ipgen exits on fatal errors; count it and continue
+            if e.code != 0:
+                failed += 1
+        except Exception as e:
+            print(f"  [FAIL] {e}")
+            failed += 1
+        print("")
+        sys.stdout.flush()
+
+    print(f"Done. {len(ip_files) - failed}/{len(ip_files)} IP file(s) updated successfully.")
+    if failed:
+        sys.exit(1)
 
 
 def cmd_new_prj(args):
@@ -918,6 +958,11 @@ def main():
             else:
                 i += 1
         run_ipgen(hqip_arg, lang)
+        return
+
+    # Update all IP netlists for project
+    if first == '-update_ip':
+        cmd_update_ip(args[1:])
         return
 
     # Simlib
