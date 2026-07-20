@@ -10,6 +10,7 @@
         "*.rpt",
         "*.log",
         "*.save",
-        "org_vs_imp.fsmap"
+        "org_vs_imp.fsmap",
+        "config.ini"
     ]
 }
