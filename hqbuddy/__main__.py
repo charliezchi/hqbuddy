@@ -688,9 +688,10 @@ def cmd_xpn2bin(args):
 def cmd_device(args):
     """Get or set device part for .hqprj."""
     if args and args[0] == '-set':
-        if len(args) < 2:
-            # No part given: launch interactive device picker
-            from .device import pick_device_interactive, get_device
+        from .device import pick_device_interactive, get_device
+        remaining = args[1:]
+        if not remaining:
+            # No part/hqprj given: launch interactive device picker
             # Detect current device from auto-detected .hqprj
             current = None
             try:
@@ -702,14 +703,29 @@ def cmd_device(args):
             part = pick_device_interactive(current)
             if part is None:
                 return
-            remaining = args[1:]
-            hqprj_path = _resolve_hqprj(remaining[0] if remaining else None)
+            hqprj_path = _resolve_hqprj(None)
             run_device(hqprj_path, part)
         else:
-            part = args[1]
-            remaining = args[2:]
-            hqprj_path = _resolve_hqprj(remaining[0] if remaining else None)
-            run_device(hqprj_path, part)
+            first = remaining[0]
+            rest = remaining[1:]
+            # If the first argument is an existing .hqprj file, treat it as the
+            # project path and launch the interactive picker (no part provided).
+            if os.path.isfile(first) and first.lower().endswith('.hqprj'):
+                current = None
+                try:
+                    current = get_device(first)
+                except SystemExit:
+                    pass
+                part = pick_device_interactive(current)
+                if part is None:
+                    return
+                hqprj_path = _resolve_hqprj(first)
+                run_device(hqprj_path, part)
+            else:
+                # first is a part name
+                part = first
+                hqprj_path = _resolve_hqprj(rest[0] if rest else None)
+                run_device(hqprj_path, part)
     else:
         hqprj_path = _resolve_hqprj(args[0] if args else None)
         run_device(hqprj_path, None)
@@ -852,8 +868,25 @@ def cmd_config(args):
         sys.exit(1)
 
 
+def _ensure_console_utf8():
+    """Configure Windows console/stderr/stdout for UTF-8 output."""
+    if sys.platform != 'win32':
+        return
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+    except Exception:
+        pass
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
+
 def main():
     """Main entry point."""
+    _ensure_console_utf8()
     args = sys.argv[1:]
 
     # No arguments: launch HqFPGA GUI
