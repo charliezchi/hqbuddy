@@ -45,7 +45,7 @@ Project:
   -new_prj <name> [-device <part>]     Create .hqprj project from template
   -add <file1> [<file2> ...]           Add source/constraint files to project
   -set_top <name>                      Set top module name
-  -clean                                Clean files/dirs listed in configs/clean_list.json
+  -clean [-force]                       Clean files/dirs listed in configs/clean_list.json
 
 Tools:
   -ipgen [<.hqip>] [-lang <lang>]       Generate IP netlist via ipgen
@@ -181,7 +181,24 @@ def _get_resource_path(relative_path):
     return os.path.join(base, relative_path)
 
 
-def cmd_clean():
+def _remove_empty_dirs(root: str) -> int:
+    """Recursively remove empty directories under root; return count deleted."""
+    deleted = 0
+    for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+        # Do not remove the project root itself
+        if os.path.samefile(dirpath, root):
+            continue
+        try:
+            if not os.listdir(dirpath):
+                os.rmdir(dirpath)
+                print(f"  [EMPTY DIR] {os.path.relpath(dirpath, root)}")
+                deleted += 1
+        except Exception as e:
+            print(f"  [FAIL] {os.path.relpath(dirpath, root)}: {e}")
+    return deleted
+
+
+def cmd_clean(force: bool = False):
     """Clean current directory using configs/clean_list.json."""
     cwd = os.getcwd()
 
@@ -222,6 +239,10 @@ def cmd_clean():
 
     if not to_delete:
         print("Nothing to clean — no matching files or directories found.")
+        # Still remove empty directories even if no listed items match
+        empty_deleted = _remove_empty_dirs(cwd)
+        if empty_deleted:
+            print(f"Deleted {empty_deleted} empty directory/directories.")
         return
 
     print(f"The following will be deleted from {cwd}:")
@@ -232,16 +253,17 @@ def cmd_clean():
         else:
             print(f"  [FILE] {entry}")
 
-    try:
-        confirm = input(f"\nDelete {len(to_delete)} item(s)? (y/N): ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        print("")
-        print("Cancelled.")
-        return
+    if not force:
+        try:
+            confirm = input(f"\nDelete {len(to_delete)} item(s)? (y/N): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            print("Cancelled.")
+            return
 
-    if confirm != 'y':
-        print("Cancelled.")
-        return
+        if confirm != 'y':
+            print("Cancelled.")
+            return
 
     deleted = 0
     for entry in to_delete:
@@ -256,6 +278,11 @@ def cmd_clean():
             print(f"  [FAIL] {entry}: {e}")
 
     print(f"Deleted {deleted}/{len(to_delete)} item(s).")
+
+    # Remove any empty directories left behind
+    empty_deleted = _remove_empty_dirs(cwd)
+    if empty_deleted:
+        print(f"Deleted {empty_deleted} empty directory/directories.")
 
 
 def cmd_new_prj(args):
@@ -827,7 +854,8 @@ def main():
 
     # Clean
     if first == '-clean':
-        cmd_clean()
+        force = '-force' in args or '-f' in args
+        cmd_clean(force)
         return
 
     # New project
