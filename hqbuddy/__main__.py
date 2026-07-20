@@ -1,5 +1,6 @@
 """CLI entry point for hqbuddy."""
 
+import fnmatch
 import glob
 import json
 import os
@@ -211,12 +212,13 @@ def cmd_clean():
         if os.path.isdir(full_path) and entry in dirs_to_clean:
             to_delete.append(entry)
 
-    # Match files by glob pattern
+    # Match files by pattern (fnmatch includes hidden dotfiles)
     for pattern in file_patterns:
-        for match in glob.glob(os.path.join(cwd, pattern)):
-            entry = os.path.basename(match)
-            if os.path.isfile(match) and entry not in to_delete:
-                to_delete.append(entry)
+        for entry in os.listdir(cwd):
+            if fnmatch.fnmatch(entry, pattern):
+                full_path = os.path.join(cwd, entry)
+                if os.path.isfile(full_path) and entry not in to_delete:
+                    to_delete.append(entry)
 
     if not to_delete:
         print("Nothing to clean — no matching files or directories found.")
