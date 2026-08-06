@@ -42,6 +42,8 @@
 #   1.3.beta (2026/6/17)  HqBuddy
 #       - 支持 ModelSim 和 QuestaSim
 #       - 编译完成后自动更新 modelsim.ini 中的 XiST 映射
+#   1.4.beta (2026/8/6)  HqBuddy
+#       - 编译源文件类型扩展为 .v / .vp
 # ===================================================================================
 
 # -----------------------------
@@ -90,7 +92,7 @@ vlib $lib_name
 vmap $lib_name $lib_name
 
 # -----------------------------
-# 5. 编译 seal / sealion 下所有 .v
+# 5. 编译 seal / sealion 下所有 .v / .vp
 # -----------------------------
 foreach dir $src_dirs {
     set abs_dir [file join $xist_dir $dir]
@@ -102,10 +104,10 @@ foreach dir $src_dirs {
 
     puts "Compiling directory: $abs_dir"
 
-    set vfiles [glob -nocomplain "$abs_dir/*.v"]
+    set vfiles [glob -nocomplain "$abs_dir/*.v" "$abs_dir/*.vp"]
 
     if {[llength $vfiles] == 0} {
-        puts "WARNING: no .v files found in $abs_dir"
+        puts "WARNING: no .v/.vp files found in $abs_dir"
     }
 
     foreach vfile $vfiles {
