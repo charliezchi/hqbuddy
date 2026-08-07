@@ -26,8 +26,8 @@
 # Description     : 自动编译智多晶 Modelsim/QuestaSim 仿真库
 #                    
 # Author          : ZhangChi
-# Created On      : 2026/6/4
-# Revision        : 1.3.beta
+# Created On      : 2026/8/7
+# Revision        : 1.5.beta
 #
 # Revision History:
 #   1.0.beta (2026/1/8)  ZhangChi
@@ -37,13 +37,15 @@
 #         格式化文本而非 Tcl 列表，导致匹配失败并触发 ONERROR 退出。
 #         改用 `catch {vmap $lib_name}` 查询特定库，通过返回码判断库是否存在。
 #       - 更新使用方法
-#   1.2.beta (2026/6/17)  HqBuddy
+#   1.2.beta (2026/6/17)  ZhangChi
 #       - 缺失源目录时改为跳过而非退出，提升兼容性
-#   1.3.beta (2026/6/17)  HqBuddy
+#   1.3.beta (2026/6/17)  ZhangChi
 #       - 支持 ModelSim 和 QuestaSim
 #       - 编译完成后自动更新 modelsim.ini 中的 XiST 映射
-#   1.4.beta (2026/8/6)  HqBuddy
+#   1.4.beta (2026/8/6)  ZhangChi
 #       - 编译源文件类型扩展为 .v / .vp
+#   1.5.beta (2026/8/7)  ZhangChi
+#       - 增加 +define+SIM 宏定义，加速 DDRCTRL 仿真
 # ===================================================================================
 
 # -----------------------------
@@ -112,7 +114,7 @@ foreach dir $src_dirs {
 
     foreach vfile $vfiles {
         puts "  vlog $vfile"
-        vlog -work $lib_name $vfile
+        vlog +define+SIM -work $lib_name $vfile
     }
 }
 
