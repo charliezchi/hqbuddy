@@ -9,7 +9,7 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 
 ## 执行途径（按优先级选择）
 
-1. **hqbuddy 封装**（首选，已处理版本解析与路径）：
+1. **hqbuddy 封装**（首选，已处理版本解析与路径；完整用法见 references/hqbuddy.md）：
    - `hqbuddy -flow [<.hqprj>]` — 完整实现流程（内部用 `hqprj2tcl` 生成 TCL 再执行）
    - `hqbuddy -cmd -e "<tcl>" [-q]` — 执行单条 TCL 命令；`-q` 过滤 banner 和 `Info:` 行
    - `hqbuddy -cmd <file.tcl>` / `hqbuddy -cmd` — 执行脚本 / 交互式 CLI
@@ -31,6 +31,7 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 
 ## 深入参考（按需加载，勿一次全读）
 
+- `references/hqbuddy.md` — hqbuddy 封装工具完整用法（操作 HqFpga 前先读这个，优先用 hqbuddy 而非原生命令）
 - `references/commands.md` — U 命令分类地图（先查这里定位命令，再读对应详情文件）
 - `references/cmd-design.md` / `cmd-dv-impl.md` / `cmd-ioh-lo.md` / `cmd-nl.md` / `cmd-phy.md` / `cmd-rtl-ta.md` — 99 个命令的语法、参数、缺省值、示例
 - `references/flow.md` — 设计流程原理与综合流程细节
