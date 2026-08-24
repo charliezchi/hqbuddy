@@ -52,7 +52,7 @@ Tools:
   -ipgen [<.hqip>] [-lang <lang>]       Generate IP netlist via ipgen
   -update_ip [<.hqprj>]                 Regenerate all IP netlists for project
   -simlib [<dir>]                       Compile XiST simulation library
-  -cmd <file>                           Launch hqfpga CLI with TCL script
+  -cmd [<file>]                         Launch hqfpga CLI (with TCL script, or interactive if omitted)
   -dl [-f <file>]                       Launch hqdnload downloader
   -cable [args...]                      Launch cable.exe
 """)
@@ -755,16 +755,14 @@ def cmd_gui(args):
 
 
 def cmd_launch_cmd(args):
-    """Launch hqfpga CLI with a TCL script."""
-    if not args:
-        print("Error: -cmd requires a TCL script file")
-        sys.exit(1)
+    """Launch hqfpga CLI, with a TCL script or interactively (no args)."""
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
         print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
         sys.exit(1)
-    launcher.launch_tool(version, 'hqfpga', ['-cmd'] + args)
+    tool_args = ['-cmd'] + args if args else []
+    launcher.launch_tool(version, 'hqfpga', tool_args)
 
 
 def cmd_dl(args):

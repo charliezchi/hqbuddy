@@ -237,10 +237,11 @@ hqbuddy example/ddrc_native_demo.hqprj  # 启动 GUI 并打开工程
 
 ### 命令行执行
 
-通过 hqfpga CLI 执行指定的 TCL 脚本。
+通过 hqfpga CLI 执行指定的 TCL 脚本。不带参数时直接进入 hqfpga 交互式 CLI。
 
 ```bat
-hqbuddy -cmd my_script.tcl
+hqbuddy -cmd my_script.tcl  :: 执行 TCL 脚本
+hqbuddy -cmd                :: 进入 hqfpga 交互式 CLI
 ```
 
 ### 启动下载器
@@ -310,7 +311,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-ipgen [<file>] [-lang <lang>]` | 根据 `.hqip` 生成 IP 网表，省略时自动检测 |
 | `-update_ip [<file>]` | 重新生成工程内所有 IP 网表 |
 | `-simlib [<dir>]` | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录 |
-| `-cmd <file>` | 通过 hqfpga CLI 执行 TCL 脚本 |
+| `-cmd [<file>]` | 通过 hqfpga CLI 执行 TCL 脚本；缺省时进入 hqfpga 交互式 CLI |
 | `-dl [-f <file>]` | 启动 hqdnload 下载器，省略时自动检测最新 `.bin` |
 | `-cable [args]` | 启动 cable.exe，透传所有参数 |
 | `-cfg [action]` | 管理配置（show / set-root / remove-root / init / auto） |
