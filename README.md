@@ -4,13 +4,13 @@
 
 ## 当前版本
 
-3.3.0
+3.3.1
 
 ## 功能特点
 
 - **提取 filelist**：从 `.hqprj` 工程文件中提取 `FILE_SRC` 源文件列表
 - **路径解析**：自动将 `$WORK_DIR$` 替换为 `.hqprj` 文件所在目录的绝对路径
-- **Flow 执行**：通过 `hqprj2tcl` 生成 TCL 脚本，支持 `-looptdo` 与 `-bin_only` 模式
+- **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
 - **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）

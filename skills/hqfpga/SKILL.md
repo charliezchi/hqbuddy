@@ -10,7 +10,7 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 ## 执行途径（按优先级选择）
 
 1. **hqbuddy 封装**（首选，已处理版本解析与路径；完整用法见 references/hqbuddy.md）：
-   - `hqbuddy -flow [<.hqprj>]` — 完整实现流程（内部用 `hqprj2tcl` 生成 TCL 再执行）
+   - `hqbuddy -flow [<.hqprj>]` — 生成完整实现流程 TCL（`run_hqprj.tcl`；**只生成不执行**，再用 `hqbuddy -cmd run_hqprj.tcl` 执行）
    - `hqbuddy -cmd -e "<tcl>" [-q]` — 执行单条 TCL 命令；`-q` 过滤 banner 和 `Info:` 行
    - `hqbuddy -cmd <file.tcl>` / `hqbuddy -cmd` — 执行脚本 / 交互式 CLI
 2. **hqfpga.exe 直接调用**：`hqfpga.exe -cmd <script.tcl>`（启动参数见 references/setup.md）

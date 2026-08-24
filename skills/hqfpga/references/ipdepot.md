@@ -86,6 +86,8 @@ meta_file=C:/.../ipdepot/pll/pll_freq_25k/pll_freq_25k.xml
 6. 运行 `hqbuddy -ipgen <.hqip>` 生成网表（自动通过 `_ipgen_.desc` 定位 ipgen 程序，在 .hqip 同目录输出 `.v`）
 7. 需要权威说明时查阅同目录 `UG*.pdf`（路径见 `_ipgen_.desc` 的 `DOC=`）
 
+**端口与复位极性**：生成的网表是加密的（`pragma protect`），读不到内部逻辑。端口方向/宽度看网表模块声明即可；复位极性（如 `srst` 高有效）、握手信号语义（如 `tx_ready`）以 `UG*.pdf` 或 `example_design/` 中的例化为准——不要凭命名猜测，拿不准就写最小 TB 仿真验证
+
 ## 6. 辅助文件速查
 
 | 文件 | 用途 |
