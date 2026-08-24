@@ -22,6 +22,7 @@ from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
 from .simlib import run_simlib
 from .encrypt import run_encrypt
+from .hqip_gen import run_gen_hqip
 
 
 def show_help():
@@ -52,6 +53,7 @@ Project:
 
 Tools:
   -ipgen [<.hqip>] [-lang <lang>]       Generate IP netlist via ipgen
+  -gen_hqip [<meta.xml>] [-device <part>]  Generate default .hqip (interactive IP picker if omitted)
   -update_ip [<.hqprj>]                 Regenerate all IP netlists for project
   -encrypt [<files...>] [-d dir] [-m m] [-po]  Encrypt HDL sources (.v/.vh/.f, default: all .v in cwd)
   -simlib [<dir>]                       Compile XiST simulation library
@@ -1071,6 +1073,11 @@ def main():
     # HDL encryption
     if first == '-encrypt':
         run_encrypt(args[1:])
+        return
+
+    # Generate default .hqip from IP meta XML
+    if first == '-gen_hqip':
+        run_gen_hqip(args[1:])
         return
 
     # Cmd

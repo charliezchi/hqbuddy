@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.1.0
+3.2.0
 
 ## 功能特点
 
@@ -206,6 +206,18 @@ hqbuddy -clean
 hqbuddy -clean -force
 ```
 
+### 生成 IP 默认配置文件
+
+从 IP meta XML 生成默认配置的 `.hqip` 文件。不带参数时，按当前工程的器件（或 `-device` 指定的器件）列出当前版本支持的所有 IP，交互式选择（支持模糊搜索 IP 名 / 变体 / 描述）：
+
+```bat
+hqbuddy -gen_hqip                          :: 交互选择 IP，按当前工程器件筛选
+hqbuddy -gen_hqip -device SL2-12E-8F256    :: 交互选择 IP，显式指定器件
+hqbuddy -gen_hqip <meta.xml>               :: 直接指定 xml 生成
+```
+
+生成的 `.hqip` 输出到 `ipcore_dir/<IP_NAME>/xsIP_<IP_NAME>.hqip`，可直接用 `hqbuddy -ipgen` 生成网表。
+
 ### 生成 IP 网表
 
 根据 `.hqip` 文件（INI 格式）中的 `meta_file` 定位对应的 ipgen 工具并生成 IP 网表。省略路径时自动使用当前目录下找到的第一个 `.hqip`。
@@ -321,6 +333,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-set_top <name>`                   | 设置顶层模块`TOP_MODULE`                                             |
 | `-clean [-force]`                   | 按`clean_list.json` 清理工程目录，`-force` 跳过确认                |
 | `-ipgen [<file>] [-lang <lang>]`    | 根据`.hqip` 生成 IP 网表，省略时自动检测                             |
+| `-gen_hqip [<meta.xml>] [-device <part>]` | 生成默认配置 .hqip（省略 xml 时交互选择 IP）                  |
 | `-update_ip [<file>]`               | 重新生成工程内所有 IP 网表                                             |
 | `-encrypt [<files...>] [-d dir] [-m m] [-po]` | 加密 HDL 源文件（缺省处理当前目录所有 .v/.f，aes256-cbc，输出 encrypted/） |
 | `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
@@ -364,6 +377,7 @@ hqbuddy/
 │   ├── xpn2bin.py        # XPN 转 BIN
 │   ├── device.py         # 器件查看/修改（含交互式选择）
 │   ├── ipgen.py          # IP 网表生成
+│   ├── hqip_gen.py       # IP 默认配置 .hqip 生成（含交互式 IP 选择）
 │   ├── encrypt.py        # HDL 源代码加密
 │   ├── ipmgr.py          # IP 配置文件管理（内部使用）
 │   ├── simlib.py         # XiST 仿真库编译
