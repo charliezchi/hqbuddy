@@ -32,6 +32,23 @@ xsPWR xsPWR_INST (.PUR(1'b1));
 - 这两个实例放在 TB 顶层即可，无需连接其他信号
 - 原语定义在 XiST 仿真库中，编译时通过 `-L XiST` 链接
 
+## 2.1 原语行为模型源码（排障时直接读）
+
+仿真库的源就是**可读的行为模型**，对原语行为有疑问（复位极性、延时、握手时序）不要猜，直接读：
+
+```
+<HqFpga根目录>/build/common/sim/verilog/XIST/
+├── seal/      # SEAL 器件原语（xsPLL.v、xsDFF*.v 等）
+├── sealion/   # SEALION 器件原语（xsSL25PLL.v 等）
+└── shark/     # SHARK 器件原语
+```
+
+**PLL 的锁定/起振时序**（实测+源码确认）：ipgen 生成的 PLL wrapper（`xsIP_*.v` 中 wrapper 逻辑是明文可读的）内含约 **11µs 上电复位计数器**（`RST_CNT_WIDTH = $clog2(11*CLKI_FREQ)+1`），复位释放后原语模型再经时钟测量、200ns 锁定延时和 2 级同步才输出 LOCK。因此：
+
+- CLKOP/CLKOS 在 ~11µs 后才起振，LOCK 略晚于输出时钟起振
+- 用 PLL 输出时钟驱动的逻辑，TB 必须等 LOCK 拉高**且**输出时钟已稳定运行后再激励；最稳妥是 `run -all` + TB 内 `$finish`
+- 仿真早期（<11µs）看到 PLL 输出不动是正常现象，不是模型坏了
+
 ## 3. 标准仿真流程（.do 脚本）
 
 推荐写成 `.do` 文件用命令行跑，可重复、可自动化：
@@ -68,7 +85,6 @@ vsim -c -do sim.do
 - 库链接：用了 XiST 原语就必须 `-L XiST`；纯 RTL 行为仿真（不含原语）可省略
 - 加密的 IP 网表（`` `pragma protect ``）可直接 `vlog` 编译，仿真器内部解密
 - **TB 文件后缀**：用 SystemVerilog 语法（`fork/join_any`、`logic`、`always_ff` 等）的 TB 必须命名为 `.sv`；命名为 `.v` 的 TB 只能用 Verilog-2001 语法，否则编译报 `Undefined variable` 之类错误
-- **PLL 锁定延时**：含 PLL 的仿真有上电复位到锁定的延时（可达 20us 量级）。不要在 1us 内看结果就下结论；用 `run -all` 加 TB 内 `$finish`（或等 LOCK 拉高后再检查输出）最稳妥
 
 ## 4. 常见问题
 
