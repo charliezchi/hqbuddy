@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-2.5.3
+2.5.4
 
 ## 功能特点
 
@@ -27,17 +27,13 @@
 - **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
 - **配置管理**：管理 HqFPGA 扫描路径和版本选择，支持 `auto` 自动扫描（`-cfg`）
 - **自动检测**：`-filelist`、`-flow`、`-xpn`、`-device` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
-- **零依赖运行**：提供独立 `exe`，无 Python 环境也能开箱即用
 
-## 开箱即用
+## 构建
 
-从 [Releases](../../releases) 页面下载最新版 `hqbuddy.exe`，放到任意目录即可。
-
-如果你从源码仓库使用，一行命令完成编译并注册到 PATH。默认（不带参数）会先 `clean` 再 `build`，`build` 成功后会自动将 `hqbuddy.exe` 复制到 `%APPDATA%\hqbuddy\` 并添加到用户 PATH：
+从源码仓库一行命令完成编译并注册到 PATH：会先清理构建产物，再用 PyInstaller 打包，成功后自动将 `hqbuddy.exe` 复制到 `%APPDATA%\hqbuddy\` 并添加到用户 PATH：
 
 ```bat
-python build.py        :: 先 clean 再 build + 自动注册
-python build.py build  :: 仅 build + 自动注册
+python build.py
 ```
 
 ## 使用方式
@@ -145,6 +141,7 @@ hqbuddy -simlib C:/hqv3_xist_3.1.1_FT053026_win64
 ```
 
 **过程：**
+
 1. 复制 `scripts/compile_xist.tcl` 到 `<HQ>/build/common/sim/verilog/XIST/`
 2. 运行 `vsim -c -do compile_xist.tcl`
 3. 自动修改 ModelSim/QuestaSim 根目录的 `modelsim.ini`，将 `XiST` 映射改为 `XiST = $MODEL_TECH/../XiST`
@@ -285,36 +282,36 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 
 ## 参数速查
 
-| 参数 | 说明 |
-|------|------|
-| （无参数） | 启动 HqFPGA GUI（hqui） |
-| `<file>.hqprj` | 启动 HqFPGA GUI 并打开工程 |
-| `-h` | 显示帮助 |
-| `-v` | 显示版本 |
-| `-root` | 显示 HqFPGA 根目录路径 |
-| `-build_sel` | 交互式选择 HqFPGA 版本（支持搜索与 latest） |
-| `-filelist [<file>]` | 从 `.hqprj` 提取 FILE_SRC filelist，省略时自动检测 |
-| `-filelist [<file>] -o <out>` | 将 filelist 输出到指定文件 |
-| `-flow [<file>]` | 生成 `hqprj2tcl` TCL 脚本，省略时自动检测，默认生成 `run_hqprj.tcl` |
-| `-flow [<file>] -o <out>` | 指定生成的 TCL 文件名 |
-| `-flow [<file>] -looptdo` | looptdo 模式：合成后运行 `design.looptdo` 搜索优化参数 |
-| `-flow [<file>] -bin_only [<name>]` | bin-only 模式：仅生成 `.bin`，不产生中间文件 |
-| `-xpn [<file>] [-o <file>]` | 生成 XPN（普通模式），省略时自动检测，默认生成 `hq.xpn` |
-| `-xpn -ins [<file>] [-o <file>]` | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成 `hq_ins.xpn` |
-| `-xpn2bin [<file>] [-o <file>]` | 将 XPN 转换为 BIN，省略时自动检测，默认生成 `<input>.bin` |
-| `-device [<file>]` | 查看 `.hqprj` 使用的器件型号 |
-| `-device -set [<part>] [<file>]` | 修改器件型号（支持交互式选择），并同步关联 `.hqip` |
-| `-new_prj <name> [-device <part>]` | 从模板创建 `.hqprj` 工程 |
-| `-add <files...>` | 添加 `.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程 |
-| `-set_top <name>` | 设置顶层模块 `TOP_MODULE` |
-| `-clean [-force]` | 按 `clean_list.json` 清理工程目录，`-force` 跳过确认 |
-| `-ipgen [<file>] [-lang <lang>]` | 根据 `.hqip` 生成 IP 网表，省略时自动检测 |
-| `-update_ip [<file>]` | 重新生成工程内所有 IP 网表 |
-| `-simlib [<dir>]` | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录 |
-| `-cmd [<file>]` | 通过 hqfpga CLI 执行 TCL 脚本；缺省时进入 hqfpga 交互式 CLI |
-| `-dl [-f <file>]` | 启动 hqdnload 下载器，省略时自动检测最新 `.bin` |
-| `-cable [args]` | 启动 cable.exe，透传所有参数 |
-| `-cfg [action]` | 管理配置（show / set-root / remove-root / init / auto） |
+| 参数                                  | 说明                                                                   |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| （无参数）                            | 启动 HqFPGA GUI（hqui）                                                |
+| `<file>.hqprj`                      | 启动 HqFPGA GUI 并打开工程                                             |
+| `-h`                                | 显示帮助                                                               |
+| `-v`                                | 显示版本                                                               |
+| `-root`                             | 显示 HqFPGA 根目录路径                                                 |
+| `-build_sel`                        | 交互式选择 HqFPGA 版本（支持搜索与 latest）                            |
+| `-filelist [<file>]`                | 从`.hqprj` 提取 FILE_SRC filelist，省略时自动检测                    |
+| `-filelist [<file>] -o <out>`       | 将 filelist 输出到指定文件                                             |
+| `-flow [<file>]`                    | 生成`hqprj2tcl` TCL 脚本，省略时自动检测，默认生成 `run_hqprj.tcl` |
+| `-flow [<file>] -o <out>`           | 指定生成的 TCL 文件名                                                  |
+| `-flow [<file>] -looptdo`           | looptdo 模式：合成后运行`design.looptdo` 搜索优化参数                |
+| `-flow [<file>] -bin_only [<name>]` | bin-only 模式：仅生成`.bin`，不产生中间文件                          |
+| `-xpn [<file>] [-o <file>]`         | 生成 XPN（普通模式），省略时自动检测，默认生成`hq.xpn`               |
+| `-xpn -ins [<file>] [-o <file>]`    | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成`hq_ins.xpn`     |
+| `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN，省略时自动检测，默认生成`<input>.bin`             |
+| `-device [<file>]`                  | 查看`.hqprj` 使用的器件型号                                          |
+| `-device -set [<part>] [<file>]`    | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
+| `-new_prj <name> [-device <part>]`  | 从模板创建`.hqprj` 工程                                              |
+| `-add <files...>`                   | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程         |
+| `-set_top <name>`                   | 设置顶层模块`TOP_MODULE`                                             |
+| `-clean [-force]`                   | 按`clean_list.json` 清理工程目录，`-force` 跳过确认                |
+| `-ipgen [<file>] [-lang <lang>]`    | 根据`.hqip` 生成 IP 网表，省略时自动检测                             |
+| `-update_ip [<file>]`               | 重新生成工程内所有 IP 网表                                             |
+| `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
+| `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本；缺省时进入 hqfpga 交互式 CLI            |
+| `-dl [-f <file>]`                   | 启动 hqdnload 下载器，省略时自动检测最新`.bin`                       |
+| `-cable [args]`                     | 启动 cable.exe，透传所有参数                                           |
+| `-cfg [action]`                     | 管理配置（show / set-root / remove-root / init / auto）                |
 
 ## 开发与打包
 
@@ -327,21 +324,9 @@ cd hqbuddy
 .\hqbuddy.bat -v
 python -m hqbuddy -v
 
-:: 打包 exe
-python build.py build
-
-:: 清理构建产物
-python build.py clean
+:: 打包 exe（先清理再构建，成功后自动注册 PATH）
+python build.py
 ```
-
-使用 `build.py` 统一管理：
-
-| 命令                   | 说明                                                 |
-| ---------------------- | ---------------------------------------------------- |
-| `python build.py`       | 先 `clean` 再 `build`，成功后自动复制 exe 并注册 PATH |
-| `python build.py build` | 打包 `hqbuddy.exe`，成功后自动复制 exe 并注册 PATH    |
-| `python build.py clean` | 清理 exe、log、dump 及 PyInstaller 临时文件          |
-| `python build.py help`  | 显示帮助                                             |
 
 打包时会临时生成入口脚本，完成后自动清理，仓库内无残留。
 

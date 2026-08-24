@@ -1,17 +1,11 @@
 #!/usr/bin/env python3
 """Build script for HqBuddy.
 
-Provides clean, build, and PATH registration.
-
 Usage:
-    python build.py [command]
+    python build.py
 
-Commands:
-    build    Build hqbuddy.exe using PyInstaller
-    clean    Remove build artifacts (exe, logs, temp files)
-    help     Show this help message
-
-Default (no command): clean + build (build registers PATH at the end)
+Cleans build artifacts, builds hqbuddy.exe with PyInstaller,
+copies it to %APPDATA%\\hqbuddy\\ and registers it to the user PATH.
 """
 
 import glob
@@ -42,10 +36,6 @@ def ok(msg):
 def fail(msg):
     print(f"{RED}{msg}{RESET}")
     sys.exit(1)
-
-
-def show_help():
-    print(__doc__.strip())
 
 
 def _remove(path):
@@ -207,7 +197,7 @@ def register():
     exe = os.path.join(SCRIPT_DIR, "hqbuddy.exe")
     if not os.path.exists(exe):
         fail("[FAIL] hqbuddy.exe not found in project directory.\n"
-             "       Please run 'python build.py build' first.")
+             "       Please run 'python build.py' first.")
 
     os.makedirs(PROXY_DIR, exist_ok=True)
     shutil.copyfile(exe, os.path.join(PROXY_DIR, "hqbuddy.exe"))
@@ -240,21 +230,8 @@ def register():
 
 
 def main():
-    command = sys.argv[1].lower() if len(sys.argv) > 1 else ""
-
-    if command == "":
-        clean()
-        build()
-    elif command == "build":
-        build()
-    elif command == "clean":
-        clean()
-    elif command == "help":
-        show_help()
-    else:
-        print(f"{RED}Unknown command: {command}{RESET}")
-        print("Run 'python build.py help' for usage.")
-        sys.exit(1)
+    clean()
+    build()
 
 
 if __name__ == "__main__":
