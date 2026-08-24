@@ -1,5 +1,4 @@
-<!-- 来源：docs/user_manual/hqfpga_um_chs.md §15.16–15.27（第 1670–2347 行），命令类：dv.*、edif.*、help、impl.decomp、impl.guide.*、impl.legalize、impl.map -->
-<!-- 注：本行范围内的 §15.28 impl.pack、§15.29 impl.place 未在指定命令清单内，故不蒸馏。 -->
+<!-- 来源：docs/user_manual/hqfpga_um_chs.md §15.16–15.29（第 1670–2371 行），命令类：dv.*、edif.*、help、impl.* -->
 
 # 命令参考（七）：dv.* / edif.* / help / impl 实现命令
 
