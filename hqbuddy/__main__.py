@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -53,6 +54,7 @@ Tools:
   -update_ip [<.hqprj>]                 Regenerate all IP netlists for project
   -simlib [<dir>]                       Compile XiST simulation library
   -cmd [<file>]                         Launch hqfpga CLI (with TCL script, or interactive if omitted)
+  -cmd -e "<tcl>"                       Execute a single TCL command string
   -dl [-f <file>]                       Launch hqdnload downloader
   -cable [args...]                      Launch cable.exe
 """)
@@ -755,12 +757,32 @@ def cmd_gui(args):
 
 
 def cmd_launch_cmd(args):
-    """Launch hqfpga CLI, with a TCL script or interactively (no args)."""
+    """Launch hqfpga CLI: interactively (no args), with a TCL script,
+    or with an inline command string via '-e'."""
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
         print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
         sys.exit(1)
+
+    if args and args[0] == '-e':
+        # Inline command: write to a temp TCL file and run it
+        command = ' '.join(args[1:]).strip()
+        if not command:
+            print("Error: -cmd -e requires a TCL command string")
+            sys.exit(1)
+        fd, tmp = tempfile.mkstemp(suffix='.tcl', prefix='hqbuddy_cmd_')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write(command + '\n')
+            launcher.launch_tool(version, 'hqfpga', ['-cmd', tmp])
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        return
+
     tool_args = ['-cmd'] + args if args else []
     launcher.launch_tool(version, 'hqfpga', tool_args)
 
