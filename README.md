@@ -35,9 +35,9 @@
 
 如果你从源码仓库使用，一行命令完成编译并注册到 PATH。默认（不带参数）会先 `clean` 再 `build`，`build` 成功后会自动将 `hqbuddy.exe` 复制到 `%APPDATA%\hqbuddy\` 并添加到用户 PATH：
 
-```powershell
-.\build.ps1        # 先 clean 再 build + 自动注册
-.\build.ps1 build  # 仅 build + 自动注册
+```bat
+python build.py        :: 先 clean 再 build + 自动注册
+python build.py build  :: 仅 build + 自动注册
 ```
 
 ## 使用方式
@@ -327,20 +327,20 @@ cd hqbuddy
 python -m hqbuddy -v
 
 :: 打包 exe
-.\build.ps1 build
+python build.py build
 
 :: 清理构建产物
-.\build.ps1 clean
+python build.py clean
 ```
 
-使用 `build.ps1` 统一管理：
+使用 `build.py` 统一管理：
 
-| 命令                | 说明                                              |
-| ------------------- | ------------------------------------------------- |
-| `.\build.ps1`       | 先 `clean` 再 `build`，成功后自动复制 exe 并注册 PATH |
-| `.\build.ps1 build` | 打包 `hqbuddy.exe`，成功后自动复制 exe 并注册 PATH    |
-| `.\build.ps1 clean` | 清理 exe、log、dump 及 PyInstaller 临时文件          |
-| `.\build.ps1 help`  | 显示帮助                                          |
+| 命令                   | 说明                                                 |
+| ---------------------- | ---------------------------------------------------- |
+| `python build.py`       | 先 `clean` 再 `build`，成功后自动复制 exe 并注册 PATH |
+| `python build.py build` | 打包 `hqbuddy.exe`，成功后自动复制 exe 并注册 PATH    |
+| `python build.py clean` | 清理 exe、log、dump 及 PyInstaller 临时文件          |
+| `python build.py help`  | 显示帮助                                             |
 
 打包时会临时生成入口脚本，完成后自动清理，仓库内无残留。
 
@@ -367,7 +367,7 @@ hqbuddy/
 ├── scripts/
 │   └── compile_xist.tcl  # XiST 仿真库编译脚本（手动或自动均使用此脚本，支持 .v / .vp）
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
-├── build.ps1             # 构建 / 清理统一管理，build 成功后自动注册 PATH
+├── build.py              # 构建 / 清理统一管理，build 成功后自动注册 PATH
 ├── .gitignore
 ├── .gitattributes
 ├── AGENTS.md
