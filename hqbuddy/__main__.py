@@ -21,6 +21,7 @@ from .device import run_device
 from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
 from .simlib import run_simlib
+from .encrypt import run_encrypt
 
 
 def show_help():
@@ -52,6 +53,7 @@ Project:
 Tools:
   -ipgen [<.hqip>] [-lang <lang>]       Generate IP netlist via ipgen
   -update_ip [<.hqprj>]                 Regenerate all IP netlists for project
+  -encrypt [<files...>] [-d dir] [-m m] [-po]  Encrypt HDL sources (.v/.vh/.f, default: all .v in cwd)
   -simlib [<dir>]                       Compile XiST simulation library
   -cmd [<file>]                         Launch hqfpga CLI (with TCL script, or interactive if omitted)
   -cmd -e "<tcl>" [-q]                  Execute a single TCL command string
@@ -1064,6 +1066,11 @@ def main():
     # Simlib
     if first == '-simlib':
         cmd_simlib(args[1:])
+        return
+
+    # HDL encryption
+    if first == '-encrypt':
+        run_encrypt(args[1:])
         return
 
     # Cmd

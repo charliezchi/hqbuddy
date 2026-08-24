@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.0.0
+3.1.0
 
 ## 功能特点
 
@@ -19,6 +19,7 @@
 - **设置顶层模块**：修改 `TOP_MODULE`（`-set_top`）
 - **工程清理**：按 `clean_list.json` 清理工程目录中的中间产物（`-clean`）
 - **IP 网表生成**：根据 `.hqip` 自动定位并调用对应 ipgen 工具生成网表（`-ipgen` / `-update_ip`）
+- **HDL 加密**：调用版本自带的 `hq_ipencrypt.exe` 加密源文件，密钥自动定位（`-encrypt`）
 - **仿真库编译**：自动将 XiST 原语仿真库编译到 ModelSim/QuestaSim 中
 - **版本选择**：通过交互式菜单选择 HqFPGA 版本，支持模糊查找与 latest 自动选择（`-build_sel`）
 - **启动 GUI**：无参数运行或双击 `.hqprj` 直接启动 HqFPGA GUI（hqui）
@@ -223,6 +224,18 @@ hqbuddy -ipgen my_ip.hqip -lang chs
 hqbuddy -update_ip
 ```
 
+### 加密 HDL 源代码
+
+调用当前所选版本自带的 `hq_ipencrypt.exe` 加密 `.v` / `.vh` 源文件（密钥文件自动定位，无需指定）：
+
+```bat
+hqbuddy -encrypt                         :: 缺省处理当前目录所有 .v 和 .f（.f 走 -l 分支）
+hqbuddy -encrypt top.v core.v            :: 加密多个文件，输出到 encrypted/
+hqbuddy -encrypt filelist.f -d out       :: 支持 .f filelist，-d 指定输出目录（自动创建）
+hqbuddy -encrypt top.v -m aes128-cbc     :: 指定算法（缺省 aes256-cbc）
+hqbuddy -encrypt top.v -po               :: 只加密 protect begin/end 块
+```
+
 ### 启动 GUI
 
 不带任何参数运行即启动 HqFPGA GUI（hqui）；将 `.hqprj` 文件路径作为首个参数传入可直接打开对应工程（注册文件关联后，双击 `.hqprj` 文件也会触发）。
@@ -309,6 +322,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-clean [-force]`                   | 按`clean_list.json` 清理工程目录，`-force` 跳过确认                |
 | `-ipgen [<file>] [-lang <lang>]`    | 根据`.hqip` 生成 IP 网表，省略时自动检测                             |
 | `-update_ip [<file>]`               | 重新生成工程内所有 IP 网表                                             |
+| `-encrypt [<files...>] [-d dir] [-m m] [-po]` | 加密 HDL 源文件（缺省处理当前目录所有 .v/.f，aes256-cbc，输出 encrypted/） |
 | `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本；缺省时进入 hqfpga 交互式 CLI            |
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |
@@ -350,6 +364,7 @@ hqbuddy/
 │   ├── xpn2bin.py        # XPN 转 BIN
 │   ├── device.py         # 器件查看/修改（含交互式选择）
 │   ├── ipgen.py          # IP 网表生成
+│   ├── encrypt.py        # HDL 源代码加密
 │   ├── ipmgr.py          # IP 配置文件管理（内部使用）
 │   ├── simlib.py         # XiST 仿真库编译
 │   └── utils.py          # 版本解析与比较工具函数
