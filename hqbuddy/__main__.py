@@ -54,7 +54,8 @@ Tools:
   -update_ip [<.hqprj>]                 Regenerate all IP netlists for project
   -simlib [<dir>]                       Compile XiST simulation library
   -cmd [<file>]                         Launch hqfpga CLI (with TCL script, or interactive if omitted)
-  -cmd -e "<tcl>"                       Execute a single TCL command string
+  -cmd -e "<tcl>" [-q]                  Execute a single TCL command string
+                                        (-q: hide banner and Info: lines)
   -dl [-f <file>]                       Launch hqdnload downloader
   -cable [args...]                      Launch cable.exe
 """)
@@ -756,9 +757,49 @@ def cmd_gui(args):
     launcher.launch_tool(version, 'hqui', args)
 
 
+def _quiet_filter_output(text: str) -> list:
+    """Quiet-mode filter for hqfpga output: strip the startup banner
+    (everything before the first 'Info:' line) and all 'Info:' lines,
+    keeping only command results and warnings/errors."""
+    lines = []
+    seen_first_info = False
+    for line in text.splitlines():
+        if not seen_first_info:
+            if line.startswith('Info:'):
+                seen_first_info = True
+            else:
+                continue
+        if line.startswith('Info:'):
+            continue
+        if line.strip():
+            lines.append(line)
+    return lines
+
+
+def _run_hqfpga_cmd(version: dict, tool_args: list, quiet: bool) -> None:
+    """Run 'hqfpga -cmd ...' for inline (-e) commands. Without -q, stream
+    output as-is; with -q, capture output and print only the filtered result."""
+    if not quiet:
+        launcher.launch_tool(version, 'hqfpga', tool_args)
+        return
+    exe_path = version['hqfpga_path']
+    proc = subprocess.run(
+        [exe_path] + tool_args,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, errors='replace',
+    )
+    for line in _quiet_filter_output(proc.stdout):
+        print(line)
+    if proc.returncode != 0:
+        sys.exit(proc.returncode)
+
+
 def cmd_launch_cmd(args):
     """Launch hqfpga CLI: interactively (no args), with a TCL script,
-    or with an inline command string via '-e'."""
+    or with an inline command string via '-e'.
+
+    '-q' (quiet) is only supported with '-e': it filters the banner and
+    all 'Info:' lines from the output."""
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
@@ -766,8 +807,10 @@ def cmd_launch_cmd(args):
         sys.exit(1)
 
     if args and args[0] == '-e':
-        # Inline command: write to a temp TCL file and run it
-        command = ' '.join(args[1:]).strip()
+        # Inline command: write to a temp TCL file and run it.
+        # '-q' may appear anywhere after -e.
+        quiet = '-q' in args[1:]
+        command = ' '.join(a for a in args[1:] if a != '-q').strip()
         if not command:
             print("Error: -cmd -e requires a TCL command string")
             sys.exit(1)
@@ -775,7 +818,7 @@ def cmd_launch_cmd(args):
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 f.write(command + '\n')
-            launcher.launch_tool(version, 'hqfpga', ['-cmd', tmp])
+            _run_hqfpga_cmd(version, ['-cmd', tmp], quiet)
         finally:
             try:
                 os.remove(tmp)
