@@ -355,14 +355,31 @@ hqbuddy/
 │   └── utils.py          # 版本解析与比较工具函数
 ├── scripts/
 │   └── compile_xist.tcl  # XiST 仿真库编译脚本（手动或自动均使用此脚本，支持 .v / .vp）
+├── skills/
+│   └── hqfpga/           # Kimi Code Skill：HqFpga 操作指南（含 references 命令参考）
+├── docs/
+│   └── user_manual/      # HqFpga 官方用户手册（md / pdf）
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
 ├── build.py              # 构建 / 清理统一管理，build 成功后自动注册 PATH
+├── install_skill.py      # 安装 hqfpga Skill 到用户级 skills 目录
 ├── .gitignore
 ├── .gitattributes
 ├── AGENTS.md
 ├── LICENSE
 └── README.md
 ```
+
+## Kimi Code Skill：hqfpga
+
+仓库内置一个面向 AI agent 的 Skill，让 agent 理解 HqFpga 的操作流程与 U 命令体系（设计流程、99 个命令参考、UDM、SDC/物理约束），由官方用户手册蒸馏而来。
+
+安装到用户级 skills 目录（任意项目下均可触发）：
+
+```bat
+python install_skill.py
+```
+
+安装后重启 Kimi Code CLI 生效。Skill 源文件在 `skills/hqfpga/`，随仓库版本管理。
 
 ## License
 
