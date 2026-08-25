@@ -59,7 +59,7 @@ def run_xpn2bin(xpn_path: str, bin_path: str | None = None) -> None:
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         sys.exit(1)
     hqfpga_path = version['hqfpga_path']
 

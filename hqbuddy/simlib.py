@@ -47,7 +47,7 @@ def _get_hqfpga_root(user_root: str | None = None) -> str:
     print("Please specify the HQFPGA installation root directory:")
     print("  hqbuddy -simlib C:/hqv3_xist_3.1.1_FT053026_win64")
     print("")
-    print("Or use 'hqbuddy -cfg auto' to configure scan roots.")
+    print("Or use 'hqbuddy -cfg' to edit the scan roots in config.json.")
     sys.exit(1)
 
 

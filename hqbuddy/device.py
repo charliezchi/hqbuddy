@@ -36,7 +36,7 @@ def _get_device_list_xml() -> ET.Element:
     versions = scan_all(cfg)
     if not versions:
         print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         sys.exit(1)
 
     version = get_selected_version(versions, cfg.get("selected_build"))

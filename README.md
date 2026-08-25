@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.5.0
+3.6.0
 
 ## 功能特点
 
@@ -27,7 +27,7 @@
 - **命令行执行**：通过 hqfpga CLI 执行 TCL 脚本（`-cmd`）
 - **下载器**：启动 hqdnload 下载器，自动检测最新 `.bin`（`-dl`）
 - **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
-- **配置管理**：管理 HqFPGA 扫描路径和版本选择，支持 `auto` 自动扫描（`-cfg`）
+- **配置管理**：用系统编辑器打开 config.json 管理扫描路径和版本选择（`-cfg`）
 - **自动检测**：`-filelist`、`-flow`、`-xpn`、`-device` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
 
 ## 构建
@@ -312,18 +312,14 @@ hqbuddy -cable                            # 启动 cable.exe
 hqbuddy -cable -scan                      # 透传 -scan 参数
 ```
 
-### 配置管理
+### 配置（config.json）
 
-管理 HqFPGA 扫描路径和版本选择配置。
+配置保存在 `%APPDATA%\hqbuddy\config.json`，用 `hqbuddy -cfg` 打开编辑：
 
-```bat
-hqbuddy -cfg                              # 显示当前配置
-hqbuddy -cfg show                         # 显示当前配置
-hqbuddy -cfg set-root C:/hqfpga_installs  # 添加扫描路径
-hqbuddy -cfg remove-root C:/hqfpga_installs  # 移除扫描路径
-hqbuddy -cfg auto                         # 自动扫描并选择最新版本
-hqbuddy -cfg init                         # 重置为默认配置
-```
+- `scan_path`：HqFPGA 安装根目录扫描列表，每个条目是一个目录，hqbuddy 会扫描其中形如 `hqv*_xist_*_win64` 的目录作为可用版本
+- `selected_build`：当前选中的版本 build（由 `-build_sel` / `-device -set` 维护，留空则自动使用最新版本）
+
+修改保存后下次运行即生效。
 
 ### 其他命令
 
@@ -375,7 +371,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-insight -init`                    | 初始化 HqInsight 工程（无需 GUI）                                      |
 | `-insight -ls [关键字]`             | 列出设计信号                                                           |
 | `-insight -add/-del <信号>`         | 添加/移除采样/触发信号                                                 |
-| `-cfg [action]`                     | 管理配置（show / set-root / remove-root / init / auto）                |
+| `-cfg`                              | 用系统编辑器打开 config.json（scan_path + selected_build）               |
 
 ## 开发与打包
 

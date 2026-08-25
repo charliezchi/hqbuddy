@@ -8,8 +8,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 
 - 多版本 HqFpga 并存时，hqbuddy 负责选择使用哪个版本：
   - `hqbuddy -build_sel` — 交互式选择版本（支持模糊搜索，`[latest]` 自动选最新）
-  - `hqbuddy -cfg auto` — 自动扫描磁盘上的 HqFpga 安装并选择最新版本
-  - `hqbuddy -cfg show` — 查看当前配置；`-cfg set-root <dir>` / `remove-root <dir>` 管理扫描路径
+  - `hqbuddy -cfg` — 用系统编辑器打开 `%APPDATA%\hqbuddy\config.json` 手动管理（`scan_path` 扫描根列表 + `selected_build` 选中版本，字段含义见仓库 README）
   - `hqbuddy -root` — 打印当前所选版本的根目录
 - 版本信息持久化在用户配置中，设置一次后续命令自动使用
 

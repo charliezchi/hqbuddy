@@ -62,7 +62,7 @@ def run_build_selector() -> str | None:
     all_versions = scanner.scan_all(cfg)
     if not all_versions:
         print("No HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg auto' or 'hqbuddy -cfg set-root' to configure.")
+        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         return None
 
     current_build = cfg.get("selected_build")

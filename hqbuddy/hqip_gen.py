@@ -576,7 +576,7 @@ def run_gen_hqip(args: list) -> None:
         version = launcher.resolve_hqfpga_version()
         if not version:
             print("Error: no HqFPGA versions found.")
-            print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+            print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
             sys.exit(1)
         ipdepot = os.path.join(version['path'], _IPDEPOT_RELPATH)
         if not os.path.isdir(ipdepot):
