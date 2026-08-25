@@ -49,7 +49,8 @@ hqbuddy -insight -capture
 
 例：`hqbuddy -insight -trig "dq_err GT 0"`、`hqbuddy -insight -trig "usr_dr_re_dly RISE"`。
 
-不带参数 `hqbuddy -insight -trig` 进入交互向导。
+- **操作数只能是整个已选信号，不支持位选/表达式**：`counter[7:0] EQ 0` 会报 signal not found。需要"低 8 位为 0"这类条件时，用整信号迂回表达（如 `counter EQ 0` 或 `counter RANGE 0 255`，注意 RANGE 作用于整个向量的数值）。
+- 不带参数 `hqbuddy -insight -trig` 进入交互向导。
 
 ## 抓取波形（-capture）
 
@@ -66,7 +67,7 @@ hqbuddy -insight -capture -force         :: 不等触发条件，立即抓（用
 
 ## 注意事项
 
-- `-insight -run` 末尾会自动拉起 hqdnload 下载器 GUI 窗口（flow 内置步骤，无开关），**直接关掉即可**，下载用 cable 命令完成。
+- `-insight -run` 末尾会自动拉起 hqdnload 下载器 GUI 窗口（flow 内置步骤，无开关），**且 hqbuddy 进程会等该窗口关闭才退出**——批处理/自动化场景要在另一端把窗口关掉，或直接等 bitgen 完成后终止。下载用 cable 命令完成，不经过 hqdnload。
 - 所有 `-insight` 子命令都可加 `.hqprj` 路径指定工程，缺省用当前目录检测到的第一个。
 - `-insight`（无参数）打印工程状态：已选信号（s/t/st 类型、宽度、时钟）、当前触发条件、depth/offset——动手前先跑这个。
 - 若 capture 报 "no trigger condition set"，说明信号增删后 ddf 被重建、条件已重置，重新 `-trig` 即可。

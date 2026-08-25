@@ -132,7 +132,7 @@ hqbuddy -insight -capture -force           # 强制触发，立即抓取
 hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin）
 ```
 
-添加/移除信号后需执行 `-insight -run` 重新生成插桩 bitstream，并用 cable.exe 下载后方可抓取。注意 `-run` 末尾会拉起 hqdnload 下载器窗口，直接关掉即可。
+添加/移除信号后需执行 `-insight -run` 重新生成插桩 bitstream，并用 cable.exe 下载后方可抓取。注意 `-run` 末尾会拉起 hqdnload 下载器窗口，且进程会等该窗口关闭才退出。
 
 抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。VCD 可用 GTKWave 或 HqWave 打开查看。
 

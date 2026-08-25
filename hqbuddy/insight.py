@@ -616,14 +616,18 @@ def _is_combined_trigger(cond_path: str) -> bool:
         return False
 
 
-def _parse_status(raw_hex: str) -> tuple:
+def _parse_status(raw_hex: str, status_bits: int) -> tuple:
     """Parse la_status TDO value -> (overflow, done, pointer).
 
-    Status register: bit0 = overflow, bit1 = done, bits[2:] = write pointer
-    (matches the HqInsight GUI's parse_status; bit order is LSB-first).
+    Replicates the HqInsight GUI's parse_status exactly: take the low
+    status_bits of the value as a binary string, reverse it, then
+    [0]=overflow, [1]=done, int([2:], 2)=pointer (i.e. the pointer field
+    is read out bit-reversed by the hardware).
+    status_bits = mem_depth.bit_length() - 1 + 2 (e.g. 12 for depth 1024).
     """
-    value = int(raw_hex, 16)
-    return (bool(value & 1), bool(value & 2), value >> 2)
+    bin_str = format(int(raw_hex, 16), f"0{status_bits}b")[-status_bits:]
+    rev = bin_str[::-1]
+    return (rev[0] == "1", rev[1] == "1", int(rev[2:] or "0", 2))
 
 
 def _write_force_ddf(proj: dict) -> str:
@@ -666,6 +670,7 @@ def run_capture(proj: dict, timeout: int, force: bool) -> None:
 
     sections = read_hqins(proj["hqins"])
     depth = int(_section_value(sections.get("MEMORY DEPTH INFO", [])) or 1024)
+    status_bits = depth.bit_length() - 1 + 2
     offset = int(_section_value(sections.get("TRIGGER POSITION", [])) or 0)
     expr_op = _capture_expr_op(cond_path)
     is_ct = _is_combined_trigger(cond_path)
@@ -719,7 +724,7 @@ def run_capture(proj: dict, timeout: int, force: bool) -> None:
             time.sleep(0.5)
             tdo = _play_svf(cable_exe, svf("status.svf"))
             if len(tdo) >= 2:
-                overflow, done, pointer = _parse_status(tdo[1])
+                overflow, done, pointer = _parse_status(tdo[1], status_bits)
                 if done:
                     print(f"[OK] Triggered (pointer={pointer}, overflow={overflow}).")
                     break
@@ -739,10 +744,15 @@ def run_capture(proj: dict, timeout: int, force: bool) -> None:
     ], cwd=proj["work_dir"])
     tdo = _play_svf(cable_exe, svf("dump.svf"))
 
-    data = [v for v in tdo if len(v) == 22]
-    header = [v for v in tdo if len(v) != 22][:2]
+    # TDO lines: the first two are status words (short hex), the rest are
+    # waveform words whose hex length depends on the LA data width (do NOT
+    # hardcode a length — narrow designs read back short words).
+    def _is_hex(v: str) -> bool:
+        return bool(v) and all(c in "0123456789abcdefABCDEF" for c in v)
+    header = list(tdo[:2])
+    data = [v for v in tdo[2:] if _is_hex(v)]
     if not force and len(tdo) >= 2:
-        overflow, done, pointer = _parse_status(tdo[1])
+        overflow, done, pointer = _parse_status(tdo[1], status_bits)
     if len(data) < limit:
         print(f"Error: expected {limit} waveform words, got {len(data)}.")
         sys.exit(1)
