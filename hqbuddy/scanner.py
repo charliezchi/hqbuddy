@@ -34,6 +34,8 @@ def find_versions_in_root(root_dir: str) -> List[Dict]:
         hqui_path = os.path.join(dir_path, 'build', 'win_x64', 'hqui', 'hqui.exe')
         hqdnload_path = os.path.join(dir_path, 'build', 'hqdnload', 'hqdnload.exe')
         cable_path = os.path.join(dir_path, 'build', 'hqdnload', 'cable.exe')
+        gtkwave_path = os.path.join(dir_path, 'build', 'HqInsight', 'tools',
+                                    'gtkwave', 'bin', 'gtkwave.exe')
 
         doc_dir = os.path.join(dir_path, 'doc')
         doc_chs = os.path.join(doc_dir, 'hqfpga_um_chs.pdf')
@@ -49,10 +51,12 @@ def find_versions_in_root(root_dir: str) -> List[Dict]:
             'has_hqui': os.path.exists(hqui_path),
             'has_hqdnload': os.path.exists(hqdnload_path),
             'has_cable': os.path.exists(cable_path),
+            'has_gtkwave': os.path.exists(gtkwave_path),
             'hqfpga_path': hqfpga_path,
             'hqui_path': hqui_path,
             'hqdnload_path': hqdnload_path,
             'cable_path': cable_path,
+            'gtkwave_path': gtkwave_path,
             'doc_dir': doc_dir,
             'has_doc_chs': os.path.exists(doc_chs),
             'has_doc_eng': os.path.exists(doc_eng),

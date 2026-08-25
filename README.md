@@ -134,7 +134,7 @@ hqbuddy -insight -run                      # 重跑插桩实现流程（生成�
 
 添加/移除信号后需执行 `-insight -run` 重新生成插桩 bitstream，并用 cable.exe 下载后方可抓取。注意 `-run` 末尾会拉起 hqdnload 下载器窗口，且进程会等该窗口关闭才退出。
 
-抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。VCD 可用 GTKWave 或 HqWave 打开查看。
+抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。用 `hqbuddy -wave` 打开波形（自动定位 HqFPGA 自带的 GTKWave，可指定文件）。
 
 ### 查看/修改器件
 
@@ -367,6 +367,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |
 | `-dl [-f <file>]`                   | 启动 hqdnload 下载器，省略时自动检测最新`.bin`                       |
 | `-cable [args]`                     | 启动 cable.exe，透传所有参数                                           |
+| `-wave [<file>]`                    | 用 GTKWave 打开 VCD 波形（缺省自动检测最新 insight 波形）              |
 | `-insight [<file>]`                 | 查看 HqInsight 在线逻辑分析仪工程状态                                  |
 | `-insight -trig [<expr>]`           | 设置触发条件（缺省进入交互向导）                                       |
 | `-insight -capture [-force] [-timeout N]` | 布防并抓取波形为 VCD，`-force` 立即抓取                          |

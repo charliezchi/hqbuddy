@@ -60,7 +60,7 @@ hqbuddy -insight -capture -timeout 120
 hqbuddy -insight -capture -force         :: 不等触发条件，立即抓（用于冒烟验证链路）
 ```
 
-成功后输出 `hqins_run/hq_import/<top>_insight_0_ww.vcd`，并打印触发时刻各信号的值摘要。VCD 可用 GTKWave / HqWave 打开。
+成功后输出 `hqins_run/hq_import/<top>_insight_0_ww.vcd`，并打印触发时刻各信号的值摘要。用 `hqbuddy -wave`（缺省自动检测，或指定文件）调起 HqFPGA 自带的 GTKWave 打开波形。
 
 - 超时未触发说明条件不满足：换更宽松的条件，或先 `-force` 确认链路本身正常。
 - 触发位置默认 offset=128（触发点前保留 128 点），由 ddf storage 配置决定。

@@ -63,6 +63,8 @@ Tools:
                                         (-q: hide banner and Info: lines)
   -dl [-f <file>]                       Launch hqdnload downloader
   -cable [args...]                      Launch cable.exe
+  -wave [<file.vcd>]                    Open a captured waveform in GTKWave
+                                        (auto-detects the latest insight VCD)
 
 Debug:
   -insight [<.hqprj>]                   HqInsight online logic analyzer (status)
@@ -884,6 +886,47 @@ def cmd_cable(args):
     launcher.launch_tool(version, 'cable', args)
 
 
+def cmd_wave(args):
+    """Open a captured VCD waveform in the bundled GTKWave."""
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA versions found.")
+        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        sys.exit(1)
+    gtkwave = version.get('gtkwave_path')
+    if not gtkwave or not os.path.isfile(gtkwave):
+        print("Error: GTKWave not found in this HqFpga installation "
+              "(build/HqInsight/tools/gtkwave).")
+        sys.exit(1)
+
+    vcd = None
+    if args:
+        vcd = args[0]
+        if not os.path.isfile(vcd):
+            print(f"Error: file not found: {vcd}")
+            sys.exit(1)
+    else:
+        # Auto-detect: newest *insight* VCD under hqins_run, else any *.vcd
+        cands = []
+        for base, _dirs, files in os.walk('.'):
+            if 'hqins_run' in base and 'hq_import' in base:
+                for f in files:
+                    if f.endswith('.vcd'):
+                        cands.append(os.path.join(base, f))
+        if not cands:
+            cands = [f for f in os.listdir('.') if f.lower().endswith('.vcd')]
+        if not cands:
+            print("Error: no .vcd file found. Pass one explicitly: hqbuddy -wave <file.vcd>")
+            sys.exit(1)
+        cands.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+        vcd = cands[0]
+        print(f"Auto-selected waveform: {vcd}")
+
+    print(f"Opening {vcd} with GTKWave ...")
+    subprocess.Popen([gtkwave, vcd],
+                     creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+
 def cmd_config(args):
     """Configuration management."""
     cfg = config.load_config()
@@ -1109,6 +1152,11 @@ def main():
     # Cable
     if first == '-cable':
         cmd_cable(args[1:])
+        return
+
+    # Open captured waveform
+    if first == '-wave':
+        cmd_wave(args[1:])
         return
 
     # HqInsight
