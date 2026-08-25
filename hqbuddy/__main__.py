@@ -955,8 +955,16 @@ def _auto_add_tcl(flat: str) -> str:
         return (0, 0) if n == "clock_cycle" else (1, 0) if n == "trigger_event" else (2, 0)
     ordered = sorted(names, key=_key)
     sigs = " ".join("{%s}" % n.replace("{", "").replace("}", "") for n in ordered)
+    lines = [f"gtkwave::addSignalsFromList {{{sigs}}}"]
+    if "trigger_event" in names:
+        # Select trigger_event and jump to its first real rising edge: the
+        # initial $dumpvars sample at t=0 counts as an edge, so two skips.
+        lines += ["gtkwave::highlightSignalsFromList {{trigger_event}}",
+                  "gtkwave::findNextEdge",
+                  "gtkwave::findNextEdge"]
+    lines.append("gtkwave::/Time/Zoom/Zoom_Full")
     with open(tcl, "w", encoding="utf-8") as f:
-        f.write(f"gtkwave::addSignalsFromList {{{sigs}}}\n")
+        f.write("\n".join(lines) + "\n")
     return tcl
 
 
