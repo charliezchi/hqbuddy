@@ -535,6 +535,236 @@ def _trig_wizard(proj: dict) -> None:
     print(f"[OK] Trigger condition set ({len(parsed['conds'])} condition(s)).")
 
 
+# --- Waveform capture (-capture) ---
+
+# cable.exe --outTDO values seen from hq_ins (die mapping unknown; 366 verified on SA30K)
+CAPTURE_OUT_TDO = "366"
+
+
+def _tcl_path(path: str) -> str:
+    """Forward-slash absolute path for tcl consumption."""
+    return os.path.abspath(path).replace(os.sep, "/")
+
+
+def _run_hqfpga_cmds(hqfpga_exe: str, cmds: list, cwd: str) -> None:
+    """Run hqfpga.exe -cmd with a temporary tcl; abort on abnormal exit."""
+    import subprocess
+    import tempfile
+
+    tcl = "\n".join(cmds) + "\nexit\n"
+    with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
+        f.write(tcl)
+        tcl_path = f.name
+    try:
+        proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path], cwd=cwd,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    finally:
+        os.unlink(tcl_path)
+    if proc.returncode != 0:
+        print(f"Error: hqfpga.exe exited abnormally (code {proc.returncode}).")
+        sys.exit(1)
+
+
+def _play_svf(cable_exe: str, svf_path: str) -> list:
+    """Play an SVF via cable.exe; return the Received:TDO values from svf.log.
+
+    cable.exe rewrites svf.log (next to itself) on every run.
+    """
+    import subprocess
+
+    log_path = os.path.join(os.path.dirname(cable_exe), "svf.log")
+    proc = subprocess.run([cable_exe, "--svf", _tcl_path(svf_path),
+                           "--outTDO", CAPTURE_OUT_TDO, "--debug"],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if proc.returncode != 0:
+        print(f"Error: cable.exe failed to play SVF (code {proc.returncode}).")
+        sys.exit(1)
+    values = []
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        line = line.strip()
+        if line.startswith("Received:TDO(") and line.endswith(")"):
+            values.append(line[len("Received:TDO("):-1])
+    return values
+
+
+def _capture_expr_op(cond_path: str) -> str:
+    """expr_op for la_set_trig_cond: bit1 = OR combine, bit0 = negate-all."""
+    try:
+        with open(cond_path, "r", encoding="utf-8") as f:
+            cond = json.load(f)
+        first = cond["conditions"]["0"][0]
+        return f"{1 if first.get('or_eq') else 0}{1 if first.get('negate_eq') else 0}"
+    except (OSError, json.JSONDecodeError, KeyError, IndexError):
+        return "00"
+
+
+def _is_combined_trigger(cond_path: str) -> bool:
+    """Combined trigger (is_ct) = two conditions in trigger_cond.json."""
+    try:
+        with open(cond_path, "r", encoding="utf-8") as f:
+            cond = json.load(f)
+        return len(cond["conditions"]["0"][0].get("operands", [])) == 2
+    except (OSError, json.JSONDecodeError, KeyError, IndexError):
+        return False
+
+
+def _parse_status(raw_hex: str) -> tuple:
+    """Parse la_status TDO value -> (overflow, done, pointer).
+
+    Status register: bit0 = overflow, bit1 = done, bits[2:] = write pointer
+    (matches the HqInsight GUI's parse_status; bit order is LSB-first).
+    """
+    value = int(raw_hex, 16)
+    return (bool(value & 1), bool(value & 2), value >> 2)
+
+
+def _write_force_ddf(proj: dict) -> str:
+    """Write <prefix>_force.ddf: all trigger blocks ignored (= trigger always fires)."""
+    import xml.etree.ElementTree as ET
+
+    force_ddf = proj["ddf"].replace(".ddf", "_force.ddf")
+    tree = ET.parse(proj["ddf"])
+    for ignore in tree.getroot().iter("ignore"):
+        ignore.text = "yes"
+    tree.write(force_ddf, encoding="utf-8", xml_declaration=True)
+    return force_ddf
+
+
+def run_capture(proj: dict, timeout: int, force: bool) -> None:
+    """Handle 'hqbuddy -insight -capture': arm trigger, wait, read waveform, dump VCD."""
+    import time
+
+    from . import launcher
+
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA installation found (use -cfg to set up).")
+        sys.exit(1)
+    hqfpga_exe = version["hqfpga_path"]
+    cable_exe = version["cable_path"]
+    if not version.get("has_cable") or not os.path.isfile(cable_exe):
+        print(f"Error: cable.exe not found in {version['path']}")
+        sys.exit(1)
+
+    import_dir = os.path.join(proj["hqins_dir"], "hq_import")
+    prefix = os.path.join(import_dir, f"{proj['top']}_insight")
+    cond_path = os.path.join(import_dir, "trigger_cond.json")
+    if not os.path.isfile(cond_path):
+        print("Error: no trigger condition set. Use -insight -trig first.")
+        sys.exit(1)
+    if not os.path.isfile(proj["ddf"]):
+        print(f"Error: .ddf not found: {proj['ddf']}")
+        sys.exit(1)
+
+    sections = read_hqins(proj["hqins"])
+    depth = int(_section_value(sections.get("MEMORY DEPTH INFO", [])) or 1024)
+    offset = int(_section_value(sections.get("TRIGGER POSITION", [])) or 0)
+    expr_op = _capture_expr_op(cond_path)
+    is_ct = _is_combined_trigger(cond_path)
+
+    if force:
+        ddf = _write_force_ddf(proj)
+    else:
+        ddf = proj["ddf"]
+
+    def svf(name):
+        return os.path.join(import_dir, name)
+
+    gen = "insight.svf_generator"
+    common = f"-la_num 1 -la_idx 0 -is_multi_window False"
+
+    if is_ct:
+        trig_args = (f"-is_continuous False -is_ct True -expr_op {expr_op} "
+                     f"-ct_no C0 -cond_path {_tcl_path(cond_path)}")
+    else:
+        trig_args = f"-is_continuous False -is_ct False -expr_op {expr_op}"
+
+    # 1. Arm the trigger
+    _run_hqfpga_cmds(hqfpga_exe, [
+        f"{gen}.start -svf_file_path {_tcl_path(svf('arm.svf'))} "
+        f"-device_die {proj['die']} -ddf_file {_tcl_path(ddf)}",
+        f"{gen}.jtag_detect",
+        f"{gen}.la_reset {common}",
+        f"{gen}.la_offset {common} -offset {offset}",
+        f"{gen}.la_set_trig_cond {common} {trig_args}",
+        f"{gen}.la_reset {common}",
+        f"{gen}.write",
+    ], cwd=proj["work_dir"])
+    _play_svf(cable_exe, svf("arm.svf"))
+    print("[OK] Trigger armed.")
+
+    # 2. Wait for the trigger (status done bit), unless -force
+    _run_hqfpga_cmds(hqfpga_exe, [
+        f"{gen}.start -svf_file_path {_tcl_path(svf('status.svf'))} "
+        f"-device_die {proj['die']} -ddf_file {_tcl_path(ddf)}",
+        f"{gen}.la_status {common}",
+        f"{gen}.write",
+    ], cwd=proj["work_dir"])
+
+    overflow, pointer = False, 0
+    if force:
+        print("[OK] Force trigger, capturing immediately.")
+    else:
+        print(f"Waiting for trigger (timeout {timeout}s, Ctrl-C to abort)...")
+        deadline = time.time() + timeout
+        while True:
+            time.sleep(0.5)
+            tdo = _play_svf(cable_exe, svf("status.svf"))
+            if len(tdo) >= 2:
+                overflow, done, pointer = _parse_status(tdo[1])
+                if done:
+                    print(f"[OK] Triggered (pointer={pointer}, overflow={overflow}).")
+                    break
+            if time.time() >= deadline:
+                print(f"Error: trigger timeout ({timeout}s). Re-run with -force to capture immediately.")
+                sys.exit(1)
+
+    # 3. Read status + waveform (only 'pointer' words if the buffer never wrapped)
+    limit = depth if (force or overflow) else max(pointer, 1)
+    _run_hqfpga_cmds(hqfpga_exe, [
+        f"{gen}.start -svf_file_path {_tcl_path(svf('dump.svf'))} "
+        f"-device_die {proj['die']} -ddf_file {_tcl_path(ddf)}",
+        f"{gen}.la_status {common}",
+        f"{gen}.write",
+        f"{gen}.la_waveform {common} -limit {limit}",
+        f"{gen}.write",
+    ], cwd=proj["work_dir"])
+    tdo = _play_svf(cable_exe, svf("dump.svf"))
+
+    data = [v for v in tdo if len(v) == 22]
+    header = [v for v in tdo if len(v) != 22][:2]
+    if not force and len(tdo) >= 2:
+        overflow, done, pointer = _parse_status(tdo[1])
+    if len(data) < limit:
+        print(f"Error: expected {limit} waveform words, got {len(data)}.")
+        sys.exit(1)
+    while len(header) < 2:
+        header.insert(0, "0")
+    tdo_path = os.path.join(import_dir, "tdo_data.txt")
+    with open(tdo_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(header + data[:limit]) + "\n")
+
+    # 4. Convert to VCD
+    _run_hqfpga_cmds(hqfpga_exe, [
+        f"{gen}.start -svf_file_path {_tcl_path(svf('vcd.svf'))} "
+        f"-device_die {proj['die']} -ddf_file {_tcl_path(proj['ddf'])}",
+        f"{gen}.dump_vcd {common} -tdo_path {_tcl_path(tdo_path)} -window_num 1 "
+        f"-is_hier True -out_path_prefix {_tcl_path(prefix)} "
+        f"-diff_info {overflow}|{pointer}",
+    ], cwd=proj["work_dir"])
+
+    vcd = f"{prefix}_0_ww.vcd"
+    if not os.path.isfile(vcd):
+        print("Error: VCD was not generated (dump_vcd failed silently).")
+        sys.exit(1)
+    print(f"[OK] Waveform captured: {vcd}")
+
+
 def run_insight(args: list) -> None:
     """Entry point for 'hqbuddy -insight'."""
     hqprj_arg = None
@@ -555,6 +785,27 @@ def run_insight(args: list) -> None:
             _trig_wizard(proj)
             return
         cmd_trig(proj, rest[1:])
+        return
+
+    if rest[0] == "-capture":
+        timeout = 60
+        force = False
+        i = 1
+        while i < len(rest):
+            if rest[i] == "-force":
+                force = True
+            elif rest[i] == "-timeout" and i + 1 < len(rest):
+                try:
+                    timeout = int(rest[i + 1])
+                except ValueError:
+                    print(f"Error: invalid timeout: {rest[i + 1]}")
+                    sys.exit(1)
+                i += 1
+            else:
+                print(f"Error: unknown -capture option: {rest[i]}")
+                sys.exit(1)
+            i += 1
+        run_capture(proj, timeout, force)
         return
 
     print(f"Error: unknown -insight option: {' '.join(rest)}")
