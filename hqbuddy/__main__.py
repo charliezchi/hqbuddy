@@ -950,7 +950,12 @@ def _auto_add_tcl(flat: str) -> str:
                 if len(parts) >= 6:  # $var type size id name $end
                     names.append(parts[4])
     tcl = f"{os.path.splitext(flat)[0]}.tcl"
-    sigs = " ".join("{%s}" % n.replace("{", "").replace("}", "") for n in names)
+    # Fixed order: clock_cycle first, trigger_event second, then the rest
+    # in their VCD declaration order.
+    def _key(n: str) -> tuple:
+        return (0, 0) if n == "clock_cycle" else (1, 0) if n == "trigger_event" else (2, 0)
+    ordered = sorted(names, key=_key)
+    sigs = " ".join("{%s}" % n.replace("{", "").replace("}", "") for n in ordered)
     with open(tcl, "w", encoding="utf-8") as f:
         f.write(f"gtkwave::addSignalsFromList {{{sigs}}}\n")
     return tcl
