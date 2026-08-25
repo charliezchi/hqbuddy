@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.3.3
+3.4.0
 
 ## 功能特点
 
@@ -12,6 +12,7 @@
 - **路径解析**：自动将 `$WORK_DIR$` 替换为 `.hqprj` 文件所在目录的绝对路径
 - **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
 - **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式
+- **HqInsight 在线调试**：状态查看、触发条件设置（参数/交互）、波形抓取为 VCD（`-insight`）
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
 - **新建工程**：从模板创建 `.hqprj` 工程（`-new_prj`）
@@ -109,6 +110,25 @@ hqbuddy -xpn2bin debug.xpn                 # 默认生成 debug.bin
 hqbuddy -xpn2bin -o my_bitstream.bin       # 自动检测 + 自定义输出
 hqbuddy -xpn2bin debug.xpn -o my_bitstream.bin
 ```
+
+### HqInsight 在线逻辑分析仪
+
+前提：已在 HqFPGA GUI 中完成选信号并保存工程（生成 `hqins_run/hq_import.hqins`），且开发板已连接。
+
+```bat
+hqbuddy -insight                           # 查看 HqInsight 工程状态（信号/触发条件）
+hqbuddy -insight -trig                     # 交互式设置触发条件
+hqbuddy -insight -trig "dq_err EQ 0"       # 参数式设置触发（EQ/GT/LT/NE/LE/GE）
+hqbuddy -insight -trig "dq_err RANGE 1 10"           # 范围触发
+hqbuddy -insight -trig "usr_clk RISE"                # 边沿触发（RISE/FALL/BOTH/X）
+hqbuddy -insight -trig "dq_err EQ 0 AND usr_clk RISE"  # 双条件组合（AND/OR）
+hqbuddy -insight -capture                  # 布防并等待触发，抓取波形（默认超时 60s）
+hqbuddy -insight -capture -timeout 120     # 自定义超时
+hqbuddy -insight -capture -force           # 强制触发，立即抓取
+hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin）
+```
+
+抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。VCD 可用 GTKWave 或 HqWave 打开查看。
 
 ### 查看/修改器件
 
@@ -341,6 +361,10 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |
 | `-dl [-f <file>]`                   | 启动 hqdnload 下载器，省略时自动检测最新`.bin`                       |
 | `-cable [args]`                     | 启动 cable.exe，透传所有参数                                           |
+| `-insight [<file>]`                 | 查看 HqInsight 在线逻辑分析仪工程状态                                  |
+| `-insight -trig [<expr>]`           | 设置触发条件（缺省进入交互向导）                                       |
+| `-insight -capture [-force] [-timeout N]` | 布防并抓取波形为 VCD，`-force` 立即抓取                          |
+| `-insight -run`                     | 重跑插桩实现流程                                                       |
 | `-cfg [action]`                     | 管理配置（show / set-root / remove-root / init / auto）                |
 
 ## 开发与打包
@@ -381,6 +405,7 @@ hqbuddy/
 │   ├── encrypt.py        # HDL 源代码加密
 │   ├── ipmgr.py          # IP 配置文件管理（内部使用）
 │   ├── simlib.py         # XiST 仿真库编译
+│   ├── insight.py        # HqInsight 在线逻辑分析仪（触发/抓取/VCD）
 │   └── utils.py          # 版本解析与比较工具函数
 ├── scripts/
 │   └── compile_xist.tcl  # XiST 仿真库编译脚本（手动或自动均使用此脚本，支持 .v / .vp）
