@@ -5,7 +5,8 @@ Usage:
     python build.py
 
 Cleans build artifacts, builds hqbuddy.exe with PyInstaller,
-copies it to %APPDATA%\\hqbuddy\\ and registers it to the user PATH.
+copies it to %APPDATA%\\hqbuddy\\, registers it to the user PATH,
+and installs the hqfpga skill to ~/.kimi-code/skills/.
 """
 
 import glob
@@ -229,9 +230,20 @@ def register():
     info("Please restart your terminal to use 'hqbuddy'.")
 
 
+def install_skill():
+    """Install the hqfpga skill via install_skill.py (non-fatal on failure)."""
+    print()
+    info("Installing hqfpga skill...")
+    r = _run([sys.executable, os.path.join(SCRIPT_DIR, "install_skill.py")])
+    if r.returncode != 0:
+        print(f"{YELLOW}[WARN] Skill installation failed; run "
+              f"'python install_skill.py' manually.{RESET}")
+
+
 def main():
     clean()
     build()
+    install_skill()
 
 
 if __name__ == "__main__":

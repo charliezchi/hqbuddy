@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.3.2
+3.3.3
 
 ## 功能特点
 
@@ -354,7 +354,7 @@ cd hqbuddy
 .\hqbuddy.bat -v
 python -m hqbuddy -v
 
-:: 打包 exe（先清理再构建，成功后自动注册 PATH）
+:: 打包 exe（先清理再构建，成功后自动注册 PATH 并安装 hqfpga Skill）
 python build.py
 ```
 
@@ -389,7 +389,7 @@ hqbuddy/
 ├── docs/
 │   └── user_manual/      # HqFpga 官方用户手册（md / pdf）
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
-├── build.py              # 构建 / 清理统一管理，build 成功后自动注册 PATH
+├── build.py              # 构建 / 清理统一管理，build 成功后自动注册 PATH 并安装 Skill
 ├── install_skill.py      # 安装 hqfpga Skill 到用户级 skills 目录
 ├── .gitignore
 ├── .gitattributes
@@ -402,7 +402,7 @@ hqbuddy/
 
 仓库内置一个面向 AI agent 的 Skill，让 agent 理解 HqFpga 的操作流程与 U 命令体系（设计流程、99 个命令参考、UDM、SDC/物理约束），由官方用户手册蒸馏而来。
 
-安装到用户级 skills 目录（任意项目下均可触发）：
+运行 `python build.py` 打包时会自动安装；也可单独手动安装：
 
 ```bat
 python install_skill.py
