@@ -933,8 +933,27 @@ def cmd_wave(args):
         flat = vcd
     else:
         flat = _flatten_vcd(vcd)
-    subprocess.Popen([gtkwave, flat],
+    # Auto-add every signal to the trace via a GTKWave startup script.
+    tcl = _auto_add_tcl(flat)
+    subprocess.Popen([gtkwave, "-S", tcl, flat],
                      creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+
+def _auto_add_tcl(flat: str) -> str:
+    """Write a GTKWave startup script that appends all VCD signals to the
+    trace (gtkwave::addSignalsFromList). Returns the script path."""
+    names = []
+    with open(flat, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if line.startswith("$var"):
+                parts = line.split()
+                if len(parts) >= 6:  # $var type size id name $end
+                    names.append(parts[4])
+    tcl = f"{os.path.splitext(flat)[0]}.tcl"
+    sigs = " ".join("{%s}" % n.replace("{", "").replace("}", "") for n in names)
+    with open(tcl, "w", encoding="utf-8") as f:
+        f.write(f"gtkwave::addSignalsFromList {{{sigs}}}\n")
+    return tcl
 
 
 def _flatten_vcd(vcd: str) -> str:
