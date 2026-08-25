@@ -54,4 +54,4 @@ hqbuddy 的 `-dl` 命令就是启动 hqdnload（缺省自动选当前目录最�
 
 - 下载的是 `.bin`（非 `.bit`）；实现流程两个都会生成
 - 下载属 RAM 加载，断电丢失；烧写 Flash 的流程未验证，不在本参考范围
-- 在线逻辑分析仪（HqInsight）的 JTAG 交互（SVF 播放等）也走同一根下载线，见 references/insight.md（待补充）
+- 在线逻辑分析仪（HqInsight）的 JTAG 交互（SVF 播放等）也走同一根下载线，见 references/insight.md
