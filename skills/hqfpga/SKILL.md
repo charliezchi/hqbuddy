@@ -40,6 +40,7 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 - `references/udm.md` — UDM 数据模型与网表对象操控（高级）
 - `references/verilog-sdc.md` — Verilog 可综合子集与 SDC 约束语法
 - `references/modelsim.md` — ModelSim/QuestaSim 仿真（XiST 仿真库、xsGSR/xsPWR 强制实例、.do 脚本模板，做仿真任务前必读）
+- `references/download.md` — cable.exe 下载调试（检测开发板、下载 bin，要下载/连接开发板时读）
 
 ## 注意事项
 
