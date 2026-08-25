@@ -375,44 +375,62 @@ def _write_ddf(proj: dict, parsed: dict, sigs: list) -> None:
     # kind -> ddf type string
     kind_type = {"edge": "EDGE", "arith": "ARITHM", "range": "RANGE"}
 
+    # Active ddf block per trigger signal; edge X ("don't care") activates none,
+    # matching observed GUI behavior (all blocks ignore=yes). All trigger-capable
+    # signals not used in the current expression get all blocks ignore=yes.
+    active = {}
+    info = _load_signal_info(proj)
+    for s in (_collect_signals(info) if info else []):
+        if s["sample_type"] in (3, 4):
+            active[f"{s['name']}__INS_{s['module']}__INS0"] = None
     for cond, sig in zip(parsed["conds"], sigs):
         ip_name = f"{cond['signal']}__INS_{sig['module']}__INS0"
+        if not (cond["kind"] == "edge" and cond["op"] == "X"):
+            active[ip_name] = cond
+
+    for condition in trigger.findall("condition"):
+        name = condition.find("./signal/name")
+        if name is None:
+            continue
+        ip_name = name.text
+        if ip_name not in active:
+            continue  # not a trigger signal we manage; leave untouched
+        cond = active[ip_name]
+        ctype = condition.findtext("type", "")
+        ignore = condition.find("ignore")
+        if ignore is None:
+            continue
+        op_el = condition.find("op")
+        if cond is None or ctype != kind_type[cond["kind"]]:
+            ignore.text = "yes"
+            # restore canonical default op (tool warns on unsupported values)
+            if op_el is not None:
+                op_el.text = {"EDGE": "RISE", "ARITHM": "EQ", "RANGE": "GE,LE"}.get(ctype, op_el.text)
+            continue
+        ignore.text = "no"
+        sig = sigs[parsed["conds"].index(cond)]
         width = sig["msb"] - sig["lsb"] + 1
-        matched = False
-        for condition in trigger.findall("condition"):
-            name = condition.find("./signal/name")
-            if name is None or name.text != ip_name:
-                continue
-            ctype = condition.findtext("type", "")
-            ignore = condition.find("ignore")
-            active = ctype == kind_type[cond["kind"]]
-            if ignore is not None:
-                ignore.text = "no" if active else "yes"
-            if active:
-                matched = True
-                op_el = condition.find("op")
-                mask_el = condition.find("mask")
-                operand_el = condition.find("operand")
-                if cond["kind"] == "arith":
-                    if op_el is not None:
-                        op_el.text = cond["op"]
-                    if mask_el is not None:
-                        mask_el.text = "0" * width
-                    if operand_el is not None:
-                        operand_el.text = _bits_lsb_first(cond["value"], width)
-                elif cond["kind"] == "range":
-                    if op_el is not None:
-                        op_el.text = "GT,LT"
-                    if mask_el is not None:
-                        mask_el.text = "0" * width
-                    if operand_el is not None:
-                        operand_el.text = (f"{_bits_lsb_first(cond['lo'], width)},"
-                                           f"{_bits_lsb_first(cond['hi'], width)}")
-                else:  # edge
-                    if op_el is not None:
-                        op_el.text = cond["op"]
-        if not matched:
-            print(f"Warning: no matching condition block in .ddf for {ip_name}")
+        op_el = condition.find("op")
+        mask_el = condition.find("mask")
+        operand_el = condition.find("operand")
+        if cond["kind"] == "arith":
+            if op_el is not None:
+                op_el.text = cond["op"]
+            if mask_el is not None:
+                mask_el.text = "0" * width
+            if operand_el is not None:
+                operand_el.text = _bits_lsb_first(cond["value"], width)
+        elif cond["kind"] == "range":
+            if op_el is not None:
+                op_el.text = "GT,LT"
+            if mask_el is not None:
+                mask_el.text = "0" * width
+            if operand_el is not None:
+                operand_el.text = (f"{_bits_lsb_first(cond['lo'], width)},"
+                                   f"{_bits_lsb_first(cond['hi'], width)}")
+        else:  # edge: ddf op uses GUI spelling (RISE/FALL/BOTH)
+            if op_el is not None:
+                op_el.text = cond["op"]
 
     tree.write(proj["ddf"], encoding="utf-8", xml_declaration=True)
 
