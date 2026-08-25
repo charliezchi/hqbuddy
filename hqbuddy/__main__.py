@@ -35,7 +35,7 @@ Global:
   -v                      Show version
   -root                   Print HqFPGA root directory path
   -build_sel              Interactive HqFPGA version selection
-  -cfg [action]           Manage configuration (show/set-root/remove-root/init/auto)
+  -cfg                    Open config.json in an editor for manual management
 
 Project:
   -filelist [<.hqprj>] [-o <file>]     Extract FILE_SRC filelist
@@ -774,7 +774,7 @@ def cmd_gui(args):
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         sys.exit(1)
     launcher.launch_tool(version, 'hqui', args)
 
@@ -825,7 +825,7 @@ def cmd_launch_cmd(args):
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         sys.exit(1)
 
     if args and args[0] == '-e':
@@ -857,7 +857,7 @@ def cmd_dl(args):
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         sys.exit(1)
 
     # Build hqdnload args
@@ -881,7 +881,7 @@ def cmd_cable(args):
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         sys.exit(1)
     launcher.launch_tool(version, 'cable', args)
 
@@ -891,7 +891,7 @@ def cmd_wave(args):
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         sys.exit(1)
     gtkwave = version.get('gtkwave_path')
     if not gtkwave or not os.path.isfile(gtkwave):
@@ -990,70 +990,41 @@ def _flatten_vcd(vcd: str) -> str:
 
 
 def cmd_config(args):
-    """Configuration management."""
-    cfg = config.load_config()
+    """Open config.json in the system editor for manual management."""
+    if args:
+        print("Usage: hqbuddy -cfg")
+        sys.exit(1)
     cfg_path = config.get_config_path()
 
-    action = args[0] if args else 'show'
-    value = args[1] if len(args) > 1 else None
-
-    if action == 'show':
-        print(f"Config file: {cfg_path}")
-        print(json.dumps(cfg, indent=2, ensure_ascii=False))
-
-    elif action == 'set-root':
-        if not value:
-            print("Usage: hqbuddy -cfg set-root <path>")
+    # Validate an existing file before opening; never touch a broken file.
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, 'r', encoding='utf-8') as f:
+                config.parse_config_text(f.read())
+        except ValueError as e:
+            print(f"Error: {cfg_path} is not valid JSON: {e}")
+            print("Fix the file first; hqbuddy will not overwrite it.")
             sys.exit(1)
-        path = os.path.abspath(value)
-        if 'scan_roots' not in cfg:
-            cfg['scan_roots'] = []
-        if path not in cfg['scan_roots']:
-            cfg['scan_roots'].append(path)
-        config.save_config(cfg)
-        print(f"Config file: {cfg_path}")
-        print(f"Added scan root: {path}")
-
-    elif action == 'remove-root':
-        if not value:
-            print("Usage: hqbuddy -cfg remove-root <path>")
-            sys.exit(1)
-        path = os.path.abspath(value)
-        if 'scan_roots' in cfg:
-            norm_roots = [os.path.normpath(os.path.normcase(r)) for r in cfg['scan_roots']]
-            norm_path = os.path.normpath(os.path.normcase(path))
-            if norm_path in norm_roots:
-                idx = norm_roots.index(norm_path)
-                cfg['scan_roots'].pop(idx)
-                config.save_config(cfg)
-                print(f"Config file: {cfg_path}")
-                print(f"Removed scan root: {path}")
-                return
-        print(f"Config file: {cfg_path}")
-        print(f"Root not found in config: {path}")
-
-    elif action == 'init':
-        config.save_config(config.DEFAULT_CONFIG)
-        print(f"Config file: {cfg_path}")
-        print("Configuration reset to defaults.")
-
-    elif action == 'auto':
-        # Scan all roots, auto-select latest as selected_build
-        from .scanner import scan_all
-        versions = scan_all(cfg)
-        if not versions:
-            print("No HqFPGA versions found. Please check scan roots.")
-            sys.exit(1)
-        latest = versions[0]
-        cfg['selected_build'] = latest['build']
-        config.save_config(cfg)
-        print(f"Config file: {cfg_path}")
-        print(f"Auto-configured: selected v{latest['semver']} (build {latest['build']})")
-
     else:
-        print(f"Unknown config action: {action}")
-        print("Valid actions: show, set-root, remove-root, init, auto")
-        sys.exit(1)
+        config.save_config(config.DEFAULT_CONFIG)
+
+    print(f"Config file: {cfg_path}")
+
+    if sys.platform == 'win32':
+        opened = _open_with_default_app(cfg_path)
+        if not opened:
+            subprocess.Popen(["notepad", cfg_path])
+    else:
+        subprocess.Popen(["xdg-open", cfg_path])
+
+
+def _open_with_default_app(path: str) -> bool:
+    """Open with the OS default association; returns False if it failed."""
+    try:
+        os.startfile(path)  # noqa: S606 - Windows only
+        return True
+    except (OSError, AttributeError):
+        return False
 
 
 def _ensure_console_utf8():
@@ -1105,7 +1076,7 @@ def main():
             print(root)
         else:
             print("Error: no HqFPGA versions found.")
-            print("Tip: Use 'hqbuddy -cfg auto' to configure scan roots.")
+            print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         return
 
     # Build selector
