@@ -172,6 +172,278 @@ def show_status(proj: dict) -> None:
         print("Trigger : (not set)")
 
 
+# --- Trigger condition setup (-trig) ---
+
+ARITH_OPS = ("EQ", "GT", "LT", "NE", "LE", "GE")
+EDGE_OPS = {"RISE": "Rising Edge", "FALL": "Falling Edge", "BOTH": "B Edge", "X": "X"}
+
+
+def _bits_lsb_first(value: int, width: int) -> str:
+    """Binary string, LSB first (ddf operand encoding: 16'd1 -> '1000000000000000')."""
+    return bin(value)[2:].zfill(width)[::-1]
+
+
+def _parse_value(token: str) -> int:
+    """Parse an integer literal (decimal or 0x hex)."""
+    try:
+        return int(token, 0)
+    except ValueError:
+        print(f"Error: invalid value: {token}")
+        sys.exit(1)
+
+
+def parse_trig_expr(tokens: list) -> dict:
+    """Parse -trig tokens into a trigger description.
+
+    Returns {conds: [{signal, kind, op, value, lo, hi, negate}],
+             combine: 'AND'|'OR'|None, negate_all: bool}.
+    kind: 'arith' | 'edge' | 'range'
+    """
+    negate_all = False
+    words = []
+    for t in tokens:
+        if t == "--negate":
+            negate_all = True
+        else:
+            words.extend(t.split())
+
+    # Split words into conditions on AND/OR
+    groups = []
+    combine = None
+    current = []
+    for w in words:
+        if w.upper() in ("AND", "OR"):
+            if not current:
+                print("Error: missing condition before AND/OR")
+                sys.exit(1)
+            groups.append(current)
+            if combine and combine != w.upper():
+                print("Error: cannot mix AND and OR")
+                sys.exit(1)
+            combine = w.upper()
+            current = []
+        else:
+            current.append(w)
+    if current:
+        groups.append(current)
+
+    if len(groups) > 2:
+        print("Error: at most 2 trigger conditions (hardware has 2 compare units)")
+        sys.exit(1)
+    if len(groups) == 2 and not combine:
+        print("Error: two conditions require AND or OR between them")
+        sys.exit(1)
+
+    conds = []
+    for g in groups:
+        negate = False
+        if g and g[0].upper() == "NOT":
+            negate = True
+            g = g[1:]
+        if len(g) < 2:
+            print(f"Error: incomplete condition: {' '.join(g)}")
+            sys.exit(1)
+        signal, op = g[0], g[1].upper()
+        if op in ARITH_OPS:
+            if len(g) != 3:
+                print(f"Error: {op} requires a value: {signal} {op} <value>")
+                sys.exit(1)
+            conds.append({"signal": signal, "kind": "arith", "op": op,
+                          "value": _parse_value(g[2]), "negate": negate})
+        elif op == "RANGE":
+            if len(g) != 4:
+                print(f"Error: RANGE requires two bounds: {signal} RANGE <lo> <hi>")
+                sys.exit(1)
+            conds.append({"signal": signal, "kind": "range",
+                          "lo": _parse_value(g[2]), "hi": _parse_value(g[3]),
+                          "negate": negate})
+        elif op in EDGE_OPS:
+            if len(g) != 2:
+                print(f"Error: {op} takes no value: {signal} {op}")
+                sys.exit(1)
+            conds.append({"signal": signal, "kind": "edge", "op": op, "negate": negate})
+        else:
+            print(f"Error: unknown trigger operator: {op}")
+            print(f"       arithmetic: {'/'.join(ARITH_OPS)}; range: RANGE lo hi; edge: RISE/FALL/BOTH/X")
+            sys.exit(1)
+
+    return {"conds": conds, "combine": combine, "negate_all": negate_all}
+
+
+def _check_trigger_signals(proj: dict, parsed: dict) -> list:
+    """Validate condition signals against .hqins; returns signal info list per cond."""
+    info = _load_signal_info(proj)
+    signals = _collect_signals(info) if info else []
+    result = []
+    for cond in parsed["conds"]:
+        match = [s for s in signals if s["name"] == cond["signal"]]
+        if not match:
+            avail = ", ".join(s["name"] for s in signals if s["sample_type"] in (3, 4))
+            print(f"Error: signal not found in HqInsight project: {cond['signal']}")
+            print(f"       trigger-capable signals: {avail or '(none)'}")
+            sys.exit(1)
+        sig = match[0]
+        if sig["sample_type"] not in (3, 4):
+            print(f"Error: signal is sample-only, cannot trigger: {cond['signal']}")
+            sys.exit(1)
+        if cond["kind"] == "edge" and sig["msb"] != sig["lsb"]:
+            print(f"Error: edge trigger requires a 1-bit signal: {cond['signal']}")
+            sys.exit(1)
+        result.append(sig)
+    return result
+
+
+def _write_trigger_expr(proj: dict, parsed: dict, sigs: list) -> None:
+    """Write trigger_expr.json (GUI persistence format)."""
+    conds_json = []
+    for cond, sig in zip(parsed["conds"], sigs):
+        width = sig["msb"] - sig["lsb"] + 1
+        level = {"trigger_level": 1, "edge_type": "",
+                 "left_value_type": "", "left_value_v": "", "left_value_b": "",
+                 "right_value_type": "", "right_value_v": "", "right_value_b": ""}
+        if cond["kind"] == "arith":
+            level["trigger_type"] = "Arithm Comparator"
+            level["left_value_type"] = cond["op"]
+            level["left_value_v"] = f"{width}'d{cond['value']}"
+            level["left_value_b"] = bin(cond["value"])[2:].zfill(width)
+        elif cond["kind"] == "range":
+            level["trigger_type"] = "Range"
+            level["left_value_type"] = "GT"
+            level["left_value_v"] = f"{width}'d{cond['lo']}"
+            level["left_value_b"] = bin(cond["lo"])[2:].zfill(width)
+            level["right_value_type"] = "LT"
+            level["right_value_v"] = f"{width}'d{cond['hi']}"
+            level["right_value_b"] = bin(cond["hi"])[2:].zfill(width)
+        else:
+            level["trigger_type"] = "Edge Detector"
+            level["edge_type"] = EDGE_OPS[cond["op"]]
+        conds_json.append({"signal_name": cond["signal"], "module_name": sig["module"],
+                           "trigger_levels": [level]})
+
+    path = os.path.join(proj["hqins_dir"], "hq_import", "trigger_expr.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"version": "1.0", "conditions": {"0": conds_json}}, f, indent=2)
+
+
+def _write_trigger_cond(proj: dict, parsed: dict, sigs: list) -> None:
+    """Write trigger_cond.json (runtime combination expression)."""
+    multi = len(parsed["conds"]) == 2
+    if multi:
+        or_eq = parsed["combine"] == "OR"
+        expr = "B0|B1" if or_eq else "B0&B1"
+        base_op = 0b101 if or_eq else 0b011
+    else:
+        or_eq = False
+        expr = "B0"
+        base_op = 0
+
+    operands = []
+    for i, (cond, sig) in enumerate(zip(parsed["conds"], sigs)):
+        op_bits = base_op | (0b1000 if cond["negate"] else 0)
+        if cond["negate"]:
+            expr = expr.replace(f"B{i}", f"!B{i}")
+        operands.append({"signal_id": f"B{i}", "signal_name": cond["signal"],
+                         "module_name": sig["module"],
+                         "negate": "Yes" if cond["negate"] else "No",
+                         "operation": format(op_bits, "04b"), "busname": ""})
+    if parsed["negate_all"]:
+        expr = f"!({expr})"
+
+    path = os.path.join(proj["hqins_dir"], "hq_import", "trigger_cond.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"version": "1.0", "conditions": {"0": [{
+            "index": "C0", "expression": expr,
+            "and_eq": not or_eq, "or_eq": or_eq,
+            "negate_eq": parsed["negate_all"], "operands": operands}]}}, f, indent=2)
+
+
+def _write_ddf(proj: dict, parsed: dict, sigs: list) -> None:
+    """Update the .ddf comparator blocks (ignore flag, op, mask, operand)."""
+    import xml.etree.ElementTree as ET
+
+    if not os.path.isfile(proj["ddf"]):
+        print(f"Warning: .ddf not found, skipped: {proj['ddf']}")
+        return
+
+    tree = ET.parse(proj["ddf"])
+    root = tree.getroot()
+    trigger = root.find("./la_core/trigger")
+    if trigger is None:
+        print("Warning: no <trigger> section in .ddf, skipped")
+        return
+
+    # kind -> ddf type string
+    kind_type = {"edge": "EDGE", "arith": "ARITHM", "range": "RANGE"}
+
+    for cond, sig in zip(parsed["conds"], sigs):
+        ip_name = f"{cond['signal']}__INS_{sig['module']}__INS0"
+        width = sig["msb"] - sig["lsb"] + 1
+        matched = False
+        for condition in trigger.findall("condition"):
+            name = condition.find("./signal/name")
+            if name is None or name.text != ip_name:
+                continue
+            ctype = condition.findtext("type", "")
+            ignore = condition.find("ignore")
+            active = ctype == kind_type[cond["kind"]]
+            if ignore is not None:
+                ignore.text = "no" if active else "yes"
+            if active:
+                matched = True
+                op_el = condition.find("op")
+                mask_el = condition.find("mask")
+                operand_el = condition.find("operand")
+                if cond["kind"] == "arith":
+                    if op_el is not None:
+                        op_el.text = cond["op"]
+                    if mask_el is not None:
+                        mask_el.text = "0" * width
+                    if operand_el is not None:
+                        operand_el.text = _bits_lsb_first(cond["value"], width)
+                elif cond["kind"] == "range":
+                    if op_el is not None:
+                        op_el.text = "GT,LT"
+                    if mask_el is not None:
+                        mask_el.text = "0" * width
+                    if operand_el is not None:
+                        operand_el.text = (f"{_bits_lsb_first(cond['lo'], width)},"
+                                           f"{_bits_lsb_first(cond['hi'], width)}")
+                else:  # edge
+                    if op_el is not None:
+                        op_el.text = cond["op"]
+        if not matched:
+            print(f"Warning: no matching condition block in .ddf for {ip_name}")
+
+    tree.write(proj["ddf"], encoding="utf-8", xml_declaration=True)
+
+
+def write_trigger_files(proj: dict, parsed: dict) -> None:
+    """Validate and write all three trigger files consistently."""
+    sigs = _check_trigger_signals(proj, parsed)
+    _write_trigger_expr(proj, parsed, sigs)
+    _write_trigger_cond(proj, parsed, sigs)
+    _write_ddf(proj, parsed, sigs)
+
+
+def cmd_trig(proj: dict, tokens: list) -> None:
+    """Handle 'hqbuddy -insight -trig ...'."""
+    parsed = parse_trig_expr(tokens)
+    write_trigger_files(proj, parsed)
+    desc = []
+    for c in parsed["conds"]:
+        prefix = "NOT " if c["negate"] else ""
+        if c["kind"] == "arith":
+            desc.append(f"{prefix}{c['signal']} {c['op']} {c['value']}")
+        elif c["kind"] == "range":
+            desc.append(f"{prefix}{c['signal']} RANGE {c['lo']} {c['hi']}")
+        else:
+            desc.append(f"{prefix}{c['signal']} {c['op']}")
+    combined = f" {parsed['combine']} ".join(desc) if parsed["combine"] else desc[0]
+    if parsed["negate_all"]:
+        combined = f"NOT ({combined})"
+    print(f"[OK] Trigger condition set: {combined}")
+
+
 def run_insight(args: list) -> None:
     """Entry point for 'hqbuddy -insight'."""
     hqprj_arg = None
@@ -185,6 +457,17 @@ def run_insight(args: list) -> None:
     proj = resolve_insight_project(hqprj_arg)
     if not rest:
         show_status(proj)
+        return
+
+    if rest[0] == "-trig":
+        if len(rest) == 1:
+            print("Error: -trig requires a condition (interactive wizard not yet available)")
+            print("Usage: -insight -trig <sig> <EQ|GT|LT|NE|LE|GE> <value>")
+            print("       -insight -trig <sig> RANGE <lo> <hi>")
+            print("       -insight -trig <sig> <RISE|FALL|BOTH|X>")
+            print('       -insight -trig "<cond1>" AND|OR "<cond2>" [--negate]')
+            sys.exit(1)
+        cmd_trig(proj, rest[1:])
         return
 
     print(f"Error: unknown -insight option: {' '.join(rest)}")
