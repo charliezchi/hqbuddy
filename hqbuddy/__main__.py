@@ -941,7 +941,8 @@ def cmd_wave(args):
 
 def _auto_add_tcl(flat: str) -> str:
     """Write a GTKWave startup script that appends all VCD signals to the
-    trace (gtkwave::addSignalsFromList). Returns the script path."""
+    trace, clock_cycle first, trigger_event second, then the rest in their
+    VCD declaration order. Returns the script path."""
     names = []
     with open(flat, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
@@ -950,8 +951,6 @@ def _auto_add_tcl(flat: str) -> str:
                 if len(parts) >= 6:  # $var type size id name $end
                     names.append(parts[4])
     tcl = f"{os.path.splitext(flat)[0]}.tcl"
-    # Fixed order: clock_cycle first, trigger_event second, then the rest
-    # in their VCD declaration order.
     def _key(n: str) -> tuple:
         return (0, 0) if n == "clock_cycle" else (1, 0) if n == "trigger_event" else (2, 0)
     ordered = sorted(names, key=_key)
