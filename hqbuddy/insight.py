@@ -444,6 +444,79 @@ def cmd_trig(proj: dict, tokens: list) -> None:
     print(f"[OK] Trigger condition set: {combined}")
 
 
+def _trig_wizard(proj: dict) -> None:
+    """Interactive wizard for setting a trigger condition."""
+    info = _load_signal_info(proj)
+    signals = [s for s in (_collect_signals(info) if info else []) if s["sample_type"] in (3, 4)]
+    if not signals:
+        print("Error: no trigger-capable signals in HqInsight project.")
+        sys.exit(1)
+
+    conds = []
+    combine = None
+    negate_all = False
+
+    while True:
+        print("\nTrigger-capable signals:")
+        for i, s in enumerate(signals):
+            print(f"  {i + 1}. {s['name']}  [{s['msb'] - s['lsb'] + 1}b]")
+        choice = input("Select signal number: ").strip()
+        try:
+            sig = signals[int(choice) - 1]
+        except (ValueError, IndexError):
+            print("Invalid selection.")
+            continue
+        width = sig["msb"] - sig["lsb"] + 1
+
+        print("Trigger type: 1. arithmetic  2. edge  3. range")
+        tchoice = input("Select type: ").strip()
+        if tchoice == "1":
+            op = input(f"Operator ({'/'.join(ARITH_OPS)}): ").strip().upper()
+            if op not in ARITH_OPS:
+                print("Invalid operator.")
+                continue
+            conds.append(f"{sig['name']} {op} {input('Value: ').strip()}")
+        elif tchoice == "2":
+            if width != 1:
+                print("Edge trigger requires a 1-bit signal.")
+                continue
+            op = input("Edge (RISE/FALL/BOTH/X): ").strip().upper()
+            if op not in EDGE_OPS:
+                print("Invalid edge type.")
+                continue
+            conds.append(f"{sig['name']} {op}")
+        elif tchoice == "3":
+            lo = input("Lower bound (exclusive): ").strip()
+            hi = input("Upper bound (exclusive): ").strip()
+            conds.append(f"{sig['name']} RANGE {lo} {hi}")
+        else:
+            print("Invalid type.")
+            continue
+
+        if input("Negate this condition? (y/N): ").strip().lower() == "y":
+            conds[-1] = "NOT " + conds[-1]
+
+        if len(conds) >= 2:
+            break
+        if input("Add another condition? (y/N): ").strip().lower() != "y":
+            break
+        combine = input("Combine with (AND/OR): ").strip().upper()
+        if combine not in ("AND", "OR"):
+            print("Invalid; using AND.")
+            combine = "AND"
+
+    if len(conds) == 2:
+        tokens = [conds[0], combine, conds[1]]
+    else:
+        tokens = [conds[0]]
+    if input("Negate the whole expression? (y/N): ").strip().lower() == "y":
+        tokens.append("--negate")
+
+    parsed = parse_trig_expr(tokens)
+    write_trigger_files(proj, parsed)
+    print(f"[OK] Trigger condition set ({len(parsed['conds'])} condition(s)).")
+
+
 def run_insight(args: list) -> None:
     """Entry point for 'hqbuddy -insight'."""
     hqprj_arg = None
@@ -461,12 +534,8 @@ def run_insight(args: list) -> None:
 
     if rest[0] == "-trig":
         if len(rest) == 1:
-            print("Error: -trig requires a condition (interactive wizard not yet available)")
-            print("Usage: -insight -trig <sig> <EQ|GT|LT|NE|LE|GE> <value>")
-            print("       -insight -trig <sig> RANGE <lo> <hi>")
-            print("       -insight -trig <sig> <RISE|FALL|BOTH|X>")
-            print('       -insight -trig "<cond1>" AND|OR "<cond2>" [--negate]')
-            sys.exit(1)
+            _trig_wizard(proj)
+            return
         cmd_trig(proj, rest[1:])
         return
 
