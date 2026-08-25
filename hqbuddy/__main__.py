@@ -907,14 +907,18 @@ def cmd_wave(args):
             sys.exit(1)
     else:
         # Auto-detect: newest *insight* VCD under hqins_run, else any *.vcd
+        # (skip our own *_flat.vcd copies)
+        def _is_flat(f: str) -> bool:
+            return f.lower().endswith("_flat.vcd")
         cands = []
         for base, _dirs, files in os.walk('.'):
             if 'hqins_run' in base and 'hq_import' in base:
                 for f in files:
-                    if f.endswith('.vcd'):
+                    if f.endswith('.vcd') and not _is_flat(f):
                         cands.append(os.path.join(base, f))
         if not cands:
-            cands = [f for f in os.listdir('.') if f.lower().endswith('.vcd')]
+            cands = [f for f in os.listdir('.')
+                     if f.lower().endswith('.vcd') and not _is_flat(f)]
         if not cands:
             print("Error: no .vcd file found. Pass one explicitly: hqbuddy -wave <file.vcd>")
             sys.exit(1)
@@ -923,8 +927,35 @@ def cmd_wave(args):
         print(f"Auto-selected waveform: {vcd}")
 
     print(f"Opening {vcd} with GTKWave ...")
-    subprocess.Popen([gtkwave, vcd],
+    # Already-flattened copies are opened as-is; anything else is copied and
+    # its signal names shortened to the last hierarchy segment.
+    if os.path.basename(vcd).lower().endswith("_flat.vcd"):
+        flat = vcd
+    else:
+        flat = _flatten_vcd(vcd)
+    subprocess.Popen([gtkwave, flat],
                      creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+
+def _flatten_vcd(vcd: str) -> str:
+    """Copy the VCD next to the original with signal names shortened to
+    their last hierarchy segment (e.g. 'top/u_inst/foo[3:0]' -> 'foo[3:0]'),
+    so the GTKWave signal list stays readable. Returns the copy path."""
+    stem, ext = os.path.splitext(vcd)
+    flat = f"{stem}_flat{ext}"
+    out = []
+    with open(vcd, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if line.startswith("$var"):
+                parts = line.split()
+                if len(parts) >= 6:  # $var type size id name $end
+                    parts[4] = parts[4].rsplit("/", 1)[-1]
+                    line = " ".join(parts) + "\n"
+            out.append(line)
+    with open(flat, "w", encoding="utf-8") as f:
+        f.write("".join(out))
+    print(f"Shortened signal names -> {flat}")
+    return flat
 
 
 def cmd_config(args):
