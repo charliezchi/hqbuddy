@@ -317,7 +317,7 @@ hqbuddy -cable -scan                      # 透传 -scan 参数
 配置保存在 `%APPDATA%\hqbuddy\config.json`，用 `hqbuddy -cfg` 打开编辑：
 
 - `scan_path`：HqFPGA 安装根目录扫描列表，每个条目是一个目录，hqbuddy 会扫描其中形如 `hqv*_xist_*_win64` 的目录作为可用版本
-- `selected_build`：当前选中的版本 build（由 `-build_sel` / `-device -set` 维护，留空则自动使用最新版本）
+- `selected_build`：当前选中的版本 build（由 `-build_sel` 维护，留空则自动使用最新版本）
 
 修改保存后下次运行即生效。
 
