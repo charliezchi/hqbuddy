@@ -763,6 +763,102 @@ def run_capture(proj: dict, timeout: int, force: bool) -> None:
         print("Error: VCD was not generated (dump_vcd failed silently).")
         sys.exit(1)
     print(f"[OK] Waveform captured: {vcd}")
+    summarize_vcd(vcd)
+
+
+def summarize_vcd(vcd_path: str) -> None:
+    """Print a summary of a captured VCD: signals and values at the trigger moment."""
+    try:
+        with open(vcd_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return
+
+    codes = {}  # code -> (name, width)
+    i = 0
+    while i < len(lines):
+        parts = lines[i].split()
+        if len(parts) >= 5 and parts[0] == "$var":
+            width = int(parts[2])
+            codes[parts[3]] = (" ".join(parts[4:-1]), width)
+        if parts and parts[0] == "$enddefinitions":
+            break
+        i += 1
+
+    # scan value changes; find first 0->1 of trigger_event
+    values = {}
+    time_now = 0
+    trig_time = None
+    trig_code = None
+    for code, (name, _) in codes.items():
+        if name == "trigger_event":
+            trig_code = code
+    for line in lines[i:]:
+        if line.startswith("#"):
+            time_now = int(line[1:])
+        elif line.startswith("b"):
+            b, _, code = line.partition(" ")
+            values[code] = b[1:]
+        elif line and line[0] in "01xz":
+            values[line[1:]] = line[0]
+            if trig_code and line[1:] == trig_code and line[0] == "1" and trig_time is None:
+                trig_time = time_now
+
+    print(f"Signals ({len(codes)}):")
+    for code, (name, width) in codes.items():
+        print(f"  {name} [{width}b]")
+    if trig_time is not None:
+        # values at the trigger moment are not fully tracked here; re-scan up to trig_time
+        values.clear()
+        time_now = 0
+        for line in lines[i:]:
+            if line.startswith("#"):
+                time_now = int(line[1:])
+                if time_now > trig_time:
+                    break
+            elif line.startswith("b"):
+                b, _, code = line.partition(" ")
+                values[code] = b[1:]
+            elif line and line[0] in "01xz":
+                values[line[1:]] = line[0]
+        print(f"Trigger at #{trig_time}:")
+        for code, (name, width) in codes.items():
+            if name == "trigger_event":
+                continue
+            v = values.get(code)
+            if v is not None:
+                pv = hex(int(v, 2)) if set(v) <= {"0", "1"} else v
+                print(f"  {name} = {v} ({pv})" if pv != v else f"  {name} = {v}")
+    else:
+        print("Trigger moment: not found in VCD.")
+
+
+def run_flow(proj: dict) -> None:
+    """Handle 'hqbuddy -insight -run': run the instrumented implementation flow."""
+    from . import launcher
+
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA installation found (use -cfg to set up).")
+        sys.exit(1)
+    hqfpga_exe = version["hqfpga_path"]
+
+    import subprocess
+    import tempfile
+
+    tcl = f"run_hqprj2hqins_flow {{{_tcl_path(proj['hqprj'])}}}\nexit\n"
+    with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
+        f.write(tcl)
+        tcl_path = f.name
+    print(f"Running instrumented flow for {proj['hqprj']} ...")
+    try:
+        proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path], cwd=proj["work_dir"])
+    finally:
+        os.unlink(tcl_path)
+    if proc.returncode != 0:
+        print(f"Error: hqfpga.exe flow failed (code {proc.returncode}).")
+        sys.exit(1)
+    print("[OK] Instrumented flow done.")
 
 
 def run_insight(args: list) -> None:
@@ -806,6 +902,10 @@ def run_insight(args: list) -> None:
                 sys.exit(1)
             i += 1
         run_capture(proj, timeout, force)
+        return
+
+    if rest[0] == "-run":
+        run_flow(proj)
         return
 
     print(f"Error: unknown -insight option: {' '.join(rest)}")

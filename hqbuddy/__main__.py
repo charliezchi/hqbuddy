@@ -66,6 +66,13 @@ Tools:
 
 Debug:
   -insight [<.hqprj>]                   HqInsight online logic analyzer (status)
+  -insight -trig [<expr>]               Set trigger condition (wizard if omitted)
+                                        e.g. "sig EQ 5", "sig RANGE 1 10", "sig RISE",
+                                        "a GT 0 AND b FALL", NOT <cond>, --negate
+  -insight -capture [-force] [-timeout N]
+                                        Arm trigger and capture waveform to VCD
+                                        (-force: capture immediately; default timeout 60s)
+  -insight -run                         Run the instrumented implementation flow
 """)
 
 
