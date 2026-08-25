@@ -21,6 +21,7 @@ from .device import run_device
 from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
 from .simlib import run_simlib
+from .insight import run_insight
 from .encrypt import run_encrypt
 from .hqip_gen import run_gen_hqip
 
@@ -62,6 +63,9 @@ Tools:
                                         (-q: hide banner and Info: lines)
   -dl [-f <file>]                       Launch hqdnload downloader
   -cable [args...]                      Launch cable.exe
+
+Debug:
+  -insight [<.hqprj>]                   HqInsight online logic analyzer (status)
 """)
 
 
@@ -1093,6 +1097,11 @@ def main():
     # Cable
     if first == '-cable':
         cmd_cable(args[1:])
+        return
+
+    # HqInsight
+    if first == '-insight':
+        run_insight(args[1:])
         return
 
     print(f"Error: unknown option: {first}")
