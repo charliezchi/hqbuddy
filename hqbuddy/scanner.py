@@ -79,7 +79,8 @@ def scan_all(config: dict) -> List[Dict]:
     all_versions = []
     seen_paths = set()
 
-    for root in config.get('scan_roots', []):
+    roots = config.get('scan_path') or config.get('scan_roots') or []
+    for root in roots:
         for v in find_versions_in_root(root):
             norm_path = os.path.normcase(os.path.normpath(v['path']))
             if norm_path not in seen_paths:
