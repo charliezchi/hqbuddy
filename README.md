@@ -113,9 +113,13 @@ hqbuddy -xpn2bin debug.xpn -o my_bitstream.bin
 
 ### HqInsight 在线逻辑分析仪
 
-前提：已在 HqFPGA GUI 中完成选信号并保存工程（生成 `hqins_run/hq_import.hqins`），且开发板已连接。
+前提：开发板已连接。选信号可以在 HqFPGA GUI 中完成，也可以全程用 CLI（`-init`/`-ls`/`-add`/`-del`）完成。
 
 ```bat
+hqbuddy -insight -init                     # 初始化 HqInsight 工程（elaborate 设计，无需 GUI）
+hqbuddy -insight -ls [关键字]              # 列出设计信号（* = 已选入）
+hqbuddy -insight -add dq_err -clk usr_clk -type both   # 添加信号（sample/trigger/both）
+hqbuddy -insight -del dq_err               # 移除信号
 hqbuddy -insight                           # 查看 HqInsight 工程状态（信号/触发条件）
 hqbuddy -insight -trig                     # 交互式设置触发条件
 hqbuddy -insight -trig "dq_err EQ 0"       # 参数式设置触发（EQ/GT/LT/NE/LE/GE）
@@ -127,6 +131,8 @@ hqbuddy -insight -capture -timeout 120     # 自定义超时
 hqbuddy -insight -capture -force           # 强制触发，立即抓取
 hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin）
 ```
+
+添加/移除信号后需执行 `-insight -run` 重新生成插桩 bitstream，并用 cable.exe 下载后方可抓取。注意 `-run` 末尾会拉起 hqdnload 下载器窗口，直接关掉即可。
 
 抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。VCD 可用 GTKWave 或 HqWave 打开查看。
 
@@ -365,6 +371,9 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-insight -trig [<expr>]`           | 设置触发条件（缺省进入交互向导）                                       |
 | `-insight -capture [-force] [-timeout N]` | 布防并抓取波形为 VCD，`-force` 立即抓取                          |
 | `-insight -run`                     | 重跑插桩实现流程                                                       |
+| `-insight -init`                    | 初始化 HqInsight 工程（无需 GUI）                                      |
+| `-insight -ls [关键字]`             | 列出设计信号                                                           |
+| `-insight -add/-del <信号>`         | 添加/移除采样/触发信号                                                 |
 | `-cfg [action]`                     | 管理配置（show / set-root / remove-root / init / auto）                |
 
 ## 开发与打包

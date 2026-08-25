@@ -23,11 +23,12 @@ def _read_hqprj_fields(hqprj_path: str, keys: tuple) -> dict:
     return result
 
 
-def resolve_insight_project(hqprj_arg: str | None) -> dict:
+def resolve_insight_project(hqprj_arg: str | None, require_hqins: bool = True) -> dict:
     """Resolve the HqInsight project from a .hqprj path or auto-detection.
 
-    Returns dict with: hqprj, work_dir, hqins_dir, hqins, ddf, top, die.
-    Exits with an error if the HqInsight project (hqins_run/) is missing.
+    Returns dict with: hqprj, work_dir, hqins_dir, hqins, ddf, top, die, family.
+    Exits with an error if the HqInsight project (hqins_run/) is missing,
+    unless require_hqins is False (e.g. for -init).
     """
     if hqprj_arg:
         hqprj = hqprj_arg
@@ -44,9 +45,10 @@ def resolve_insight_project(hqprj_arg: str | None) -> dict:
 
     hqprj = os.path.abspath(hqprj)
     work_dir = os.path.dirname(hqprj)
-    fields = _read_hqprj_fields(hqprj, ("TOP_MODULE", "DIE"))
+    fields = _read_hqprj_fields(hqprj, ("TOP_MODULE", "DIE", "FAMILY"))
     top = fields.get("TOP_MODULE")
     die = fields.get("DIE")
+    family = fields.get("FAMILY")
     if not top or not die:
         print("Error: missing TOP_MODULE or DIE in .hqprj")
         sys.exit(1)
@@ -55,9 +57,9 @@ def resolve_insight_project(hqprj_arg: str | None) -> dict:
     hqins = os.path.join(hqins_dir, "hq_import.hqins")
     ddf = os.path.join(hqins_dir, "hq_import", f"{top}_insight.ddf")
 
-    if not os.path.isfile(hqins):
+    if require_hqins and not os.path.isfile(hqins):
         print("Error: HqInsight project not found (no hqins_run/hq_import.hqins).")
-        print("Tip: configure signals in the HqFpga GUI first, then save the project.")
+        print("Tip: run -insight -init, or configure signals in the HqFpga GUI first.")
         sys.exit(1)
 
     return {
@@ -68,6 +70,7 @@ def resolve_insight_project(hqprj_arg: str | None) -> dict:
         "ddf": ddf,
         "top": top,
         "die": die,
+        "family": family or "",
     }
 
 
@@ -861,6 +864,422 @@ def run_flow(proj: dict) -> None:
     print("[OK] Instrumented flow done.")
 
 
+# --- Signal selection (-init/-ls/-add/-del) ---
+
+STYPE_TOKENS = {"sample": 2, "trigger": 3, "both": 4}
+
+
+def _initial_hqins(proj: dict, vfiles: list) -> str:
+    """Build the initial .hqins skeleton (as the GUI writes it on entering HqInsight)."""
+    import time
+
+    wdir = "$WORK_DIR"
+    files = "\n".join(f.replace(proj["work_dir"].replace(os.sep, "/"), wdir) for f in vfiles)
+    times = "\n".join(str(os.path.getmtime(f)) for f in vfiles)
+    hqins_rel = f"{wdir}/hqins_run/hq_import.hqins"
+    return f"""[HQINS PROJECT VERSION]
+1.0
+
+[OWNER NAME]
+HqInsight
+
+[PROJECT NAME]
+{hqins_rel}
+
+
+[PROJECT FILES]
+{files}
+
+
+[FILE TIMES]
+{times}
+
+[HQFPGA TCL]
+{wdir}/hqins_run/hq_impor_t.tcl
+
+[HQFPGA NEW RTL TCL]
+{wdir}/hqins_run/hq_impor_new_rtl.tcl
+
+[MEMORY DEPTH INFO]
+0_LA:1024
+
+[ADD REGISTER]
+0_LA:YES
+
+[TRIGGER POSITION]
+0_LA:128
+
+[WRITE FULL BRAM]
+0_LA:true
+
+[TRIGGER MULTI-WINDOW]
+0_LA:1
+
+[TRIGGER LEVEL]
+0_LA:1
+
+[LA NUMBER]
+1
+
+[CLOCK FREQUENCY]
+100
+
+[TOP MODULE NAME]
+{proj['top']}
+
+[FPGA DEVICE NAME]
+{proj['family']}
+
+[FPGA DEVICE DIE]
+{proj['die']}
+"""
+
+
+def _write_import_tcls(proj: dict, vfiles: list) -> None:
+    """Write hq_impor_t.tcl / hq_impor_new_rtl.tcl into hqins_run/ (GUI equivalents)."""
+    wdir = proj["work_dir"].replace(os.sep, "/")
+    lines = "\n".join(f"lappend vfiles {f}" for f in vfiles)
+    base = f"""set WORK_DIR {wdir}
+set vfiles {{}}
+{lines}
+dv.setup -synlib_only {proj['family']}
+rtl.analyze $vfiles
+"""
+    t = base + f"""rtl.srcfiles.list -print -o> $WORK_DIR/hqins_run/hq_srcfile.f
+rtl.elaborate -top {proj['top']} -insight $WORK_DIR/hqins_run/hq_import.hqins
+exit
+"""
+    new_rtl = base + f"""rtl.elaborate -top {proj['top']} -new_rtl $WORK_DIR/hqins_run/hq_import.hqins
+exit
+"""
+    with open(os.path.join(proj["hqins_dir"], "hq_impor_t.tcl"), "w", encoding="utf-8") as f:
+        f.write(t)
+    with open(os.path.join(proj["hqins_dir"], "hq_impor_new_rtl.tcl"), "w", encoding="utf-8") as f:
+        f.write(new_rtl)
+
+
+def run_init(proj: dict) -> None:
+    """Handle 'hqbuddy -insight -init': create hqins_run skeleton and elaborate."""
+    from . import launcher
+    from .hqprj_parser import extract_filelist
+
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA installation found (use -cfg to set up).")
+        sys.exit(1)
+    hqfpga_exe = version["hqfpga_path"]
+
+    vfiles = extract_filelist(proj["hqprj"])
+    vfiles = [f for f in vfiles if os.path.isfile(f)]
+    if not vfiles:
+        print("Error: no source files found in .hqprj FILE_SRC.")
+        sys.exit(1)
+
+    os.makedirs(proj["hqins_dir"], exist_ok=True)
+    _write_import_tcls(proj, vfiles)
+    with open(proj["hqins"], "w", encoding="utf-8") as f:
+        f.write(_initial_hqins(proj, vfiles))
+
+    import subprocess
+    tcl_path = os.path.join(proj["hqins_dir"], "hq_impor_t.tcl")
+    proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path], cwd=proj["work_dir"])
+    if proc.returncode != 0:
+        print(f"Error: elaborate failed (code {proc.returncode}).")
+        sys.exit(1)
+    dump = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_parser_staticelab_dump.json")
+    if not os.path.isfile(dump):
+        print("Error: elaborate produced no signal database.")
+        sys.exit(1)
+    print(f"[OK] HqInsight project initialized: {proj['hqins']}")
+
+
+def _load_dump_json(proj: dict) -> list:
+    """Load the elaborate signal database; returns the modules list."""
+    dump = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_parser_staticelab_dump.json")
+    if not os.path.isfile(dump):
+        print("Error: signal database not found. Run -insight -init first.")
+        sys.exit(1)
+    with open(dump, "r", encoding="utf-8") as f:
+        return json.load(f).get("modules", [])
+
+
+def _signal_catalog(proj: dict) -> list:
+    """Flatten the dump json into [{module, name, msb, lsb, hier}]."""
+    modules = _load_dump_json(proj)
+
+    def find_inst_path(target_name: str, from_mod: dict, prefix: str, seen: set) -> str | None:
+        for inst in from_mod["module"].get("inst_mod", []):
+            path = f"{prefix}/{inst['inst_name']}" if prefix else inst["inst_name"]
+            if inst["mod_name"] == target_name:
+                return path
+            child = next((m for m in modules if m["module"]["name"] == inst["mod_name"]), None)
+            if child and id(child) not in seen:
+                seen.add(id(child))
+                r = find_inst_path(target_name, child, path, seen)
+                if r:
+                    return r
+        return None
+
+    top_mod = next((m for m in modules if m["module"]["name"].split("[")[0] == proj["top"]), None)
+    catalog = []
+    for m in modules:
+        mod_name = m["module"]["name"]
+        hier = ""
+        if top_mod and mod_name.split("[")[0] != proj["top"]:
+            hier = find_inst_path(mod_name, top_mod, "", {id(top_mod)}) or ""
+        for sig in m.get("normal_signals", []):
+            catalog.append({
+                "module": mod_name,
+                "name": sig["name"],
+                "msb": sig.get("range_msb", 0),
+                "lsb": sig.get("range_lsb", 0),
+                "hier": f"{proj['top']}/{hier}" if hier else proj["top"],
+            })
+    return catalog
+
+
+def list_signals(proj: dict, keyword: str | None) -> None:
+    """Handle 'hqbuddy -insight -ls [keyword]'."""
+    catalog = _signal_catalog(proj)
+    selected = {s["name"] for s in _collect_signals(_load_signal_info(proj) or {})}
+    if keyword:
+        kw = keyword.lower()
+        catalog = [c for c in catalog if kw in c["name"].lower()]
+    print(f"Signals ({len(catalog)}): (* = selected)")
+    for c in catalog:
+        width = c["msb"] - c["lsb"] + 1
+        mark = "*" if c["name"] in selected else " "
+        print(f" {mark} {c['name']}[{width}b]  module={c['module']}")
+
+
+def _ip_name(name: str, module: str) -> str:
+    return f"{name}__INS_{module}__INS0"
+
+
+def _show_name(name: str, msb: int, lsb: int) -> str:
+    return f"{name}[{msb}:{lsb}]" if msb != lsb else f"{name}[{lsb}]"
+
+
+def _la_info_path(proj: dict) -> dict:
+    """Return parsed [SIGNAL JSON INFO] and [LA SIGNAL INFO] (empty defaults)."""
+    sections = read_hqins(proj["hqins"])
+    sig_raw = "\n".join(sections.get("SIGNAL JSON INFO", [])).strip()
+    la_raw = "\n".join(sections.get("LA SIGNAL INFO", [])).strip()
+    sig_info = json.loads(sig_raw) if sig_raw else {"version": "0.0.3", "module_sample_list": []}
+    la_info = json.loads(la_raw) if la_raw else {"la_list": []}
+    return sig_info, la_info
+
+
+def _rewrite_hqins_sections(proj: dict, sig_info: dict, la_info: dict) -> None:
+    """Rewrite .hqins, replacing/adding [SIGNAL JSON INFO] and [LA SIGNAL INFO]."""
+    sections = read_hqins(proj["hqins"])
+    sections["SIGNAL JSON INFO"] = [json.dumps(sig_info, ensure_ascii=False)]
+    sections["LA SIGNAL INFO"] = [json.dumps(la_info, ensure_ascii=False)]
+    parts = []
+    for name, lines in sections.items():
+        parts.append(f"[{name}]")
+        parts.extend(lines)
+        parts.append("")
+    with open(proj["hqins"], "w", encoding="utf-8") as f:
+        f.write("\n".join(parts))
+
+
+def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str | None = None) -> None:
+    """Handle 'hqbuddy -insight -add <signal> [-clk <clk>] [-type ...] [-module <mod>]'."""
+    catalog = _signal_catalog(proj)
+    matches = [c for c in catalog if c["name"] == name]
+    if module:
+        matches = [c for c in matches if c["module"] == module or c["module"].split("[")[0] == module]
+    if not matches:
+        print(f"Error: signal not found in design: {name}")
+        sys.exit(1)
+    if len(matches) > 1:
+        mods = ", ".join(c["module"] for c in matches)
+        print(f"Error: '{name}' exists in multiple modules: {mods}; pick one with -module")
+        sys.exit(1)
+    sig = matches[0]
+
+    sig_info, la_info = _la_info_path(proj)
+    msl = sig_info.setdefault("module_sample_list", [])
+    clk_entry = next((e for e in msl if e["clk_module_name"] == sig["module"]), None)
+    if clk_entry is None:
+        if not clk:
+            print(f"Error: first signal of module {sig['module']} requires -clk <clock signal>.")
+            sys.exit(1)
+        clk_entry = {"clk_module_name": sig["module"], "clk_signal_name": clk,
+                     "modules_sample_data": []}
+        msl.append(clk_entry)
+    clk_name = clk_entry["clk_signal_name"]
+    mod_data = next((d for d in clk_entry["modules_sample_data"]
+                     if d["module_name"] == sig["module"]), None)
+    if mod_data is None:
+        mod_data = {"module_name": sig["module"], "sample_list": [], "trigger_list": [],
+                    "sample_and_trigger_list": [], "disable_list": [], "normal_signals": [],
+                    "two_packed_array_signals": [], "one_packed_one_unpacked_array_signals": [],
+                    "one_unpacked_array_signals": [], "two_unpacked_array_signals": [],
+                    "signal_to_root": {}, "root_to_signals": {}, "struct_tree_data": []}
+        clk_entry["modules_sample_data"].append(mod_data)
+
+    if any(s["signal_name"] == name for s in mod_data["normal_signals"]):
+        print(f"Error: signal already added: {name}")
+        sys.exit(1)
+    key = {2: "sample_list", 3: "trigger_list", 4: "sample_and_trigger_list"}[stype]
+    mod_data[key].append(name)
+    mod_data["normal_signals"].append({
+        "signal_name": name, "sample_type": stype,
+        "raw_msb": sig["msb"], "raw_lsb": sig["lsb"],
+        "slice_msb": sig["msb"], "slice_lsb": sig["lsb"]})
+
+    # [LA SIGNAL INFO]
+    la_list = la_info.setdefault("la_list", [])
+    la = la_list[0] if la_list else None
+    if la is None:
+        la = {"clk_list": [], "data_in_order": [], "s_list": [], "st_list": [],
+              "t_list": [], "trig_in_order": []}
+        la_list.append(la)
+    clk_sig = next((c for c in catalog if c["name"] == clk_name and c["module"] == sig["module"]), None)
+    if not la["clk_list"] and clk_sig:
+        la["clk_list"].append({
+            "ip_signal_name": _ip_name(clk_name, sig["module"]), "lsb": 0, "msb": 0,
+            "module_name": sig["module"], "raw_signal_name": clk_name,
+            "show_hier_name": clk_name, "show_name": clk_name})
+    entry = {"ip_signal_name": _ip_name(name, sig["module"]), "lsb": sig["lsb"],
+             "msb": sig["msb"], "module_name": sig["module"], "raw_signal_name": name,
+             "show_hier_name": f"{sig['hier']}/{_show_name(name, sig['msb'], sig['lsb'])}",
+             "show_name": _show_name(name, sig["msb"], sig["lsb"])}
+    if stype == 2:
+        la["s_list"].append(entry)
+        la["data_in_order"].append(entry["ip_signal_name"])
+    elif stype == 3:
+        la["t_list"].append(entry)
+        la["trig_in_order"].append(entry["ip_signal_name"])
+    else:  # 4: sample+trigger lives only in st_list, but appears in both orders
+        la["st_list"].append(entry)
+        la["data_in_order"].append(entry["ip_signal_name"])
+        la["trig_in_order"].append(entry["ip_signal_name"])
+
+    _rewrite_hqins_sections(proj, sig_info, la_info)
+    _regenerate_ddf(proj, sig_info, la_info)
+    print(f"[OK] Signal added: {name} (type={stype}, clk={clk_name})")
+    print("Tip: run -insight -run to rebuild the instrumented bitstream.")
+
+
+def del_signal(proj: dict, name: str) -> None:
+    """Handle 'hqbuddy -insight -del <signal>'."""
+    sig_info, la_info = _la_info_path(proj)
+    removed = False
+    for clk_entry in sig_info.get("module_sample_list", []):
+        for mod_data in clk_entry.get("modules_sample_data", []):
+            for key in ("sample_list", "trigger_list", "sample_and_trigger_list"):
+                if name in mod_data[key]:
+                    mod_data[key].remove(name)
+                    removed = True
+            mod_data["normal_signals"] = [s for s in mod_data["normal_signals"]
+                                          if s["signal_name"] != name]
+    for la in la_info.get("la_list", []):
+        for key in ("s_list", "t_list", "st_list"):
+            la[key] = [e for e in la[key] if e["raw_signal_name"] != name]
+        la["data_in_order"] = [n for n in la["data_in_order"] if not n.startswith(name + "__INS")]
+        la["trig_in_order"] = [n for n in la["trig_in_order"] if not n.startswith(name + "__INS")]
+    if not removed:
+        print(f"Error: signal not in HqInsight project: {name}")
+        sys.exit(1)
+    _rewrite_hqins_sections(proj, sig_info, la_info)
+    _regenerate_ddf(proj, sig_info, la_info)
+    print(f"[OK] Signal removed: {name}")
+    print("Tip: run -insight -run to rebuild the instrumented bitstream.")
+
+
+def _regenerate_ddf(proj: dict, sig_info: dict, la_info: dict) -> None:
+    """Regenerate the .ddf from .hqins [LA SIGNAL INFO], then refresh insight_ip.v
+    and the instrumented netlist. rtl.elaborate -new_rtl rewrites the .hqins JSON
+    sections (and loses show_hier_name), so the sections are restored afterwards."""
+    from . import launcher
+
+    la = la_info["la_list"][0]
+    sections = read_hqins(proj["hqins"])
+    depth = _section_value(sections.get("MEMORY DEPTH INFO", [])) or "1024"
+    offset = _section_value(sections.get("TRIGGER POSITION", [])) or "128"
+    freq = float(_section_value(sections.get("CLOCK FREQUENCY", []), la="") or 100)
+    period = f"{int(1000 / freq)}ns"
+    clk_net = la["clk_list"][0]["ip_signal_name"]
+
+    def signal_xml(e, nbits, indent):
+        pad = "\t" * indent
+        bits = "".join(f"{pad}\t<bit>\n{pad}\t\t<net></net>\n{pad}\t</bit>\n" for _ in range(nbits))
+        return (f"{pad}<signal>\n"
+                f"{pad}\t<name>{e['ip_signal_name']}</name>\n"
+                f"{pad}\t<show_name>{e['show_name']}</show_name>\n"
+                f"{pad}\t<show_hier_name>{e['show_hier_name']}</show_hier_name>\n"
+                f"{pad}\t<file></file>\n{pad}\t<lineno></lineno>\n{bits}{pad}</signal>\n")
+
+    out = ['<?xml version="1.0" encoding="utf-8"?>', "<root>", "<version>1.0</version>",
+           f"<design>{proj['top']}</design>", "<edif></edif>", f"<family>{proj['family']}</family>",
+           "\t<la_core>", "\t\t<refclk>", f"\t\t\t<net>{clk_net}</net>",
+           f"\t\t\t<period>{period}</period>", "\t\t</refclk>",
+           "\t\t<trigger>", "\t\t\t<level>1</level>"]
+    for e in la["t_list"] + la["st_list"]:
+        width = e["msb"] - e["lsb"] + 1
+        for ctype, op, operand in (("EDGE", "RISE", None),
+                                   ("ARITHM", "EQ", "1" * width),
+                                   ("RANGE", "GE,LE", f"{'0' * width},{'1' * width}")):
+            out.append("\t\t\t<condition>")
+            out.append(f"\t\t\t\t<type>{ctype}</type>")
+            out.append(f"\t\t\t\t<op>{op}</op>")
+            out.append("\t\t\t\t<mask>0</mask>" if ctype == "EDGE"
+                       else f"\t\t\t\t<mask>{'0' * width}</mask>")
+            if operand is not None:
+                out.append(f"\t\t\t\t<operand>{operand}</operand>")
+            out.append(signal_xml(e, width, 4).rstrip("\n"))
+            out.append("\t\t\t\t<ignore>yes</ignore>")
+            out.append("\t\t\t</condition>")
+    out += ["\t\t</trigger>", "\t\t<storage>", f"\t\t\t<depth>{depth}</depth>",
+            f"\t\t\t<offset>{offset}</offset>", "\t\t\t<window_num>1</window_num>"]
+    for e in la["s_list"] + la["st_list"]:
+        out.append(signal_xml(e, e["msb"] - e["lsb"] + 1, 3).rstrip("\n"))
+    for e in la["clk_list"]:
+        out.append(signal_xml(e, 1, 3).rstrip("\n"))
+    out += ["\t\t</storage>", "\t</la_core>", "</root>"]
+    with open(proj["ddf"], "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + "\n")
+
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA installation found (use -cfg to set up).")
+        sys.exit(1)
+
+    import_dir = os.path.join(proj["hqins_dir"], "hq_import")
+    insight_ip = os.path.join(import_dir, "insight_ip.v")
+    new_rtl_tcl = os.path.join(proj["hqins_dir"], "hq_impor_new_rtl.tcl")
+    _run_hqfpga_cmds(version["hqfpga_path"], [
+        f"insight.load {_tcl_path(proj['ddf'])}",
+        f"insight.debugip.create 1 False -f {_tcl_path(insight_ip)}",
+    ], cwd=proj["work_dir"])
+    if not os.path.isfile(insight_ip):
+        print("Error: insight.debugip.create did not produce insight_ip.v")
+        sys.exit(1)
+    # regenerate the instrumented netlist (hq_import_with_bscan.v)
+    if os.path.isfile(new_rtl_tcl):
+        import subprocess
+        proc = subprocess.run([version["hqfpga_path"], "-cmd", new_rtl_tcl],
+                              cwd=proj["work_dir"], stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL)
+        if proc.returncode != 0:
+            print("Error: rtl.elaborate -new_rtl failed.")
+            sys.exit(1)
+    open(os.path.join(proj["hqins_dir"], ".hq_ins.chk_ok"), "w").close()
+    # signal.inf: "<name>:<module>::<hier>" lines in s/t/st order.
+    # Written AFTER -new_rtl, because elaborate rewrites it with an empty hier.
+    def hier_of(e):
+        return e["show_hier_name"].rsplit("/", 1)[0]
+    inf_lines = [f"{e['raw_signal_name']}:{e['module_name']}::{hier_of(e)}"
+                 for e in la["s_list"] + la["t_list"] + la["st_list"]]
+    with open(os.path.join(import_dir, "signal.inf"), "w", encoding="utf-8") as f:
+        f.write("\n".join(inf_lines) + "\n")
+    # elaborate -new_rtl rewrites the JSON sections (losing show_hier_name); restore
+    _rewrite_hqins_sections(proj, sig_info, la_info)
+
+
 def run_insight(args: list) -> None:
     """Entry point for 'hqbuddy -insight'."""
     hqprj_arg = None
@@ -871,9 +1290,54 @@ def run_insight(args: list) -> None:
         else:
             rest.append(a)
 
+    if rest[0] == "-init":
+        proj = resolve_insight_project(hqprj_arg, require_hqins=False)
+        run_init(proj)
+        return
+
     proj = resolve_insight_project(hqprj_arg)
     if not rest:
         show_status(proj)
+        return
+
+    if rest[0] == "-ls":
+        list_signals(proj, rest[1] if len(rest) > 1 else None)
+        return
+
+    if rest[0] == "-add":
+        if len(rest) < 2:
+            print("Error: -add requires a signal name: -insight -add <signal> [-clk <clk>] [-type sample|trigger|both]")
+            sys.exit(1)
+        name = rest[1]
+        clk = None
+        module = None
+        stype = 2
+        i = 2
+        while i < len(rest):
+            if rest[i] == "-clk" and i + 1 < len(rest):
+                clk = rest[i + 1]
+                i += 1
+            elif rest[i] == "-module" and i + 1 < len(rest):
+                module = rest[i + 1]
+                i += 1
+            elif rest[i] == "-type" and i + 1 < len(rest):
+                if rest[i + 1] not in STYPE_TOKENS:
+                    print(f"Error: invalid type: {rest[i + 1]} (sample/trigger/both)")
+                    sys.exit(1)
+                stype = STYPE_TOKENS[rest[i + 1]]
+                i += 1
+            else:
+                print(f"Error: unknown -add option: {rest[i]}")
+                sys.exit(1)
+            i += 1
+        add_signal(proj, name, clk, stype, module)
+        return
+
+    if rest[0] == "-del":
+        if len(rest) < 2:
+            print("Error: -del requires a signal name: -insight -del <signal>")
+            sys.exit(1)
+        del_signal(proj, rest[1])
         return
 
     if rest[0] == "-trig":

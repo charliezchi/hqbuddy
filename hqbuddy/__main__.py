@@ -73,6 +73,11 @@ Debug:
                                         Arm trigger and capture waveform to VCD
                                         (-force: capture immediately; default timeout 60s)
   -insight -run                         Run the instrumented implementation flow
+  -insight -init                        Init HqInsight project (no GUI needed)
+  -insight -ls [keyword]                List design signals (* = already selected)
+  -insight -add <sig> [-clk c] [-type sample|trigger|both] [-module m]
+                                        Add a signal to the HqInsight project
+  -insight -del <sig>                   Remove a signal from the HqInsight project
 """)
 
 
