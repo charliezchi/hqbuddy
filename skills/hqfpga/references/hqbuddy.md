@@ -18,7 +18,8 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -new_prj <name> [-device <part>]` — 从模板创建工程；未指定器件时唤起交互式选择
 - `hqbuddy -add <files...>` — 添加文件：`.v`/`.vh` → FILE_SRC，`.sdc` → FILE_TC，`.upc` → FILE_PC；支持 `.f` filelist（其中的相对路径相对于 filelist 所在目录）；找不到的文件与不支持的后缀会报错
 - `hqbuddy -set_top <name>` — 修改 TOP_MODULE
-- `hqbuddy -device [<file>]` — 查看器件；`hqbuddy -device -set [<part>] [<file>]` — 修改器件（支持交互式选择+模糊搜索），自动同步工程内 `.hqip` 的 `device=` 字段并校验 dv_list.xml
+- `hqbuddy -get_device [<file>]` — 查看器件；`hqbuddy -set_device [<part>] [<file>]` — 修改器件（支持交互式选择+模糊搜索），自动同步工程内 `.hqip` 的 `device=` 字段并校验 dv_list.xml
+- `hqbuddy -get_pin_bank <pin> [-device <part>]` — 查询引脚所属 IO bank（缺省器件取当前目录 `.hqprj`），底层用 `dv.get_pin_bank`
 - `hqbuddy -filelist [<file>] [-o <out>]` — 提取 FILE_SRC 列表
 - `hqbuddy -clean [-force]` — 按内置清单清理工程目录（保留 .hqprj；当前目录无 .hqprj 时拒绝执行；`-force` 跳过确认，同时删除空目录）
 

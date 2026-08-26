@@ -406,7 +406,7 @@ def scan_supported_ips(ipdepot_dir: str, device: str) -> list:
 
 
 # ---------------------------------------------------------------
-# interactive IP picker (same UX as -build_sel / -device -set)
+# interactive IP picker (same UX as -build_sel / -set_device)
 # ---------------------------------------------------------------
 def _clear_lines(n: int):
     for _ in range(n):

@@ -1,0 +1,160 @@
+{
+  "boards": [
+    {
+      "name": "EVAL-SA5Z-30-D1-8U213C REV 1.2",
+      "device": "SA5Z-30-D1-8U213C",
+      "family": "SEAL",
+      "notes": "",
+      "peripherals": [
+        {
+          "name": "clk_25m",
+          "type": "oscillator",
+          "pins": [
+            {
+              "pin": "A4",
+              "net": "FPGA_CLK2",
+              "bank": "Bank1",
+              "direction": "input",
+              "active": "",
+              "io_std": "LVCMOS33"
+            }
+          ]
+        },
+        {
+          "name": "clk_27m",
+          "type": "oscillator",
+          "pins": [
+            {
+              "pin": "N2",
+              "net": "FPGA_CLK1",
+              "bank": "Bank1",
+              "direction": "input",
+              "active": "",
+              "io_std": "LVCMOS33"
+            }
+          ]
+        },
+        {
+          "name": "button",
+          "type": "button",
+          "pins": [
+            {
+              "pin": "L15",
+              "net": "SW1",
+              "bank": "Bank3",
+              "direction": "input",
+              "active": "low",
+              "io_std": "LVCMOS33"
+            },
+            {
+              "pin": "M15",
+              "net": "SW2",
+              "bank": "Bank3",
+              "direction": "input",
+              "active": "low",
+              "io_std": "LVCMOS33"
+            },
+            {
+              "pin": "R11",
+              "net": "SW3",
+              "bank": "Bank3",
+              "direction": "input",
+              "active": "low",
+              "io_std": "LVCMOS33"
+            },
+            {
+              "pin": "P11",
+              "net": "SW4",
+              "bank": "Bank3",
+              "direction": "input",
+              "active": "low",
+              "io_std": "LVCMOS33"
+            }
+          ]
+        },
+        {
+          "name": "led",
+          "type": "led",
+          "pins": [
+            {
+              "pin": "P14",
+              "net": "FPGA_LED0",
+              "bank": "Bank3",
+              "direction": "output",
+              "active": "low",
+              "io_std": "LVCMOS33"
+            },
+            {
+              "pin": "R14",
+              "net": "FPGA_LED1",
+              "bank": "Bank3",
+              "direction": "output",
+              "active": "low",
+              "io_std": "LVCMOS33"
+            },
+            {
+              "pin": "P13",
+              "net": "FPGA_LED2",
+              "bank": "Bank3",
+              "direction": "output",
+              "active": "low",
+              "io_std": "LVCMOS33"
+            },
+            {
+              "pin": "R13",
+              "net": "FPGA_LED3",
+              "bank": "Bank3",
+              "direction": "output",
+              "active": "low",
+              "io_std": "LVCMOS33"
+            }
+          ]
+        },
+        {
+          "name": "uart",
+          "type": "CH330/340N",
+          "pins": [
+            {
+              "pin": "P12",
+              "net": "USB_RXD",
+              "bank": "Bank3",
+              "direction": "input",
+              "active": "",
+              "io_std": "LVCMOS33"
+            },
+            {
+              "pin": "R12",
+              "net": "USB_TXD",
+              "bank": "Bank3",
+              "direction": "output",
+              "active": "",
+              "io_std": "LVCMOS33"
+            }
+          ]
+        }
+      ],
+      "banks": [
+        {
+          "bank": "Bank1",
+          "vccio": "3.3V",
+          "notes": ""
+        },
+        {
+          "bank": "Bank2",
+          "vccio": "3.3V or 2.5V",
+          "notes": "Switch by header P1."
+        },
+        {
+          "bank": "Bank3",
+          "vccio": "3.3V",
+          "notes": ""
+        },
+        {
+          "bank": "Bank5",
+          "vccio": "1.8V",
+          "notes": ""
+        }
+      ]
+    }
+  ]
+}

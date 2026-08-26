@@ -402,3 +402,58 @@ def run_device(hqprj_path: str, part: str | None = None) -> None:
     else:
         current = get_device(hqprj_path)
         print(f"Device: {current}")
+
+
+def get_pin_bank(device_part: str, pin: str) -> None:
+    """
+    Print the IO bank a pin belongs to for a device part.
+
+    Args:
+        device_part: Device part, e.g. SA5Z-30-D1-8U213C.
+        pin: FPGA pin name, e.g. A4.
+    """
+    from . import launcher
+    import subprocess
+    import tempfile
+
+    match = _DEVICE_PART_RE.match(device_part)
+    if not match:
+        print(f"Error: invalid device part: {device_part}")
+        sys.exit(1)
+    family = get_family_for_device(device_part)
+    if not family:
+        print(f"Error: cannot determine family for device: {device_part}")
+        sys.exit(1)
+
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA installation found (use -cfg to set up).")
+        sys.exit(1)
+    hqfpga_exe = version["hqfpga_path"]
+
+    tcl = (f"dv.setup {family} {device_part}\n"
+           f"puts \"BANK_RESULT: [dv.get_pin_bank {pin}]\"\n"
+           f"exit\n")
+    with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
+                                     encoding="utf-8") as f:
+        f.write(tcl)
+        tcl_path = f.name
+    try:
+        proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path],
+                              cwd=os.getcwd(),
+                              capture_output=True, text=True)
+    finally:
+        os.unlink(tcl_path)
+    if proc.returncode != 0:
+        print(f"Error: hqfpga.exe failed (code {proc.returncode}).")
+        sys.exit(1)
+    bank = None
+    for line in proc.stdout.splitlines():
+        if line.strip().startswith("BANK_RESULT:"):
+            bank = line.split(":", 1)[1].strip()
+            break
+    if bank is None:
+        print(f"Error: no bank reported for pin {pin} "
+              f"(check the pin name against the device package).")
+        sys.exit(1)
+    print(f"Bank: {bank}")

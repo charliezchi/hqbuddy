@@ -28,7 +28,7 @@
 - **下载器**：启动 hqdnload 下载器，自动检测最新 `.bin`（`-dl`）
 - **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
 - **配置管理**：用系统编辑器打开 config.json 管理扫描路径和版本选择（`-cfg`）
-- **自动检测**：`-filelist`、`-flow`、`-xpn`、`-device` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
+- **自动检测**：`-filelist`、`-flow`、`-xpn`、`-get_device` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
 
 ## 构建
 
@@ -141,8 +141,8 @@ hqbuddy -insight -run                      # 重跑插桩实现流程（生成�
 查看 `.hqprj` 当前使用的器件型号（格式：DIE-SPEED-PACKAGE-CONDITION）。
 
 ```bat
-hqbuddy -device                            # 自动检测当前目录的 .hqprj
-hqbuddy -device example/ddrc_native_demo.hqprj
+hqbuddy -get_device                         # 自动检测当前目录的 .hqprj
+hqbuddy -get_device example/ddrc_native_demo.hqprj
 ```
 
 修改 `.hqprj` 的器件型号，修改前会通过所选版本的 `dv_list.xml` 验证器件是否合法。修改 `.hqprj` 的同时，会自动同步修改工程中直接使用的 `.hqip` IP 配置文件中的 `device=` 字段。
@@ -150,13 +150,20 @@ hqbuddy -device example/ddrc_native_demo.hqprj
 **注意**：此功能仅支持直接加入到工程中的文件（即 `.hqprj` 的 `FILE_SRC` 中列出的文件），不支持通过 `include` 等方式间接引用的文件。
 
 ```bat
-hqbuddy -device -set                                  # 交互式搜索并选择器件
-hqbuddy -device -set SA5T-100-D0-7F676CI
-hqbuddy -device -set SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
-hqbuddy -device -set example/ddrc_native_demo.hqprj   # 指定工程 + 交互式选择
+hqbuddy -set_device                                   # 交互式搜索并选择器件
+hqbuddy -set_device SA5T-100-D0-7F676CI
+hqbuddy -set_device SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
+hqbuddy -set_device example/ddrc_native_demo.hqprj    # 指定工程 + 交互式选择
 ```
 
 不指定 `part` 时进入交互式器件列表：上下键选择、输入关键字模糊查找，选中项带箭头标记。
+
+查询引脚所属 IO bank（器件缺省取当前目录 `.hqprj`，也可 `-device` 显式指定）：
+
+```bat
+hqbuddy -get_pin_bank A4
+hqbuddy -get_pin_bank A4 -device SA5Z-30-D1-8U213C
+```
 
 ### 编译 XiST 仿真库
 
@@ -348,8 +355,9 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-xpn [<file>] [-o <file>]`         | 生成 XPN（普通模式），省略时自动检测，默认生成`hq.xpn`               |
 | `-xpn -ins [<file>] [-o <file>]`    | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成`hq_ins.xpn`     |
 | `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN，省略时自动检测，默认生成`<input>.bin`             |
-| `-device [<file>]`                  | 查看`.hqprj` 使用的器件型号                                          |
-| `-device -set [<part>] [<file>]`    | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
+| `-get_device [<file>]`              | 查看`.hqprj` 使用的器件型号                                          |
+| `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
+| `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
 | `-new_prj <name> [-device <part>]`  | 从模板创建`.hqprj` 工程                                              |
 | `-add <files...>`                   | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程         |
 | `-set_top <name>`                   | 设置顶层模块`TOP_MODULE`                                             |

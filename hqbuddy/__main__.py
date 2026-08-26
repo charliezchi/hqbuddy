@@ -45,8 +45,10 @@ Project:
   -xpn [<.hqprj>] [-o <file>]          Generate XPN (normal mode)
     -ins                                Generate XPN (hqinsight mode)
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN
-  -device [<.hqprj>]                   Show device part
-    -set [<part>] [<.hqprj>]           Set device part (interactive if no part)
+  -get_device [<.hqprj>]                Show device part
+  -set_device [<part>] [<.hqprj>]       Set device part (interactive if no part)
+  -get_pin_bank <pin> [-device <part>]  Show the IO bank of a pin
+                                        (device from .hqprj, or -device <part>)
   -new_prj <name> [-device <part>]     Create .hqprj project from template
   -add <file1> [<file2> ...]           Add source/constraint files to project
   -set_top <name>                      Set top module name
@@ -399,7 +401,7 @@ def cmd_new_prj(args):
     family = get_family_for_device(device)
     if not family:
         print(f"Error: device not found: {device}")
-        print("Please use a valid device from 'hqbuddy -device -set'")
+        print("Please use a valid device from 'hqbuddy -set_device'")
         sys.exit(1)
 
     # Read template
@@ -710,50 +712,73 @@ def cmd_xpn2bin(args):
     run_xpn2bin(xpn_path, bin_path)
 
 
-def cmd_device(args):
-    """Get or set device part for .hqprj."""
-    if args and args[0] == '-set':
-        from .device import pick_device_interactive, get_device
-        remaining = args[1:]
-        if not remaining:
-            # No part/hqprj given: launch interactive device picker
-            # Detect current device from auto-detected .hqprj
-            current = None
-            try:
-                hqprj = _find_hqprj()
-                if hqprj:
-                    current = get_device(hqprj)
-            except SystemExit:
-                pass
-            part = pick_device_interactive(current)
-            if part is None:
-                return
-            hqprj_path = _resolve_hqprj(None)
-            run_device(hqprj_path, part)
-        else:
-            first = remaining[0]
-            rest = remaining[1:]
-            # If the first argument is an existing .hqprj file, treat it as the
-            # project path and launch the interactive picker (no part provided).
-            if os.path.isfile(first) and first.lower().endswith('.hqprj'):
-                current = None
-                try:
-                    current = get_device(first)
-                except SystemExit:
-                    pass
-                part = pick_device_interactive(current)
-                if part is None:
-                    return
-                hqprj_path = _resolve_hqprj(first)
-                run_device(hqprj_path, part)
-            else:
-                # first is a part name
-                part = first
-                hqprj_path = _resolve_hqprj(rest[0] if rest else None)
-                run_device(hqprj_path, part)
+def cmd_get_device(args):
+    """Show device part of an .hqprj."""
+    hqprj_path = _resolve_hqprj(args[0] if args else None)
+    run_device(hqprj_path, None)
+
+
+def cmd_set_device(args):
+    """Set device part of an .hqprj (interactive picker if no part given)."""
+    from .device import pick_device_interactive, get_device
+    if not args:
+        # No part/hqprj given: launch interactive device picker
+        # Detect current device from auto-detected .hqprj
+        current = None
+        try:
+            hqprj = _find_hqprj()
+            if hqprj:
+                current = get_device(hqprj)
+        except SystemExit:
+            pass
+        part = pick_device_interactive(current)
+        if part is None:
+            return
+        hqprj_path = _resolve_hqprj(None)
+        run_device(hqprj_path, part)
+        return
+    first = args[0]
+    rest = args[1:]
+    # If the first argument is an existing .hqprj file, treat it as the
+    # project path and launch the interactive picker (no part provided).
+    if os.path.isfile(first) and first.lower().endswith('.hqprj'):
+        current = None
+        try:
+            current = get_device(first)
+        except SystemExit:
+            pass
+        part = pick_device_interactive(current)
+        if part is None:
+            return
+        hqprj_path = _resolve_hqprj(first)
+        run_device(hqprj_path, part)
     else:
-        hqprj_path = _resolve_hqprj(args[0] if args else None)
-        run_device(hqprj_path, None)
+        # first is a part name
+        part = first
+        hqprj_path = _resolve_hqprj(rest[0] if rest else None)
+        run_device(hqprj_path, part)
+
+
+def cmd_get_pin_bank(args):
+    """Show which IO bank a pin belongs to."""
+    from .device import get_pin_bank, get_device, _DEVICE_PART_RE
+
+    if not args:
+        print("Usage: hqbuddy -get_pin_bank <pin> [-device <part>]")
+        sys.exit(1)
+    pin = args[0]
+    device_part = None
+    i = 1
+    while i < len(args):
+        if args[i] == '-device' and i + 1 < len(args):
+            device_part = args[i + 1]
+            i += 2
+        else:
+            i += 1
+    if not device_part:
+        hqprj_path = _resolve_hqprj(None)
+        device_part = get_device(hqprj_path)
+    get_pin_bank(device_part, pin)
 
 
 def cmd_simlib(args):
@@ -1131,8 +1156,16 @@ def main():
         return
 
     # Device
-    if first == '-device':
-        cmd_device(args[1:])
+    if first == '-get_device':
+        cmd_get_device(args[1:])
+        return
+
+    if first == '-set_device':
+        cmd_set_device(args[1:])
+        return
+
+    if first == '-get_pin_bank':
+        cmd_get_pin_bank(args[1:])
         return
 
     # IP generation
