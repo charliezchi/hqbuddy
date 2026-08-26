@@ -126,7 +126,6 @@ def build():
         sys.executable, "-m", "PyInstaller",
         "--onefile",
         "--name", "hqbuddy",
-        "--add-data", f"scripts{sep}scripts",
         "--add-data", f"templates{sep}templates",
         entry_file,
     ]

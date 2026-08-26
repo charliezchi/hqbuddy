@@ -169,7 +169,7 @@ hqbuddy -simlib C:/hqv3_xist_3.1.1_FT053026_win64
 
 **过程：**
 
-1. 复制 `scripts/compile_xist.tcl` 到 `<HQ>/build/common/sim/verilog/XIST/`
+1. 复制 `templates/compile_xist.tcl` 到 `<HQ>/build/common/sim/verilog/XIST/`
 2. 运行 `vsim -c -do compile_xist.tcl`
 3. 自动修改 ModelSim/QuestaSim 根目录的 `modelsim.ini`，将 `XiST` 映射改为 `XiST = $MODEL_TECH/../XiST`
 
@@ -413,8 +413,11 @@ hqbuddy/
 │   ├── simlib.py         # XiST 仿真库编译
 │   ├── insight.py        # HqInsight 在线逻辑分析仪（触发/抓取/VCD）
 │   └── utils.py          # 版本解析与比较工具函数
-├── scripts/
-│   └── compile_xist.tcl  # XiST 仿真库编译脚本（手动或自动均使用此脚本，支持 .v / .vp）
+├── templates/
+│   ├── clean_list.json   # -clean 清理清单
+│   ├── compile_xist.tcl  # XiST 仿真库编译脚本（手动或自动均使用此脚本，支持 .v / .vp）
+│   ├── config.json       # -cfg 配置模板
+│   └── project.hqprj     # -new_prj 工程模板
 ├── skills/
 │   └── hqfpga/           # Kimi Code Skill：HqFpga 操作指南（含 references 命令参考）
 ├── docs/

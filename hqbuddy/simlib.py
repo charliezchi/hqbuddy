@@ -4,7 +4,6 @@ import os
 import shutil
 import subprocess
 import sys
-import importlib.resources as pkg_resources
 
 from . import launcher
 
@@ -162,8 +161,11 @@ def run_simlib(hqfpga_root: str | None = None) -> None:
     script_dst = os.path.join(xist_dir, "compile_xist.tcl")
 
     try:
-        # Read bundled script from package resources (works for both source and PyInstaller)
-        script_content = pkg_resources.read_text("scripts", "compile_xist.tcl")
+        # Read the bundled script from the templates dir (repo tree or PyInstaller bundle)
+        bundled = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               'templates', 'compile_xist.tcl')
+        with open(bundled, 'r', encoding='utf-8') as f:
+            script_content = f.read()
         with open(script_dst, "w", encoding="utf-8") as f:
             f.write(script_content)
         print(f"Copied compile script to: {script_dst}")
