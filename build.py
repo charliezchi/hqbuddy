@@ -128,7 +128,6 @@ def build():
         "--name", "hqbuddy",
         "--add-data", f"scripts{sep}scripts",
         "--add-data", f"templates{sep}templates",
-        "--add-data", f"configs{sep}configs",
         entry_file,
     ]
     r = _run(cmd)

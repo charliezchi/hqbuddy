@@ -225,7 +225,7 @@ hqbuddy -set_top my_top
 
 ### 清理工程目录
 
-按 `configs/clean_list.json` 中的清单清理脚本所在目录下的中间文件与空文件夹（保留 `.hqprj`）。清理前会二次确认，`-force` 跳过确认：
+按 `templates/clean_list.json` 中的清单清理脚本所在目录下的中间文件与空文件夹（保留 `.hqprj`）。清理前会二次确认，`-force` 跳过确认：
 
 ```bat
 hqbuddy -clean

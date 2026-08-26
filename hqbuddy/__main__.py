@@ -50,7 +50,7 @@ Project:
   -new_prj <name> [-device <part>]     Create .hqprj project from template
   -add <file1> [<file2> ...]           Add source/constraint files to project
   -set_top <name>                      Set top module name
-  -clean [-force]                       Clean files/dirs listed in configs/clean_list.json
+  -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
 
 Tools:
   -ipgen [<.hqip>] [-lang <lang>]       Generate IP netlist via ipgen
@@ -226,7 +226,7 @@ def _remove_empty_dirs(root: str) -> int:
 
 
 def cmd_clean(force: bool = False):
-    """Clean current directory using configs/clean_list.json."""
+    """Clean current directory using templates/clean_list.json."""
     cwd = os.getcwd()
 
     # Check if .hqprj exists
@@ -237,7 +237,7 @@ def cmd_clean(force: bool = False):
         sys.exit(1)
 
     # Load clean list
-    clean_list_path = _get_resource_path(os.path.join("configs", "clean_list.json"))
+    clean_list_path = _get_resource_path(os.path.join("templates", "clean_list.json"))
     try:
         with open(clean_list_path, "r", encoding="utf-8") as f:
             clean_list = json.load(f)
