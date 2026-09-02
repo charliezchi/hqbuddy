@@ -1,0 +1,31 @@
+[General]
+;internal ini values
+;-----------------------------
+ebr_mode=5
+;-----------------------------
+wrport.addr_width=9
+wrport.data_width=32
+
+rdport.addr_width=9
+rdport.data_width=32
+
+almost_full.assert=510
+
+almost_empty.assert=10
+
+oreg.enable=FALSE
+oreg.ctrl_by_RDEN=FALSE
+oreg.out_clk_reg=FALSE
+
+reset.assert=0
+reset.release=0
+
+
+[File]
+output_module=FIFO_32bit
+
+[IP]
+#! device from HqFpga project
+device=SA5Z-50-D0-7F484C
+meta_file=D:/softInstall/HqFPGA/hqv3_xist_3.0.3_021824_win64/build/ipcreator/sup_files/ipdepot/ebr_seal/fifo/fifo.xml
+

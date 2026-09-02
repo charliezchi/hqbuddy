@@ -1,0 +1,122 @@
+{
+  "ex10_spi": {
+    "core": "star",
+    "preset": "ex10_spi",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "spi.bin"
+  },
+  "ex11_ahb_master_ram": {
+    "core": "star",
+    "preset": "ex11_ahb_master_ram",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "ahb.bin"
+  },
+  "ex12_dma": {
+    "core": "star",
+    "preset": "ex12_dma",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "dma.bin"
+  },
+  "ex13_ahb_burst_master": {
+    "core": "star",
+    "preset": "ex13_ahb_burst_master",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "ahb_dma.bin"
+  },
+  "ex14_uart_pll": {
+    "core": "star",
+    "preset": "ex14_uart_pll",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "uart.bin"
+  },
+  "ex15_extint": {
+    "core": "star",
+    "preset": "ex15_extint",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "extint.bin"
+  },
+  "ex16_apb_master_reg": {
+    "core": "star",
+    "preset": "ex16_apb_master_reg",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "apb.bin"
+  },
+  "ex17_axil_master_reg": {
+    "core": "star",
+    "preset": "ex17_axil_master_reg",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "axil.bin"
+  },
+  "ex18_ahb_master_ext": {
+    "core": "star",
+    "preset": "ex18_ahb_master_ext",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "ahb.bin"
+  },
+  "ex19_apb_master_ext": {
+    "core": "star",
+    "preset": "ex19_apb_master_ext",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "apb.bin"
+  },
+  "ex1_led_systick": {
+    "core": "star",
+    "preset": "ex1_led_systick",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "led.bin"
+  },
+  "ex23_low_power": {
+    "core": "star",
+    "preset": "ex23_low_power",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "uart.bin"
+  },
+  "ex2_key": {
+    "core": "star",
+    "preset": "ex2_key",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "key.bin"
+  },
+  "ex3_gpio_int": {
+    "core": "star",
+    "preset": "ex3_gpio_int",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "gpio_int.bin"
+  },
+  "ex4_uart": {
+    "core": "star",
+    "preset": "ex4_uart",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "uart.bin"
+  },
+  "ex5_i2c": {
+    "core": "star",
+    "preset": "ex5_i2c",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "i2c.bin"
+  },
+  "ex6_adc": {
+    "core": "star",
+    "preset": "ex6_adc",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "adc.bin"
+  },
+  "ex7_timer": {
+    "core": "star",
+    "preset": "ex7_timer",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "timer.bin"
+  },
+  "ex8_dual_timer": {
+    "core": "star",
+    "preset": "ex8_dual_timer",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "dualtimer.bin"
+  },
+  "ex9_watcgdog": {
+    "core": "star",
+    "preset": "ex9_watcgdog",
+    "device": "SA5Z-50-D0-7F484-C",
+    "bin": "watchdog.bin"
+  }
+}

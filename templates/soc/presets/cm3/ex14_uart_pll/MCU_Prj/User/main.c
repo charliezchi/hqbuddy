@@ -1,0 +1,62 @@
+#include "CM3DS_gpio.h"
+#include "CM3DS_MPS2.h"
+#include "CM3DS_uart.h"
+#include "CM3_retarget.h"
+#include "uart.h"
+
+#include <stdio.h> 
+#include <string.h> 
+
+//LED2 GPIO0_0,LED3 GPIO0_1
+#define LED2_PORT	CM3DS_MPS2_GPIO0
+#define LED2_PIN	GPIO_Pin_0
+#define LED3_PORT	CM3DS_MPS2_GPIO0
+#define LED3_PIN	GPIO_Pin_1
+
+//LED??
+#define LED2_ON		GPIO_SetBit(LED2_PORT,LED2_PIN)
+#define LED3_ON		GPIO_SetBit(LED3_PORT,LED3_PIN)
+
+//LED??
+#define LED2_OFF	GPIO_ResetBit(LED2_PORT,LED2_PIN)
+#define LED3_OFF	GPIO_ResetBit(LED3_PORT,LED3_PIN)
+
+/*软件延时*/
+void delay_ms(unsigned int ms)
+{
+	unsigned int i, j;
+	for (i = 0; i <= ms; i++)
+	{
+		for(j= 0; j <= 3000; j++);
+	}
+}
+
+
+int main(void)
+{	
+	GPIO_DeInit(CM3DS_MPS2_GPIO0);
+	
+	/*LED GPIO模式设置*/
+	GPIO_Mode_Set(LED2_PORT,LED2_PIN,GPIO_Mode_Output);
+	GPIO_Mode_Set(LED3_PORT,LED3_PIN,GPIO_Mode_Output);
+	
+	/*LED2 LED3 ON*/
+	LED2_ON;
+	LED3_ON;
+	delay_ms(1000);
+	
+	/*LED2 LED3 OFF*/
+	LED2_OFF;
+	LED3_OFF;
+	
+	/*uart0初始化*/
+	uart0_init(2000000);
+	printf("CM3 uart0 echo test...\n");
+	
+	while(1)
+	{
+		;	//主函数循环不做其他业务，等待用户通过uart发送数据，echo在接收中断中实现
+	}
+}
+
+

@@ -207,6 +207,29 @@ hqbuddy -new_prj my_project
 hqbuddy -new_prj my_project -device SA5T-100-D0-7F676CI
 ```
 
+### SoC 工程（FPGA + MCU 软核）
+
+面向 SA5Z-30（Cortex-M3）/ SA5Z-50（Cortex-M33）SoC 器件，从官方 Demo 例程预设一键生成完整工程树并全 CLI 编译烧写：
+
+```bat
+hqbuddy -list_soc                                  # 列出可用预设（cm3/star 各 19-20 个）
+hqbuddy -new_soc my_app -core cm3 -preset ex4_uart # 生成 FPGA_Prj + MCU_Prj 工程树
+cd my_app\FPGA_Prj\hq_prj
+hqbuddy -build                                     # FPGA 全流程（生成并执行 run_hqprj.tcl）
+cd ..\..
+hqbuddy -mcu_build                                 # Keil 无人值守编译（编译后自动合并 bin）
+hqbuddy -dl -f my_app\FPGA_Prj\hq_prj\my_app_merged.bin   # 下载合并镜像
+```
+
+说明：
+
+- `-new_soc` 生成的工程已改好 `PROJ_NAME`、校准时间戳、还原去重的 CMSIS 库，并把 Demo 里硬编码工具路径的合并脚本替换为基于 `-merge_bin` 的版本（合并不下板；`mergeBinFileAndProgram.bat -dl` 才下载）
+- `-build` 生成的 FPGA bin 位于 `.hqprj` 同目录（CLI 流程不使用 GUI 的 `hq_run` 输出目录）
+- `-mcu_build` 自动定位 Keil UV4（`config.json` 可加 `"keil_uv4": "C:\\Keil_v5\\UV4\\UV4.exe"` 指定）
+- `-merge_bin <fpga.bin> <mcu.bin>` 支持 `-o`、`-model SA30K|SA50K`、`-remap`、`-dl`（合并后下载）
+- merge bat 依赖 PATH 上的 hqbuddy，更新代码后需 `python build.py` 重新构建安装
+- 巨型例程（lwip/mqtt/FreeRTOS/bootloader/DDR/CAN）未内置为预设，需要时从 Demo 目录手动拷贝；用法详见 skills/hqfpga/references/soc_workflow.md
+
 ### 添加源文件
 
 向工程添加设计文件与约束文件，并自动维护对应时间戳：
@@ -367,6 +390,11 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
 | `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
 | `-new_prj <name> [-device <part>]`  | 从模板创建`.hqprj` 工程                                              |
+| `-new_soc <name> [-core cm3\|star] [-preset <ex>]` | 从 Demo 预设生成 SoC 工程（FPGA+MCU 全套）             |
+| `-list_soc`                         | 列出可用 SoC 预设                                                    |
+| `-build [<file>]`                   | 生成 run_hqprj.tcl 并执行完整 FPGA 实现流程                          |
+| `-mcu_build [-p <uvprojx>]`         | Keil UV4 无人值守编译 MCU 固件                                       |
+| `-merge_bin <fpga> <mcu>`           | 合并 FPGA+MCU bin（`-o`/`-model`/`-dl`）                             |
 | `-add <files...>`                   | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程         |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
 | `-set_top <name>`                   | 设置顶层模块`TOP_MODULE`                                             |

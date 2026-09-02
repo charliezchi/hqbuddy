@@ -12,7 +12,7 @@ import time
 
 
 from . import __version__
-from . import config, launcher, build_selector
+from . import config, launcher, build_selector, soc
 from .hqprj_parser import extract_filelist
 from .flow import run_flow, run_flow_bin_only, run_flow_looptdo
 from .xpn import run_xpn
@@ -50,6 +50,15 @@ Project:
   -get_pin_bank <pin> [-device <part>]  Show the IO bank of a pin
                                         (device from .hqprj, or -device <part>)
   -new_prj <name> [-device <part>]     Create .hqprj project from template
+  -new_soc <name> [-core cm3|star]     Scaffold a full SoC project (FPGA+MCU)
+     [-preset <example>] [-dir <p>]      from a demo preset (-list_soc to see)
+  -list_soc                            List available SoC presets
+  -build [<.hqprj>] [-looptdo|-bin_only]
+                                        Generate run_hqprj.tcl AND run the full
+                                        FPGA implementation flow
+  -mcu_build [-p <file.uvprojx>]       Build MCU_Prj firmware via Keil UV4 (headless)
+  -merge_bin <fpga.bin> <mcu.bin>      Merge FPGA+MCU bins for download (cable.exe)
+     [-o <file>] [-model SA30K] [-dl]    (-dl: download after merge)
   -add <file1> [<file2> ...]           Add source/constraint files to project
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
                                         to match FILE_SRC/FILE_TC/FILE_PC
@@ -645,36 +654,59 @@ def cmd_refresh_time(args):
         sys.exit(1)
     hqprj_abs = os.path.abspath(hqprj_path)
 
-    with open(hqprj_abs, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    now = str(int(time.time()))
-    out = []
-    src_count = 0
-    cst_count = 0
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("FILE_TIME_CST="):
-            continue
-        if stripped.startswith("FILE_TIME="):
-            continue
-        out.append(line)
-        if stripped.startswith("FILE_SRC="):
-            src_count += 1
-            out.append(f"FILE_TIME={now}\n")
-        elif stripped.startswith("FILE_TC=") and stripped != "FILE_TC=NONE":
-            cst_count += 1
-        elif stripped.startswith("FILE_PC=") and stripped != "FILE_PC=NONE":
-            cst_count += 1
-    for _ in range(cst_count):
-        out.append(f"FILE_TIME_CST={now}\n")
-
-    with open(hqprj_abs, "w", encoding="utf-8") as f:
-        f.writelines(out)
+    src_count, cst_count = soc.refresh_hqprj_times(hqprj_abs)
 
     print(f"  [SET] FILE_TIME x{src_count} (FILE_SRC x{src_count})")
     print(f"  [SET] FILE_TIME_CST x{cst_count} (FILE_TC+FILE_PC x{cst_count})")
     print(f"Updated: {hqprj_abs}")
+
+
+def cmd_build_fpga(args):
+    """Run the full FPGA implementation flow (generate run_hqprj.tcl, execute)."""
+    looptdo = '-looptdo' in args
+    bin_only = '-bin_only' in args
+    filtered = [a for a in args if a not in ('-looptdo', '-bin_only')]
+    if looptdo and bin_only:
+        print("Error: -looptdo and -bin_only cannot be used together")
+        sys.exit(1)
+
+    hqprj_path, output_tcl = _parse_args_with_output(filtered)
+    work_dir = os.path.dirname(os.path.abspath(hqprj_path))
+    flow_tcl = os.path.join(work_dir, output_tcl or "run_hqprj.tcl")
+
+    if looptdo:
+        run_flow_looptdo(hqprj_path, output_tcl)
+    elif bin_only:
+        run_flow_bin_only(hqprj_path, None, output_tcl)
+    else:
+        run_flow(hqprj_path, output_tcl)
+
+    if not os.path.isfile(flow_tcl):
+        print(f"Error: flow TCL not generated: {flow_tcl}")
+        sys.exit(1)
+
+    version = launcher.resolve_hqfpga_version()
+    if not version:
+        print("Error: no HqFPGA versions found.")
+        sys.exit(1)
+    print("")
+    print(f"Running implementation flow: {os.path.basename(flow_tcl)}")
+    print("")
+    proc = subprocess.Popen([version['hqfpga_path'], '-cmd', flow_tcl], cwd=work_dir)
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        raise
+    if proc.returncode != 0:
+        print("")
+        print(f"Warning: hqfpga exited with code {proc.returncode}")
+        sys.exit(proc.returncode)
 
 
 def cmd_set_top(args):
@@ -1166,6 +1198,30 @@ def main():
     # New project
     if first == '-new_prj':
         cmd_new_prj(args[1:])
+        return
+
+    # SoC scaffold / list
+    if first == '-new_soc':
+        soc.cmd_new_soc(args[1:])
+        return
+
+    if first == '-list_soc':
+        soc.cmd_list_soc(args[1:])
+        return
+
+    # Full FPGA implementation flow
+    if first == '-build':
+        cmd_build_fpga(args[1:])
+        return
+
+    # MCU (Keil) headless build
+    if first == '-mcu_build':
+        soc.cmd_mcu_build(args[1:])
+        return
+
+    # FPGA+MCU bin merge (+ optional download)
+    if first == '-merge_bin':
+        soc.cmd_merge_bin(args[1:])
         return
 
     # Add files

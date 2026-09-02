@@ -1,0 +1,5 @@
+`include "../../ipcore_dir/STAR_Processor/xsIP_STAR_Processor.v"
+`include "../../ipcore_dir/EBR_PDP/xsIP_EBR_PDP.v"
+`include "../common/cmsdk_ahb_eg_slave.v"
+`include "../common/cmsdk_ahb_eg_slave_interface.v"
+`include "../common/cmsdk_ahb_eg_slave_reg.v"

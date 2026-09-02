@@ -1,0 +1,116 @@
+{
+  "ex10_spi": {
+    "core": "cm3",
+    "preset": "ex10_spi",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "spi.bin"
+  },
+  "ex11_ahb_master_ram": {
+    "core": "cm3",
+    "preset": "ex11_ahb_master_ram",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "ahb.bin"
+  },
+  "ex12_dma": {
+    "core": "cm3",
+    "preset": "ex12_dma",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "dma.bin"
+  },
+  "ex13_ahb_burst_master": {
+    "core": "cm3",
+    "preset": "ex13_ahb_burst_master",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "ahb_dma.bin"
+  },
+  "ex14_uart_pll": {
+    "core": "cm3",
+    "preset": "ex14_uart_pll",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "uart_pll.bin"
+  },
+  "ex15_ext_int": {
+    "core": "cm3",
+    "preset": "ex15_ext_int",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "ext_int.bin"
+  },
+  "ex16_apb_master_reg": {
+    "core": "cm3",
+    "preset": "ex16_apb_master_reg",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "apb.bin"
+  },
+  "ex17_axil_master_reg": {
+    "core": "cm3",
+    "preset": "ex17_axil_master_reg",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "axil.bin"
+  },
+  "ex18_ahb_master_ext": {
+    "core": "cm3",
+    "preset": "ex18_ahb_master_ext",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "ahb.bin"
+  },
+  "ex19_apb_master_ext": {
+    "core": "cm3",
+    "preset": "ex19_apb_master_ext",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "apb.bin"
+  },
+  "ex1_led_systick": {
+    "core": "cm3",
+    "preset": "ex1_led_systick",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "led.bin"
+  },
+  "ex2_key": {
+    "core": "cm3",
+    "preset": "ex2_key",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "key.bin"
+  },
+  "ex3_gpio_int": {
+    "core": "cm3",
+    "preset": "ex3_gpio_int",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "gpio_int.bin"
+  },
+  "ex4_uart": {
+    "core": "cm3",
+    "preset": "ex4_uart",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "uart.bin"
+  },
+  "ex5_i2c": {
+    "core": "cm3",
+    "preset": "ex5_i2c",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "i2c.bin"
+  },
+  "ex6_adc": {
+    "core": "cm3",
+    "preset": "ex6_adc",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "adc.bin"
+  },
+  "ex7_timer": {
+    "core": "cm3",
+    "preset": "ex7_timer",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "timer.bin"
+  },
+  "ex8_dual_timer": {
+    "core": "cm3",
+    "preset": "ex8_dual_timer",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "dualtimer.bin"
+  },
+  "ex9_watchdog": {
+    "core": "cm3",
+    "preset": "ex9_watchdog",
+    "device": "SA5Z-30-D1-8U213-C",
+    "bin": "watchdog.bin"
+  }
+}
