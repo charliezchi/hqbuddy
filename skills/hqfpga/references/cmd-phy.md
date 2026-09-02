@@ -159,6 +159,13 @@ phycst.loc.check EBR_R24C29
 # EBR_R24C29 是 Sealion 25K 器件的合法位置，返回 "1"；对其它器件返回 "0"
 ```
 
+> 实测备注（languagetemplates 项目，Build FT082926）：本命令在
+> FT081626~FT082326 存在段错误崩溃缺陷（`instloc2cord`，pc_cmds.cpp:1816），
+> FT082926 起修复。且实测**无需** `phycst.start`/`phycst.end` 会话，
+> `dv.setup` 选定器件后即可直接执行。另：示例中的 `EBR_R24C29` 在
+> SL2-25E-8F256CI 上实测返回 "0"，与示例描述不符，使用前请以
+> `loc.check` 实测为准。
+
 ---
 
 ## 15.66 phycst.loc.set
@@ -433,6 +440,11 @@ phycst.region.set {myreg_net*} my_region1 -net
 启动物理约束分析器。必须与 `phycst.end` 配对出现。
 
 除 `phycst.instloc.check`、`phycst.rgnrect.check` 和 `phycst.pinloclist.get` 可直接调用外，其它物理约束命令须以 `phycst.start` 开始、以 `phycst.end` 结束。
+
+> 实测备注（languagetemplates 项目，Build FT082926）：`phycst.loc.check`
+> 实测同样可免会话直接执行（选完器件即可）；手册所述免会话命令
+> `phycst.instloc.check` / `phycst.rgnrect.check` / `phycst.pinloclist.get`
+> 在本仓库模板中未覆盖，版本对应关系待确认。
 
 **语法**
 
