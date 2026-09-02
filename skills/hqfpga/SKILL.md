@@ -34,11 +34,13 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 - `references/hqbuddy.md` — hqbuddy 封装工具完整用法（操作 HqFpga 前先读这个，优先用 hqbuddy 而非原生命令）
 - `references/ipdepot.md` — IP 库（ipdepot）结构与 .hqip 配置修改方法（要配置/修改 IP 时读这个）
 - `references/commands.md` — U 命令分类地图（先查这里定位命令，再读对应详情文件）
+- `references/tcl_commands_help.md` — 全量 1055 个 TCL 命令的实测 help dump（含手册未载的隐藏命令；查命令语法先试 `help <命令名>`）
 - `references/cmd-design.md` / `cmd-dv-impl.md` / `cmd-ioh-lo.md` / `cmd-nl.md` / `cmd-phy.md` / `cmd-rtl-ta.md` — 99 个命令的语法、参数、缺省值、示例
 - `references/flow.md` — 设计流程原理与综合流程细节
 - `references/setup.md` — 安装、目录结构、hqfpga.exe 启动参数
 - `references/udm.md` — UDM 数据模型与网表对象操控（高级）
 - `references/verilog-sdc.md` — Verilog 可综合子集与 SDC 约束语法
+- `references/synthesis_directives.md` — RTL 综合指令（syn_ramstyle/keep/HQ_MAX_FANOUT/HQ_DATA_SKEW 等，写 RTL 前后按需读）
 - `references/modelsim.md` — ModelSim/QuestaSim 仿真（XiST 仿真库、xsGSR/xsPWR 强制实例、.do 脚本模板，做仿真任务前必读）
 - `references/download.md` — cable.exe 下载调试（检测开发板、下载 bin，要下载/连接开发板时读）
 - `references/insight.md` — HqInsight 在线逻辑分析仪全 CLI 流程（选信号、触发条件、抓波形为 VCD，做在线调试时读）
