@@ -222,6 +222,14 @@ hqbuddy -new_prj my_project -device SA5T-100-D0-7F676CI
 hqbuddy -add test.v test2.v timing.sdc physical.upc files.f
 ```
 
+### 刷新时间戳条目
+
+重建 `.hqprj` 中的 `FILE_TIME` / `FILE_TIME_CST` 条目，使其数量与 `FILE_SRC` / `FILE_TC`+`FILE_PC` 一致（GUI 要求两者数目相等，否则打开工程会失败）。条目不足则补、多余则删，时间戳取当前时刻：
+
+```bat
+hqbuddy -refresh_time [<.hqprj>]
+```
+
 ### 设置顶层模块
 
 修改 `TOP_MODULE`：
@@ -360,6 +368,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
 | `-new_prj <name> [-device <part>]`  | 从模板创建`.hqprj` 工程                                              |
 | `-add <files...>`                   | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程         |
+| `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
 | `-set_top <name>`                   | 设置顶层模块`TOP_MODULE`                                             |
 | `-clean [-force]`                   | 按`clean_list.json` 清理工程目录，`-force` 跳过确认                |
 | `-ipgen [<file>] [-lang <lang>]`    | 根据`.hqip` 生成 IP 网表，省略时自动检测                             |

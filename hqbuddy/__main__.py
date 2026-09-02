@@ -51,6 +51,8 @@ Project:
                                         (device from .hqprj, or -device <part>)
   -new_prj <name> [-device <part>]     Create .hqprj project from template
   -add <file1> [<file2> ...]           Add source/constraint files to project
+  -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
+                                        to match FILE_SRC/FILE_TC/FILE_PC
   -set_top <name>                      Set top module name
   -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
 
@@ -629,6 +631,52 @@ def cmd_add(args):
         print(f"Updated: {hqprj_abs}")
 
 
+def cmd_refresh_time(args):
+    """Refresh FILE_TIME/FILE_TIME_CST entries to match FILE_SRC/FILE_TC/FILE_PC.
+
+    The hqfpga GUI requires one FILE_TIME per FILE_SRC and one FILE_TIME_CST
+    per constraint file (FILE_TC + FILE_PC); fix any mismatch so the project
+    opens again.
+    """
+    hqprj_path = _resolve_hqprj(args[0] if args else None)
+
+    if not os.path.isfile(hqprj_path):
+        print(f"Error: file not found: {hqprj_path}")
+        sys.exit(1)
+    hqprj_abs = os.path.abspath(hqprj_path)
+
+    with open(hqprj_abs, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    now = str(int(time.time()))
+    out = []
+    src_count = 0
+    cst_count = 0
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("FILE_TIME_CST="):
+            continue
+        if stripped.startswith("FILE_TIME="):
+            continue
+        out.append(line)
+        if stripped.startswith("FILE_SRC="):
+            src_count += 1
+            out.append(f"FILE_TIME={now}\n")
+        elif stripped.startswith("FILE_TC=") and stripped != "FILE_TC=NONE":
+            cst_count += 1
+        elif stripped.startswith("FILE_PC=") and stripped != "FILE_PC=NONE":
+            cst_count += 1
+    for _ in range(cst_count):
+        out.append(f"FILE_TIME_CST={now}\n")
+
+    with open(hqprj_abs, "w", encoding="utf-8") as f:
+        f.writelines(out)
+
+    print(f"  [SET] FILE_TIME x{src_count} (FILE_SRC x{src_count})")
+    print(f"  [SET] FILE_TIME_CST x{cst_count} (FILE_TC+FILE_PC x{cst_count})")
+    print(f"Updated: {hqprj_abs}")
+
+
 def cmd_set_top(args):
     """Set TOP_MODULE in the .hqprj project."""
     if not args:
@@ -1123,6 +1171,11 @@ def main():
     # Add files
     if first == '-add':
         cmd_add(args[1:])
+        return
+
+    # Refresh timestamps
+    if first == '-refresh_time':
+        cmd_refresh_time(args[1:])
         return
 
     # Set top module
