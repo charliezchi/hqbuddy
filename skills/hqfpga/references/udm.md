@@ -553,7 +553,38 @@ HqFpga 所支持 SDC 对象访问命令的详情见原手册第 14.14.1 节（�
 
 ---
 
-## 疑点记录（原文格式碎裂处）
+## 附录：实测补充（hqfpga 3.1.1 build FT082926，`info commands` + `help` 实测）
+
+手册 §12 并未列全。在 hqfpga TCL 交互中：
+
+- `info commands obj*` 可列出本 build 实际存在的全部 `obj.*` 命令（共 27 个，手册描述约 20 个）。
+- `help <cmd>` 可输出任意命令的 `[Syntax]` / `[Arguments]`（含枚举取值），比手册更权威。
+
+### 手册未记载的命令
+
+| 命令 | 语法（help 实测） | 说明 |
+|---|---|---|
+| `obj.lib.create` | `obj.lib.create <name>` | 新建用户库 |
+| `obj.port.create` | `obj.port.create <obj> <name> <direction>` | 在单元上创建端口，direction ∈ `in\|out\|inout` |
+| `obj.lview.set` | `obj.lview.set <view> <type> [-cover <cover_value>]` | 设置逻辑视图功能；type ∈ one/zero/buf/inv/and/or/nand/nor/xor/xnor/mux2/complex，cover 为覆盖表字符串 |
+| `obj.nview.info` | `obj.nview.info <obj> <info>` | info ∈ `instcnt\|netcnt\|psview\|all`；psview 返回对应物理视图 |
+| `obj.psview.info` | `obj.psview.info <obj> <info>` | info ∈ `nview\|cfgstr\|all`；cfgstr 为物理配置串 |
+| `obj.sys.get` | `obj.sys.get <sysobj>` | 获取系统对象引用：`design\|topview\|worklib\|primlib\|archlib\|synlib\|org_archlib\|org_synlib`（免写死 `/`、`~` 等名字） |
+| `obj.index.start` / `obj.index.stop` | 无参数 | 开启/关闭对象索引（大批量遍历前开启，疑似加速名称→ID 查找） |
+| `obj.flag.list` | `obj.flag.list <obj>` | 列出对象上的内部标志位 |
+
+### 手册有载但取值/参数不全的
+
+- `obj.port.info`：手册漏了 `bubbled`（查询端口是否取反/bubbled-up）。
+- `obj.port.set`：额外支持 `-bubbled` 开关。
+- `obj.view.info`：手册漏了 `unique_inst`（唯一实例计数）。
+- `obj.net.info`：手册漏了 `phynet`（物理网表中的对应连线）。
+- `obj.pin.info`：手册漏了 `bubbled`、`delay`。
+- `obj.cell.set`：type 除手册所列外还有 `dsp|cmu|ext`。
+- `obj.xdata.set`：xdata_type 还支持 `ull`（手册只列到 long）。
+- `obj.probe` 的 `<what>`：除 l1/l2/c1/c2/fidx 外还有 `flist`（配 `/` 使用列出 RTL 文件清单，手册在示例中提到但未入表）。
+
+
 
 1. **表 3（UDM 对象命名规则，行 757）**：表格多列内容被粘连成单行（如 `/lib/cell/view/lib/cell//~`、`~/instanceinstance`、`~/netnetn'net`、`/lib/cell/view.pin~.pin.pin`、`/lib/cell/view/net/lib/cell/view/n'net`），已按下文的限定符说明与示例逐行拆解还原，还原结果可能与原文本意有细微出入。
 2. **行 761**：“用户将得到空的值” 一段在表格之后出现，但对应的是行 753 关于 `level1/level2/leaf_1` 名称含 `/` 的例子；上下文衔接碎裂，已按语义归并到 12.2.1 名称引用小节。
