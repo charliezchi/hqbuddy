@@ -462,7 +462,8 @@ hqbuddy/
 │   ├── clean_list.json   # -clean 清理清单
 │   ├── compile_xist.tcl  # XiST 仿真库编译脚本（手动或自动均使用此脚本，支持 .v / .vp）
 │   ├── config.json       # -cfg 配置模板
-│   └── project.hqprj     # -new_prj 工程模板
+│   ├── project.hqprj     # -new_prj 工程模板
+│   └── boards/           # 开发板板卡资料（每板一个 md，FPGA 引脚分配摘要，查阅方法见 skill references/boards.md）
 ├── skills/
 │   └── hqfpga/           # Kimi Code Skill：HqFpga 操作指南（含 references 命令参考）
 ├── docs/
