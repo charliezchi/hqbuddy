@@ -15,19 +15,21 @@ hqbuddy -insight -init                              :: 初始化（elaborate 设
 hqbuddy -insight -ls [关键字]                       :: 浏览/搜索设计信号（* = 已选入）
 hqbuddy -insight -add <信号> -clk <采样时钟> -type both
 hqbuddy -insight -add <信号2>                        :: 同模块后续信号不必再给 -clk
-hqbuddy -insight -run                               :: 重跑插桩实现流程（几分钟）
-hqbuddy -cable --sealion "<bin>" --model "SA30K" --Burst   :: 下载
+hqbuddy -insight -run                               :: 重跑插桩实现流程（几分钟；完成会拉起 hqdnload 下载 GUI 并阻塞直至关窗，见注意事项）
+hqbuddy -cable --sealion "<bin>" --model "SA30K" --Burst   :: 下载（bin 产物路径见 -run 后下方说明）
 hqbuddy -insight -trig "<条件>"                      :: 设触发
 hqbuddy -insight -capture                           :: 布防等待触发并抓波形
 ```
 
-- `-add` 的 `-type`：`sample`（只采样）/ `trigger`（只触发）/ `both`（采样+触发）。**只触发不采样的信号不会出现在波形里**；想看它的值就用 `both`。
+- `-add` 的 `-type`：`sample`（只采样）/ `trigger`（只触发）/ `both`（采样+触发）。**只触发不采样的信号不会出现在波形里**；想看它的值就用 `both`。**触发（trigger/both）信号会占用 LA 的 trigger 逻辑资源**，非必须做触发条件的信号一律用 `sample` 即可（实测 6 信号里仅 1 个 `both`、其余全 sample 运行良好）。
 - **红线（实测必踩坑）：至少需要 1 个 trigger-capable 信号（`-type trigger` 或 `both`）。若全部只选 `sample`，`-add` 末尾的 ddf 重建会在 `insight.debugip.create` 段错误退出（`hqfpga.exe exited abnormally (code 3221225477)` = 0xC0000005，无堆栈）。正确做法：先把你打算做触发的信号用 `-type both` 加进去，其余信号再按 sample 加。**
 - 每个模块第一次加信号时必须给 `-clk` 指定采样时钟（该模块的时钟信号）。
 - **`-clk` 有效性判据（隐藏失败模式）：`-clk` 给的信号必须能 `-ls` 到、且其 module 等于被加信号所在模块。** 否则 LA 采样时钟悬空，抓回的波形会**全 0**，看着像没抓到。加之前先 `hqbuddy -insight -ls <候选时钟名>` 确认它在目标模块 catalog 里（例如 DDR demo 中 `ddrc_operator_native[1]` 模块的采样时钟是 `usr_clk`）。
 - **同名信号跨模块需 `-module <mod>` 消歧**：裸 `-add dq_err` 若信号存在于多个模块会报 `exists in multiple modules ... pick one with -module`。加 `-module ddrc_operator_native`（模块名可不带 `[1]` 后缀）即可。
+- **`-clk` / `-module` 上下文延续**：同一模块内，首个信号给过 `-clk`（和/或 `-module`）后，**后续同模块信号的 `-clk` 与 `-module` 均可省略**，会自动沿用。只有当要加的信号属另一模块、或属歧义名需明确归属时才需重新指定。仅给 `-clk` 不指定 `-module` 时，上下文也会按首个信号所在模块锁定。
 - `-insight -del <信号>` 移除。增删信号后必须重新 `-run` + 下载才生效。
 - `-init` 在工程目录创建 `hqins_run/`，不影响原设计源文件。
+- **`-run` 之后可下载的位流产物在 `hqins_run/hq_import/hqins_impl/<工程名>.bin`**（下载时 `--sealion` 指向它，不是工程根的 run_hqprj.tcl 产物）。
 
 ### 路线 B：接管 GUI 里已选好信号的工程
 
