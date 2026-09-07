@@ -968,6 +968,40 @@ exit
         f.write(new_rtl)
 
 
+def _dump_metadata(dump_path: str) -> dict:
+    """Build the GUI-style [SIGNAL JSON INFO] metadata keys from the static-elab dump.
+
+    rtl.elaborate -new_rtl requires module_signals_name / expanded_module_inst /
+    sub_module_inst_list to punch the sample-clock probe port through the module
+    boundary; without them the LA refclk floats and capture reads all zeros.
+    """
+    with open(dump_path, "r", encoding="utf-8") as f:
+        modules = json.load(f).get("modules", [])
+    module_signals_name = [{"module_name": m["module"]["name"],
+                            "signal_list": [s["name"] for s in m.get("normal_signals", [])]}
+                           for m in modules]
+    sub_module_inst_list = [{"module_name": m["module"]["name"],
+                             "submod_list": [i["mod_name"] for i in m["module"].get("inst_mod", [])],
+                             "subinst_list": [i["inst_name"] for i in m["module"].get("inst_mod", [])]}
+                            for m in modules]
+    expanded_module_inst = []
+    for m in modules:
+        inst_mod = m["module"].get("inst_mod", [])
+        if not inst_mod or all(i.get("mod_property") == "blackbox" for i in inst_mod):
+            continue
+        expanded_module_inst.append({
+            "module_name": m["module"]["name"],
+            "inst_list": [{"disp_mod_name": i["mod_name"], "orig_mod_name": i["mod_name"],
+                           "disp_inst_name": i["inst_name"], "orig_inst_name": i["inst_name"],
+                           "is_array": "[" in i["inst_name"], "msb": -1, "lsb": -1,
+                           "array_idx": -1, "line_num": i["first_line"]}
+                          for i in inst_mod]})
+    return {"expanded_module_inst": expanded_module_inst,
+            "module_signals_name": module_signals_name,
+            "module_to_orig_map": [],
+            "sub_module_inst_list": sub_module_inst_list}
+
+
 def run_init(proj: dict) -> None:
     """Handle 'hqbuddy -insight -init': create hqins_run skeleton and elaborate."""
     from . import launcher
@@ -1000,6 +1034,21 @@ def run_init(proj: dict) -> None:
     if not os.path.isfile(dump):
         print("Error: elaborate produced no signal database.")
         sys.exit(1)
+
+    # Seed [SIGNAL JSON INFO] with the dump-derived metadata keys the GUI writes,
+    # so rtl.elaborate -new_rtl punches the sample-clock probe port (-add keeps them).
+    sections = read_hqins(proj["hqins"])
+    sig0 = {"version": "0.0.3", "module_sample_list": []}
+    sig0.update(_dump_metadata(dump))
+    sections["SIGNAL JSON INFO"] = [json.dumps(sig0, ensure_ascii=False, sort_keys=True)]
+    parts = []
+    for name, lines in sections.items():
+        parts.append(f"[{name}]")
+        parts.extend(lines)
+        parts.append("")
+    with open(proj["hqins"], "w", encoding="utf-8") as f:
+        f.write("\n".join(parts))
+
     print(f"[OK] HqInsight project initialized: {proj['hqins']}")
 
 
@@ -1300,7 +1349,7 @@ def run_insight(args: list) -> None:
         else:
             rest.append(a)
 
-    if rest[0] == "-init":
+    if rest and rest[0] == "-init":
         proj = resolve_insight_project(hqprj_arg, require_hqins=False)
         run_init(proj)
         return
