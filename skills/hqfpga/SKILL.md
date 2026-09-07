@@ -11,18 +11,21 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 
 1. **hqbuddy 封装**（首选，已处理版本解析与路径；完整用法见 references/hqbuddy.md）：
    - `hqbuddy -flow [<.hqprj>]` — 生成完整实现流程 TCL（`run_hqprj.tcl`；**只生成不执行**，再用 `hqbuddy -cmd run_hqprj.tcl` 执行）
+   - `hqbuddy -new_prj` / `-add` / `-set_top` / `-get_device` / `-set_device` — 工程创建、源文件/约束管理、顶层与器件设置（**凡是加载或修改 `.hqprj` 的需求都走这里**）
    - `hqbuddy -cmd -e "<tcl>" [-q]` — 执行单条 TCL 命令；`-q` 过滤 banner 和 `Info:` 行
    - `hqbuddy -cmd <file.tcl>` / `hqbuddy -cmd` — 执行脚本 / 交互式 CLI
 2. **hqfpga.exe 直接调用**：`hqfpga.exe -cmd <script.tcl>`（启动参数见 references/setup.md）
 3. **生成标准流程脚本**：在 hqfpga CLI 中执行 `hqprj2tcl <prj.hqprj> [out.tcl]`，得到官方完整流程 TCL——需要自定义流程时，**先生成再修改**，不要凭空写命令
 
-## 关键命令速查
+## 关键命令速查（最低优先级）
+
+> **优先级最低，先 hqbuddy 后 TCL**：凡 hqbuddy 能完成的需求（工程创建/改文件/生成并执行流程），一律走 hqbuddy，不要手拼 TCL。下表仅供 hqbuddy 覆盖不到、需要直接进 hqfpga CLI 时查阅；其中实现类命令已由 `hqbuddy -flow` 产出的 `run_hqprj.tcl` 按正确顺序与参数包含，通常无需手写。
 
 | 阶段 | 命令 |
 |---|---|
 | 器件设置 | `dv.setup <family> <device>`，`dv.query` / `dv.info` 查询 |
-| 加载工程 | `design.load <prj.hqprj>` |
-| 综合 | `rtl.analyze` / `rtl.elaborate` / `design.rtlsyn` / `design.flatten` |
+| 工程/文件 | **不存在"加载 .hqprj"的 TCL 命令**：`design.load` 只回读 `design.save` 保存的 UDB 设计数据（.udb），传入 .hqprj 会报 `ERROR(LOAD-2)`。跑工程一律 `hqbuddy -flow` 生成 `run_hqprj.tcl` 后 `hqbuddy -cmd run_hqprj.tcl` 执行（CLI 内等价入口：`hqprj2tcl <prj.hqprj> [out.tcl]`） |
+| 综合 | `rtl.analyze` / `rtl.elaborate` / `design.rtlsyn` / `design.flatten`（流程脚本实际用法：`design.analyze $RTL_FILES` + `design.rtlsyn -top $TOP_MODULE`） |
 | 实现 | `design.map` → `design.pack` → `design.place` → `design.route` |
 | 位流 | `design.bitgen` |
 | 时序 | `sdc.read`、`ta.run` / `ta.report` / `ta.fmax.report`、`design.looptdo`（自动调参优化） |
