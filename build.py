@@ -238,10 +238,64 @@ def install_skill():
               f"'python install_skill.py' manually.{RESET}")
 
 
+def first_run_reminder():
+    """After a fresh build, point the user at -cfg configuration.
+
+    The default scan_path is ["C:\\\\"], but HqFPGA is often installed on
+    another drive. If no version can be found under the current config,
+    tell the user how to set scan_path so hqbuddy does not fail with
+    "no HqFPGA versions found" on first use.
+    """
+    print()
+    info("========================================")
+    info("  First-run configuration reminder")
+    info("========================================")
+
+    found = None  # None = could not determine
+    try:
+        # Build is launched from the source tree, so the package is importable.
+        sys.path.insert(0, SCRIPT_DIR)
+        from hqbuddy import config, scanner  # noqa: PLC0415
+        cfg = config.load_config()
+        versions = scanner.scan_all(cfg)
+        found = len(versions) > 0
+    except Exception:
+        found = None
+
+    if found is False:
+        print()
+        print(f"{YELLOW}[WARN] No HqFPGA installation was found under the "
+              f"configured scan_path.{RESET}")
+        print(f"{YELLOW}       The default scan_path is [\"C:\\\\\"]. If your "
+              f"HqFPGA lives on another drive,{RESET}")
+        print(f"{YELLOW}       hqbuddy will report \"no HqFPGA versions found\" "
+              f"until you configure it.{RESET}")
+        print()
+        print("To fix, configure the install root, then pick a version:")
+        print("  1) Run:   hqbuddy -cfg")
+        print("     This opens %APPDATA%\\hqbuddy\\config.json in your editor.")
+        print("  2) In \"scan_path\", list the root directory(ies) that contain")
+        print("     your hqv*_xist_*_win64 folders (e.g. \"D:\\\\tools\").")
+        print("  3) Save the file, then run:   hqbuddy -build_sel")
+    elif found is True:
+        print(f"[OK] Detected {len(versions)} HqFPGA version(s) under the "
+              f"current scan_path.")
+        print("     If that is not where your HqFPGA actually lives, run "
+              "'hqbuddy -cfg' to change scan_path.")
+    else:
+        print("If hqbuddy cannot find your HqFPGA, run 'hqbuddy -cfg' to set "
+              "scan_path (the default only scans C:\\) and then 'hqbuddy -build_sel'.")
+    print()
+    info("Next: open a new terminal, then run  hqbuddy -build_sel  (or "
+         "hqbuddy -root  to verify).")
+    print()
+
+
 def main():
     clean()
     build()
     install_skill()
+    first_run_reminder()
 
 
 if __name__ == "__main__":

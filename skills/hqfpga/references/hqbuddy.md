@@ -8,9 +8,29 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 
 - 多版本 HqFpga 并存时，hqbuddy 负责选择使用哪个版本：
   - `hqbuddy -build_sel` — 交互式选择版本（支持模糊搜索，`[latest]` 自动选最新）
-  - `hqbuddy -cfg` — 用系统编辑器打开 `%APPDATA%\hqbuddy\config.json` 手动管理（`scan_path` 扫描根列表 + `selected_build` 选中版本，字段含义见仓库 README）
-  - `hqbuddy -root` — 打印当前所选版本的根目录
-- 版本信息持久化在用户配置中，设置一次后续命令自动使用
+  - `hqbuddy -root` — 打印当前所选版本的根目录（**用来验证版本是否已就绪**：能打印出路径即已可用）
+- 版本信息持久化在用户配置中，设置一次后续命令自动使用。
+
+### 配置文件（首次使用前必须先配置好，否则找不到版本）
+
+- 配置文件路径：`%APPDATA%\hqbuddy\config.json`（Windows 上即 `C:\Users\<用户>\AppData\Roaming\hqbuddy\config.json`）。
+- 结构：
+  ```json
+  {
+    "scan_path": ["C:\\"],
+    "selected_build": null
+  }
+  ```
+  - `scan_path`：HqFpga 安装根目录扫描列表。hqbuddy 会扫描其中每个根目录下形如 `hqv*_xist_*_win64` 的文件夹作为可用版本。
+  - `selected_build`：当前选中的版本 build；`null` 表示自动使用扫描到的最新版本（由 `-build_sel` 维护）。
+- **关键**：`scan_path` 默认是 `["C:\\"]`，只扫 C 盘根目录。**用户往往把 HqFpga 装在别的盘或子目录**——若未配置，hqbuddy 会一直报 `no HqFPGA versions found`，所有需要版本的命令（含 hqfpga GUI、`-flow`、`-cable` 等）都无法用。
+- 判断是否已配置就绪：`hqbuddy -root`。能打印出版本根目录路径 = 已可用；报 `Error: no HqFPGA versions found.` = `scan_path` 不对，需配置。
+- **agent 自助配置（不要依赖 `-cfg` 打开的编辑器）**：`hqbuddy -cfg` 会用系统编辑器打开 JSON，agent 无法操作 GUI 编辑器。agent 应直接用文件工具读写该 JSON：
+  1. 先找出用户 HqFpga 实际安装位置，定位其中包含 `hqv*_xist_*_win64` 文件夹的**父目录**（一个或多个）。可用 `hqbuddy -cmd -e "..."` 无关；直接在常见盘根/目录用文件系统探查，或询问用户。
+  2. 把该目录写进 `scan_path` 数组（替换或追加到默认的 `C:\\`）。若文件不存在就新建上述结构。
+  3. （可选）用户要固定某个版本时用 `hqbuddy -build_sel`，否则留 `null` 自动选最新。
+  4. 用 `hqbuddy -root` 验证能打印出路径。
+- `hqbuddy -cfg`（给真人用）：用系统编辑器打开上述 JSON，人工管理 `scan_path` + `selected_build`；已存在但损坏的 JSON 不会被覆盖，需先修好。
 
 ## 工程文件（.hqprj）操作
 

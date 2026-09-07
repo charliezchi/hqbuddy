@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.10.4
+3.10.5
 
 ## 功能特点
 
@@ -37,6 +37,46 @@
 ```bat
 python build.py
 ```
+
+> **构建/安装完成后，首次使用前请先配置 HqFPGA 路径（见下）**，否则 hqbuddy 会一直提示 `no HqFPGA versions found`。
+
+## ⚠️ 首次使用：配置 HqFPGA 安装路径（必读）
+
+hqbuddy 必须知道你的 HqFPGA 装在哪，才能调用它。配置保存在 `%APPDATA%\hqbuddy\config.json`。
+
+> **默认只扫描 `C:\` 根目录**。大多数用户把 HqFPGA 装在其它盘（如 `D:\`）或子目录，**若不配置，任何需要版本的命令都会失败**（GUI、`-flow`、`-cable`、`-insight` 等全部不可用）。
+
+快速检查是否已就绪：
+
+```bat
+hqbuddy -root
+```
+
+能打印出版本根目录路径即已可用；若报 `Error: no HqFPGA versions found.` 则需按下面配置。
+
+### 如何配置
+
+方法一（推荐，用系统编辑器）：
+
+```bat
+hqbuddy -cfg
+```
+
+这会打开 `config.json`，把 `scan_path` 改成**包含你所有 `hqv*_xist_*_win64` 文件夹的父目录**。例如装在 `D:\tools\hqv3_xist_3.1.1_FT090526_win64`，则写成 `"D:\\tools"`（多个就列成数组）。保存后运行 `hqbuddy -root` 验证。
+
+示例 `config.json`：
+
+```json
+{
+  "scan_path": ["D:\\tools", "C:\\"],
+  "selected_build": null
+}
+```
+
+- `scan_path`：HqFPGA 安装根目录扫描列表，每个目录下会被查找 `hqv*_xist_*_win64` 文件夹作为可用版本
+- `selected_build`：选中的版本 build，留 `null` 自动用最新版；用 `hqbuddy -build_sel` 交互选择
+
+配置完成后：`hqbuddy -build_sel` 选版本 → `hqbuddy -root` 确认 → 即可正常使用。agent 无需人工开编辑器，直接改写 `%APPDATA%\hqbuddy\config.json` 的 `scan_path` 字段即可（详见 hqfpga skill 的 `references/hqbuddy.md`）。
 
 ## 使用方式
 
