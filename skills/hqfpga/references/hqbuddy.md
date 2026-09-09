@@ -51,6 +51,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -flow <file> -bin_only [<name>]` — bin-only 模式：生成的 TCL 被精简为只产出 `.bin`（自动删除 .xpn/.rpt/.log 等中间文件的生成指令），名称缺省用流程默认
 - `hqbuddy -xpn [<file>] [-o <out>]` / `-xpn -ins ...` — 生成 XPN 物理网表（普通 / hqinsight 模式）
 - `hqbuddy -xpn2bin [<file>] [-o <out>]` — XPN 转 BIN
+- `hqbuddy -report [<dir>|<file>]` — **主流程报告摘要（agent 必用）**：实现流程后运行，一眼拿到 FMAX（各时钟）、WNS（最差 slack，标注 MET/VIOLATED）、资源利用率表（IO/SLICE/LUT/FF/BRAM/DSP）、bin 文件与时间戳、各报告文件存在性。省去 grep 原始 .rpt。报告源：`fmax.rpt`/`<top>_slack.rpt`/`res_place.rpt`（res_pack/res_rtl 兜底）
 - 省略 `.hqprj` 参数时，自动检测当前目录下的工程文件
 - **bitgen 需要引脚约束**：工程无 `.upc`（FILE_PC）时，bitgen 必停于 `ERROR(BIT-11): pads have no location constraint`——跑到 route 成功、bitgen 报这个错是预期行为，补 `.upc` 后即可
 
@@ -81,3 +82,12 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy <file>.hqprj` — 启动 GUI 并打开工程（.hqprj 关联打开也走此分支）
 - `hqbuddy -h` / `-v` — 帮助 / 版本
 - 中文输出：hqfpga/ipgen 等子进程输出为 GBK，在 UTF-8 终端会显示乱码，属显示问题、不影响执行结果
+
+## VIO 运行时探针
+
+- `hqbuddy -vio` — 查看探针登记（hqvla_vio/probes.json）
+- `hqbuddy -vio -gen [-module m] [-in w] [-out w]` — 生成 VIO IP 模块 `src/<m>.v`（端口 probe_in[In-1:0]/probe_out[Out-1:0]，`HQ_VIO` 属性自动接 JTAG TAP；标准实现流程即可，无需插桩流程）
+- `hqbuddy -vio -reg -in cnt:8 [-in ...] [-out led:2 ...]` — 登记探针名/位宽
+- `hqbuddy -vio -read [-loop N] [-interval s]` — 运行时读输入探针
+- `hqbuddy -vio -write <name>=<val>[,...]` — 运行时驱动输出探针
+- 详细流程/与 LA 互斥关系/坑：`references/vio.md`
