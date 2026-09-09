@@ -639,11 +639,11 @@ def _capture_expr_op(cond_path: str) -> str:
 
 
 def _is_combined_trigger(cond_path: str) -> bool:
-    """Combined trigger (is_ct) = two conditions in trigger_cond.json."""
+    """Combined trigger (is_ct) = two or more condition operands in trigger_cond.json."""
     try:
         with open(cond_path, "r", encoding="utf-8") as f:
             cond = json.load(f)
-        return len(cond["conditions"]["0"][0].get("operands", [])) == 2
+        return len(cond["conditions"]["0"][0].get("operands", [])) >= 2
     except (OSError, json.JSONDecodeError, KeyError, IndexError):
         return False
 

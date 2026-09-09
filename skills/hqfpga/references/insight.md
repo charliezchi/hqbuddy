@@ -65,6 +65,7 @@ hqbuddy -insight -trig "state RANGE_C 2 5" AND "NOT dq_err GT 0"
 
 - 硬件模型（反编译+实测确认）：每个 trigger-capable 信号有独立的比较单元（EDGE/ARITHM/RANGE 三选一生效），条件链把它们按单一 AND（或 OR）组合，可对每个条件取反、可整体取反。**不支持括号嵌套/混合 AND+OR**（GUI 也只生成扁平链）。
 - 条件数不限于 2：N 个条件生成 N 个操作数。但触发条件里只能引用 trigger/both 类型信号；`sample` 信号会报 `signal is sample-only, cannot trigger`。
+- **⚠️ 多条件组合触发的可靠性警告（round-4 盲测实测）**：单条件（is_ct=False 路径）在任何构建上都 100% 可靠；**多条件组合（is_ct=True 路径）被观测到只在特定时段/条件下命中**（同一 96 位 TrigCond SVF 在下载后训练期曾触发，之后用字节相同文件重放不再触发，跨数十次尝试）。需要多条件联合判断时，**可靠做法是只用其中最稀有/最有判别力的单条件布防**，抓回 VCD 后用脚本按其余条件过滤分析（`-o` 保留多次抓取便于对比）。
 - **操作数只能是整个已选信号，不支持位选/表达式**：`counter[7:0] EQ 0` 会报 signal not found。需要"低 8 位为 0"这类条件时，用整信号迂回表达（如 `counter EQ 0` 或 `counter RANGE 0 255`，RANGE 作用于整个向量的数值）。
 - 不带参数 `hqbuddy -insight -trig` 进入交互向导。
 - 触发条件写入 3 个文件（`trigger_expr.json` / `trigger_cond.json` / `.ddf`）+ `.hqins` 的 `[EXPRESSION OPERATION]` 段，GUI 重新打开也能看到。**改触发只重写文件，下次 -capture 直接生效，无需重新编译下载。**
@@ -84,6 +85,7 @@ hqbuddy -insight -capture -o hqins_run/hq_import/run1   :: 自定义输出前缀
 - 超时未触发说明条件不满足：换更宽松的条件，或先 `-force` 确认链路本身正常。
 - 触发位置默认 offset=128（触发点前保留 128 点），由 ddf storage 配置决定。
 - **建议流程：布防后先用短超时（如 30s）抓一次。超时就换信号/条件，别死等。**
+- **板况分相**：刚下载后的 1~2 分钟是 DDR 训练期（FSM 全状态轮转、burst 计数大范围变化、数据错误脉冲频繁），之后进入稳态（FSM 只剩少数状态、burst 模式固定）。涉及"训练期才出现的状态/计数值"的触发条件只在训练期有效——下载后**立即**布防这类条件。
 - **触发标记点的取值有一拍级流水偏斜**：trigger_event 所在样本的原始值不一定逐字满足触发条件（比较通路与存储读出通路对齐差一拍），硬件触发本身真实发生。报告"触发时刻的值"时，用工具摘要与 VCD 中 trigger_event 附近波形交叉确认，别只看单点。
 
 ## 插桩探针陷阱（触发永不命中的头号原因）
