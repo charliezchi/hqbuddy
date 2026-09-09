@@ -22,6 +22,8 @@ from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
 from .simlib import run_simlib
 from .insight import run_insight
+from .vio import run_vio
+from .report import run_report
 from .encrypt import run_encrypt
 from .hqip_gen import run_gen_hqip
 
@@ -96,6 +98,14 @@ Debug:
   -insight -add <sig> [-clk c] [-type sample|trigger|both] [-module m]
                                         Add a signal to the HqInsight project
   -insight -del <sig>                   Remove a signal from the HqInsight project
+  -vio [<.hqprj>]                       VIO runtime probes status (hqvla_vio/probes.json)
+  -vio -gen [-module m] [-in w] [-out w]
+                                        Generate VIO IP RTL module (probe_in/probe_out ports)
+  -vio -reg -in name:w [-in ...] [-out name:w ...]
+                                        Register named probes (bit order = registration order)
+  -vio -read [-loop N] [-interval s]    Read input probes (hex/dec per probe)
+  -vio -write <name>=<val>[,...]        Drive output probes (val: dec/0x/0b)
+  -report [<dir>|<.hqprj>]              Digest main-flow reports: Fmax/WNS/utilization/bit files
 """)
 
 
@@ -1340,6 +1350,16 @@ def main():
     # HqInsight
     if first == '-insight':
         run_insight(args[1:])
+        return
+
+    # VIO runtime probes
+    if first == '-vio':
+        run_vio(args[1:])
+        return
+
+    # Main-flow report digest
+    if first == '-report':
+        run_report(args[1:])
         return
 
     print(f"Error: unknown option: {first}")

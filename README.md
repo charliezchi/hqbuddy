@@ -172,6 +172,16 @@ hqbuddy -insight -capture -force           # 强制触发，立即抓取
 hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin；自动关闭其拉起的 hqdnload 窗口）
 ```
 
+### VIO 虚拟 IO（运行时读/驱动设计信号，无需重编译）
+
+```bat
+hqbuddy -vio -gen -in 8 -out 8             # 生成 VIO 探针模块（RTL 实例化 probe_in/probe_out）
+hqbuddy -vio -reg -in cnt:8 -out led:2     # 登记探针（hqvla_vio/probes.json）
+hqbuddy -vio -read [-loop N]               # 运行时读输入探针
+hqbuddy -vio -write led=0b10               # 运行时驱动输出探针
+hqbuddy -report [<dir>]                    # 主流程报告摘要：Fmax/WNS/资源利用率/bit 文件
+```
+
 添加/移除信号后需执行 `-insight -run` 重新生成插桩 bitstream，并用 cable.exe 下载后方可抓取（`-run` 现已自动关闭流程末尾拉起的 hqdnload 窗口，不再阻塞）。注意：插桩探针只能 tap 综合后仍存在的 net——若触发信号被综合吸收，任何触发条件都不会命中（详见 `skills/hqfpga/references/insight.md` 的"插桩探针陷阱"）。
 
 抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。用 `hqbuddy -wave` 打开波形（自动定位 HqFPGA 自带的 GTKWave，可指定文件）。
