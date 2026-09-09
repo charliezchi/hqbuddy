@@ -86,9 +86,10 @@ Debug:
                                         "state EQ 4 AND data_err RISE", NOT <cond>, --negate
                                         ops: EQ/GT/LT/NE/LE/GE, RANGE(_C/_LC/_RC) lo hi,
                                         RISE/FALL/BOTH/X; N-condition single-op chains OK
-  -insight -capture [-force] [-timeout N]
+  -insight -capture [-force] [-timeout N] [-o prefix]
                                         Arm trigger and capture waveform to VCD
-                                        (-force: capture immediately; default timeout 60s)
+                                        (-force: capture immediately; default timeout 60s;
+                                        -o: output prefix, default <top>_insight → <prefix>_0_ww.vcd)
   -insight -run                         Run the instrumented implementation flow
   -insight -init                        Init HqInsight project (no GUI needed)
   -insight -ls [keyword]                List design signals with hierarchy (* = selected)

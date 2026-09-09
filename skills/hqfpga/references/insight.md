@@ -75,13 +75,16 @@ hqbuddy -insight -trig "state RANGE_C 2 5" AND "NOT dq_err GT 0"
 hqbuddy -insight -capture                :: 布防，等触发（默认超时 60s）
 hqbuddy -insight -capture -timeout 120
 hqbuddy -insight -capture -force         :: 不等触发条件，立即抓（用于冒烟验证链路）
+hqbuddy -insight -capture -o hqins_run/hq_import/run1   :: 自定义输出前缀（产 run1_0_ww.vcd）
 ```
 
 成功后输出 `hqins_run/hq_import/<top>_insight_0_ww.vcd`，并打印触发时刻各信号的值摘要。用 `hqbuddy -wave`（缺省自动检测，或指定文件）调起 HqFPGA 自带的 GTKWave 打开波形——信号名自动缩短为最后一层，且自动把所有信号加入波形视图。
 
+- **多次抓取默认输出同名文件会互相覆盖**：需要保留对比时用 `-o` 区分（或抓后自行改名）。
 - 超时未触发说明条件不满足：换更宽松的条件，或先 `-force` 确认链路本身正常。
 - 触发位置默认 offset=128（触发点前保留 128 点），由 ddf storage 配置决定。
 - **建议流程：布防后先用短超时（如 30s）抓一次。超时就换信号/条件，别死等。**
+- **触发标记点的取值有一拍级流水偏斜**：trigger_event 所在样本的原始值不一定逐字满足触发条件（比较通路与存储读出通路对齐差一拍），硬件触发本身真实发生。报告"触发时刻的值"时，用工具摘要与 VCD 中 trigger_event 附近波形交叉确认，别只看单点。
 
 ## 插桩探针陷阱（触发永不命中的头号原因）
 

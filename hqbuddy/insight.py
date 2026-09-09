@@ -674,7 +674,7 @@ def _write_force_ddf(proj: dict) -> str:
     return force_ddf
 
 
-def run_capture(proj: dict, timeout: int, force: bool) -> None:
+def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = None) -> None:
     """Handle 'hqbuddy -insight -capture': arm trigger, wait, read waveform, dump VCD."""
     import time
 
@@ -691,7 +691,7 @@ def run_capture(proj: dict, timeout: int, force: bool) -> None:
         sys.exit(1)
 
     import_dir = os.path.join(proj["hqins_dir"], "hq_import")
-    prefix = os.path.join(import_dir, f"{proj['top']}_insight")
+    prefix = out_prefix or os.path.join(import_dir, f"{proj['top']}_insight")
     cond_path = os.path.join(import_dir, "trigger_cond.json")
     if not os.path.isfile(cond_path):
         print("Error: no trigger condition set. Use -insight -trig first.")
@@ -1487,6 +1487,7 @@ def run_insight(args: list) -> None:
     if rest[0] == "-capture":
         timeout = 60
         force = False
+        out_prefix = None
         i = 1
         while i < len(rest):
             if rest[i] == "-force":
@@ -1498,11 +1499,14 @@ def run_insight(args: list) -> None:
                     print(f"Error: invalid timeout: {rest[i + 1]}")
                     sys.exit(1)
                 i += 1
+            elif rest[i] == "-o" and i + 1 < len(rest):
+                out_prefix = os.path.abspath(rest[i + 1])
+                i += 1
             else:
                 print(f"Error: unknown -capture option: {rest[i]}")
                 sys.exit(1)
             i += 1
-        run_capture(proj, timeout, force)
+        run_capture(proj, timeout, force, out_prefix)
         return
 
     if rest[0] == "-run":
