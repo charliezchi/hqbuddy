@@ -110,8 +110,8 @@ def cmd_gen(work: str, module: str, in_width: int, out_width: int) -> None:
         print("Error: no HqFPGA installation found (use -cfg to set up).")
         sys.exit(1)
 
-    # hqfpga's vio.ip.create emits the module to a file named after the -I value
-    scratch = os.path.join(work, "_vio_ip_tmp")
+    # hqfpga's vio.ip.create emits the module to a file named after the -O value
+    scratch = os.path.join(work, "_vio_ip_tmp").replace(os.sep, "/")
     tcl_path = os.path.join(work, "_hqbuddy_vio_gen.tcl")
     with open(tcl_path, "w", encoding="utf-8") as f:
         f.write(f"vio.ip.create -O {scratch} -output_module {module}\nexit\n")
