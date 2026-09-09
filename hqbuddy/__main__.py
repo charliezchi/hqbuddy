@@ -82,14 +82,16 @@ Tools:
 Debug:
   -insight [<.hqprj>]                   HqInsight online logic analyzer (status)
   -insight -trig [<expr>]               Set trigger condition (wizard if omitted)
-                                        e.g. "sig EQ 5", "sig RANGE 1 10", "sig RISE",
-                                        "a GT 0 AND b FALL", NOT <cond>, --negate
+                                        e.g. "sig EQ 5", "sig RANGE_C 1 10", "sig RISE",
+                                        "state EQ 4 AND data_err RISE", NOT <cond>, --negate
+                                        ops: EQ/GT/LT/NE/LE/GE, RANGE(_C/_LC/_RC) lo hi,
+                                        RISE/FALL/BOTH/X; N-condition single-op chains OK
   -insight -capture [-force] [-timeout N]
                                         Arm trigger and capture waveform to VCD
                                         (-force: capture immediately; default timeout 60s)
   -insight -run                         Run the instrumented implementation flow
   -insight -init                        Init HqInsight project (no GUI needed)
-  -insight -ls [keyword]                List design signals (* = already selected)
+  -insight -ls [keyword]                List design signals with hierarchy (* = selected)
   -insight -add <sig> [-clk c] [-type sample|trigger|both] [-module m]
                                         Add a signal to the HqInsight project
   -insight -del <sig>                   Remove a signal from the HqInsight project

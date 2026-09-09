@@ -179,6 +179,12 @@ def show_status(proj: dict) -> None:
 
 ARITH_OPS = ("EQ", "GT", "LT", "NE", "LE", "GE")
 EDGE_OPS = {"RISE": "Rising Edge", "FALL": "Falling Edge", "BOTH": "B Edge", "X": "X"}
+# RANGE bound op pairs: CLI token -> (left_op, right_op) written to ddf/json.
+# GUI Range dialog allows GT/GE for the left bound and LT/LE for the right.
+RANGE_OPS = {"RANGE": ("GT", "LT"),           # open interval
+             "RANGE_C": ("GE", "LE"),         # closed interval
+             "RANGE_LC": ("GE", "LT"),        # left-closed
+             "RANGE_RC": ("GT", "LE")}        # right-closed
 
 
 def _bits_lsb_first(value: int, width: int) -> str:
@@ -230,11 +236,8 @@ def parse_trig_expr(tokens: list) -> dict:
     if current:
         groups.append(current)
 
-    if len(groups) > 2:
-        print("Error: at most 2 trigger conditions (hardware has 2 compare units)")
-        sys.exit(1)
-    if len(groups) == 2 and not combine:
-        print("Error: two conditions require AND or OR between them")
+    if len(groups) >= 2 and not combine:
+        print("Error: multiple conditions require AND or OR between them")
         sys.exit(1)
 
     conds = []
@@ -253,11 +256,11 @@ def parse_trig_expr(tokens: list) -> dict:
                 sys.exit(1)
             conds.append({"signal": signal, "kind": "arith", "op": op,
                           "value": _parse_value(g[2]), "negate": negate})
-        elif op == "RANGE":
+        elif op in RANGE_OPS:
             if len(g) != 4:
-                print(f"Error: RANGE requires two bounds: {signal} RANGE <lo> <hi>")
+                print(f"Error: {op} requires two bounds: {signal} {op} <lo> <hi>")
                 sys.exit(1)
-            conds.append({"signal": signal, "kind": "range",
+            conds.append({"signal": signal, "kind": "range", "op": op,
                           "lo": _parse_value(g[2]), "hi": _parse_value(g[3]),
                           "negate": negate})
         elif op in EDGE_OPS:
@@ -267,7 +270,8 @@ def parse_trig_expr(tokens: list) -> dict:
             conds.append({"signal": signal, "kind": "edge", "op": op, "negate": negate})
         else:
             print(f"Error: unknown trigger operator: {op}")
-            print(f"       arithmetic: {'/'.join(ARITH_OPS)}; range: RANGE lo hi; edge: RISE/FALL/BOTH/X")
+            print(f"       arithmetic: {'/'.join(ARITH_OPS)}; range: "
+                  f"{'/'.join(RANGE_OPS)} lo hi; edge: RISE/FALL/BOTH/X")
             sys.exit(1)
 
     return {"conds": conds, "combine": combine, "negate_all": negate_all}
@@ -310,11 +314,12 @@ def _write_trigger_expr(proj: dict, parsed: dict, sigs: list) -> None:
             level["left_value_v"] = f"{width}'d{cond['value']}"
             level["left_value_b"] = bin(cond["value"])[2:].zfill(width)
         elif cond["kind"] == "range":
+            left_op, right_op = RANGE_OPS[cond["op"]]
             level["trigger_type"] = "Range"
-            level["left_value_type"] = "GT"
+            level["left_value_type"] = left_op
             level["left_value_v"] = f"{width}'d{cond['lo']}"
             level["left_value_b"] = bin(cond["lo"])[2:].zfill(width)
-            level["right_value_type"] = "LT"
+            level["right_value_type"] = right_op
             level["right_value_v"] = f"{width}'d{cond['hi']}"
             level["right_value_b"] = bin(cond["hi"])[2:].zfill(width)
         else:
@@ -328,23 +333,44 @@ def _write_trigger_expr(proj: dict, parsed: dict, sigs: list) -> None:
         json.dump({"version": "1.0", "conditions": {"0": conds_json}}, f, indent=2)
 
 
+def _expr_op_bits(parsed: dict) -> str:
+    """expr_op encoding: bit1 = OR combine, bit0 = negate-all."""
+    return f"{1 if parsed['combine'] == 'OR' else 0}{1 if parsed['negate_all'] else 0}"
+
+
+def _write_expression_operation(proj: dict, parsed: dict) -> None:
+    """Persist [EXPRESSION OPERATION] into .hqins (section the GUI debugger reads)."""
+    sections = read_hqins(proj["hqins"])
+    sections["EXPRESSION OPERATION"] = [_expr_op_bits(parsed)]
+    parts = []
+    for name, lines in sections.items():
+        parts.append(f"[{name}]")
+        parts.extend(lines)
+        parts.append("")
+    with open(proj["hqins"], "w", encoding="utf-8") as f:
+        f.write("\n".join(parts))
+
+
 def _write_trigger_cond(proj: dict, parsed: dict, sigs: list) -> None:
-    """Write trigger_cond.json (runtime combination expression)."""
-    multi = len(parsed["conds"]) == 2
-    if multi:
-        or_eq = parsed["combine"] == "OR"
-        expr = "B0|B1" if or_eq else "B0&B1"
-        base_op = 0b101 if or_eq else 0b011
+    """Write trigger_cond.json (runtime combination expression).
+
+    The .svf generator resolves each operand's hardware compare unit by
+    signal_name+module_name (signal_id is symbolic and the expression string is
+    GUI bookkeeping); per-operand `operation` codes drive the actual combination:
+    bit3 = negate unit, low bits 01 = OR chain, 11 = AND chain.
+    """
+    n = len(parsed["conds"])
+    if n == 1:
+        expr, base_op = "B0", 0b00
     else:
-        or_eq = False
-        expr = "B0"
-        base_op = 0
+        or_eq = parsed["combine"] == "OR"
+        expr = "|".join(f"B{i}" for i in range(n)) if or_eq \
+            else "&".join(f"B{i}" for i in range(n))
+        base_op = 0b101 if or_eq else 0b011
 
     operands = []
     for i, (cond, sig) in enumerate(zip(parsed["conds"], sigs)):
         op_bits = base_op | (0b1000 if cond["negate"] else 0)
-        if cond["negate"]:
-            expr = expr.replace(f"B{i}", f"!B{i}")
         operands.append({"signal_id": f"B{i}", "signal_name": cond["signal"],
                          "module_name": sig["module"],
                          "negate": "Yes" if cond["negate"] else "No",
@@ -356,8 +382,10 @@ def _write_trigger_cond(proj: dict, parsed: dict, sigs: list) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"version": "1.0", "conditions": {"0": [{
             "index": "C0", "expression": expr,
-            "and_eq": not or_eq, "or_eq": or_eq,
+            "and_eq": not (parsed["combine"] == "OR"),
+            "or_eq": parsed["combine"] == "OR",
             "negate_eq": parsed["negate_all"], "operands": operands}]}}, f, indent=2)
+    _write_expression_operation(proj, parsed)
 
 
 def _write_ddf(proj: dict, parsed: dict, sigs: list) -> None:
@@ -424,16 +452,20 @@ def _write_ddf(proj: dict, parsed: dict, sigs: list) -> None:
             if operand_el is not None:
                 operand_el.text = _bits_lsb_first(cond["value"], width)
         elif cond["kind"] == "range":
+            left_op, right_op = RANGE_OPS[cond["op"]]
             if op_el is not None:
-                op_el.text = "GT,LT"
+                op_el.text = f"{left_op},{right_op}"
             if mask_el is not None:
                 mask_el.text = "0" * width
             if operand_el is not None:
                 operand_el.text = (f"{_bits_lsb_first(cond['lo'], width)},"
                                    f"{_bits_lsb_first(cond['hi'], width)}")
-        else:  # edge: ddf op uses GUI spelling (RISE/FALL/BOTH)
+        else:  # edge: hardware EDGE unit op only accepts RISE/FALL;
+            # BOTH edge = RISE with mask bits set (any-direction edge monitor).
             if op_el is not None:
-                op_el.text = cond["op"]
+                op_el.text = "FALL" if cond["op"] == "FALL" else "RISE"
+            if mask_el is not None:
+                mask_el.text = "1" if cond["op"] == "BOTH" else "0"
 
     tree.write(proj["ddf"], encoding="utf-8", xml_declaration=True)
 
@@ -456,7 +488,7 @@ def cmd_trig(proj: dict, tokens: list) -> None:
         if c["kind"] == "arith":
             desc.append(f"{prefix}{c['signal']} {c['op']} {c['value']}")
         elif c["kind"] == "range":
-            desc.append(f"{prefix}{c['signal']} RANGE {c['lo']} {c['hi']}")
+            desc.append(f"{prefix}{c['signal']} {c['op']} {c['lo']} {c['hi']}")
         else:
             desc.append(f"{prefix}{c['signal']} {c['op']}")
     combined = f" {parsed['combine']} ".join(desc) if parsed["combine"] else desc[0]
@@ -507,8 +539,8 @@ def _trig_wizard(proj: dict) -> None:
                 continue
             conds.append(f"{sig['name']} {op}")
         elif tchoice == "3":
-            lo = input("Lower bound (exclusive): ").strip()
-            hi = input("Upper bound (exclusive): ").strip()
+            lo = input("Lower bound: ").strip()
+            hi = input("Upper bound: ").strip()
             conds.append(f"{sig['name']} RANGE {lo} {hi}")
         else:
             print("Invalid type.")
@@ -858,12 +890,41 @@ def run_flow(proj: dict) -> None:
 
     import subprocess
     import tempfile
+    import threading
+    import time
+    from datetime import datetime, timedelta
 
     tcl = f"run_hqprj2hqins_flow {{{_tcl_path(proj['hqprj'])}}}\nexit\n"
     with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
         f.write(tcl)
         tcl_path = f.name
     print(f"Running instrumented flow for {proj['hqprj']} ...")
+
+    # The flow spawns the hqdnload GUI at the very end (it pre-fills the WRONG,
+    # non-instrumented bin and blocks hqfpga.exe until dismissed). Auto-close
+    # only instances started after this flow began, then let hqfpga finish.
+    cutoff = (datetime.now() - timedelta(seconds=2)).strftime("%Y-%m-%d %H:%M:%S")
+    ps = (f"Get-Process hqdnload -ErrorAction SilentlyContinue | "
+          f"Where-Object {{ $_.StartTime -gt [datetime]'{cutoff}' }} | "
+          f"Select-Object -ExpandProperty Id")
+
+    def reap_downloader():
+        while os.path.isfile(tcl_path):
+            try:
+                r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                                   capture_output=True, text=True, timeout=15)
+                pids = [ln.strip() for ln in (r.stdout or "").splitlines()
+                        if ln.strip().isdigit()]
+                for pid in pids:
+                    subprocess.run(["taskkill", "/PID", pid, "/F"],
+                                   capture_output=True, timeout=15)
+                    print("[i] Auto-closed hqdnload window spawned by the flow.")
+            except Exception:
+                pass
+            time.sleep(2)
+
+    watcher = threading.Thread(target=reap_downloader, daemon=True)
+    watcher.start()
     try:
         proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path], cwd=proj["work_dir"])
     finally:
@@ -1108,7 +1169,7 @@ def list_signals(proj: dict, keyword: str | None) -> None:
     for c in catalog:
         width = c["msb"] - c["lsb"] + 1
         mark = "*" if c["name"] in selected else " "
-        print(f" {mark} {c['name']}[{width}b]  module={c['module']}")
+        print(f" {mark} {c['name']}[{width}b]  module={c['module']}  {c['hier']}")
 
 
 def _ip_name(name: str, module: str) -> str:
@@ -1143,12 +1204,29 @@ def _rewrite_hqins_sections(proj: dict, sig_info: dict, la_info: dict) -> None:
         f.write("\n".join(parts))
 
 
+def _current_context_module(proj: dict) -> str | None:
+    """Module of the most recently added signal (context for -clk/-module carry-over)."""
+    info = _la_info_path(proj)[0]
+    entries = info.get("module_sample_list", [])
+    if not entries:
+        return None
+    datas = entries[-1].get("modules_sample_data", [])
+    return datas[-1]["module_name"] if datas else entries[-1].get("clk_module_name")
+
+
 def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str | None = None) -> None:
     """Handle 'hqbuddy -insight -add <signal> [-clk <clk>] [-type ...] [-module <mod>]'."""
     catalog = _signal_catalog(proj)
     matches = [c for c in catalog if c["name"] == name]
     if module:
         matches = [c for c in matches if c["module"] == module or c["module"].split("[")[0] == module]
+    elif len(matches) > 1:
+        # Disambiguate via the module of the previously added signal.
+        ctx = _current_context_module(proj)
+        if ctx:
+            narrowed = [c for c in matches if c["module"] == ctx]
+            if len(narrowed) == 1:
+                matches = narrowed
     if not matches:
         print(f"Error: signal not found in design: {name}")
         sys.exit(1)

@@ -157,22 +157,22 @@ hqbuddy -xpn2bin debug.xpn -o my_bitstream.bin
 
 ```bat
 hqbuddy -insight -init                     # 初始化 HqInsight 工程（elaborate 设计，无需 GUI）
-hqbuddy -insight -ls [关键字]              # 列出设计信号（* = 已选入）
-hqbuddy -insight -add dq_err -clk usr_clk -type both   # 添加信号（sample/trigger/both）
+hqbuddy -insight -ls [关键字]              # 列出设计信号（* = 已选入，含层次路径）
+hqbuddy -insight -add dq_err -clk aclk -type both     # 添加信号（sample/trigger/both）
 hqbuddy -insight -del dq_err               # 移除信号
 hqbuddy -insight                           # 查看 HqInsight 工程状态（信号/触发条件）
 hqbuddy -insight -trig                     # 交互式设置触发条件
 hqbuddy -insight -trig "dq_err EQ 0"       # 参数式设置触发（EQ/GT/LT/NE/LE/GE）
-hqbuddy -insight -trig "dq_err RANGE 1 10"           # 范围触发
+hqbuddy -insight -trig "dq_err RANGE 1 10"           # 范围触发（RANGE=开区间；另有 RANGE_C 闭区间、RANGE_LC/RANGE_RC 单边闭）
 hqbuddy -insight -trig "usr_clk RISE"                # 边沿触发（RISE/FALL/BOTH/X）
-hqbuddy -insight -trig "dq_err EQ 0 AND usr_clk RISE"  # 双条件组合（AND/OR）
+hqbuddy -insight -trig "state EQ 4 AND dq_err EQ 0 AND busy RISE"   # 多条件链（AND/OR，可 NOT/--negate）
 hqbuddy -insight -capture                  # 布防并等待触发，抓取波形（默认超时 60s）
 hqbuddy -insight -capture -timeout 120     # 自定义超时
 hqbuddy -insight -capture -force           # 强制触发，立即抓取
-hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin）
+hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin；自动关闭其拉起的 hqdnload 窗口）
 ```
 
-添加/移除信号后需执行 `-insight -run` 重新生成插桩 bitstream，并用 cable.exe 下载后方可抓取。注意 `-run` 末尾会拉起 hqdnload 下载器窗口，且进程会等该窗口关闭才退出。
+添加/移除信号后需执行 `-insight -run` 重新生成插桩 bitstream，并用 cable.exe 下载后方可抓取（`-run` 现已自动关闭流程末尾拉起的 hqdnload 窗口，不再阻塞）。注意：插桩探针只能 tap 综合后仍存在的 net——若触发信号被综合吸收，任何触发条件都不会命中（详见 `skills/hqfpga/references/insight.md` 的"插桩探针陷阱"）。
 
 抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。用 `hqbuddy -wave` 打开波形（自动定位 HqFPGA 自带的 GTKWave，可指定文件）。
 
