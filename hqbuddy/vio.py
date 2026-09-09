@@ -114,7 +114,7 @@ def cmd_gen(work: str, module: str, in_width: int, out_width: int) -> None:
     scratch = os.path.join(work, "_vio_ip_tmp")
     tcl_path = os.path.join(work, "_hqbuddy_vio_gen.tcl")
     with open(tcl_path, "w", encoding="utf-8") as f:
-        f.write(f"vio.ip.create -I {scratch} -output_module {module}\nexit\n")
+        f.write(f"vio.ip.create -O {scratch} -output_module {module}\nexit\n")
     import subprocess
     try:
         subprocess.run([version["hqfpga_path"], "-cmd", tcl_path], cwd=work,
@@ -220,14 +220,15 @@ def cmd_read(work: str, loop: int, interval: float) -> None:
 
     def one_read():
         raw = _read_raw(hqfpga_exe, cable_exe, work, die, total)
-        s = format(raw, f"0{total}b")  # MSB-first string, GUI convention
+        # Packing: the FIRST registered probe occupies the LSB end of the read
+        # value (board-verified with a rotating 8-bit pattern; opposite of the
+        # raw TDO MSB-first string the GUI table uses).
         results = []
-        start = 0
+        rem = raw
         for p in inputs:
             w = p["width"]
-            bits = s[start:start + w][::-1]
-            start += w
-            results.append((p["name"], int(bits, 2) if bits else 0, w))
+            results.append((p["name"], rem & ((1 << w) - 1), w))
+            rem >>= w
         return results
 
     def show():

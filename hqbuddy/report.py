@@ -63,16 +63,39 @@ def _parse_wns(work: str, top: str | None) -> dict | None:
     if top:
         candidates.append(os.path.join(work, f"{top}_slack.rpt"))
     candidates.append(os.path.join(work, "final_ta.rpt"))
-    candidates.append(os.path.join(work, "vio_demo_top_slack.rpt"))
     for path in candidates:
         txt = _read(path)
         if not txt:
             continue
-        slacks = [float(m.group(1)) for m in re.finditer(r"Slack\s*:\s*(-?[\d.]+)\s*ps", txt)]
-        if not slacks:
+        # Split into per-path blocks; classify Setup vs Hold so the worst
+        # setup slack is not polluted by hold paths (they are independent
+        # sign-off checks and differ by orders of magnitude).
+        blocks = re.split(r"\*{4,}\s*\*\s*Path\s+(\d+)\s*\*{4,}", txt)
+        worst = {"Setup": None, "Hold": None, "": None}
+        count = {"Setup": 0, "Hold": 0, "": 0}
+        for seg in blocks[1:]:
+            m = re.search(r"Slack\s*:\s*(-?[\d.]+)\s*(ps|ns)", seg)
+            if not m:
+                continue
+            val = float(m.group(1)) * (1000 if m.group(2) == "ns" else 1)
+            tmatch = re.search(r"Type\s*:\s*(\S+)", seg)
+            kind = (tmatch.group(1) if tmatch else "").rstrip(":")
+            kind = kind if kind in worst else ""
+            cur = worst[kind]
+            if cur is None or val < cur:
+                worst[kind] = val
+            count[kind] += 1
+        setup, hold = worst["Setup"], worst["Hold"]
+        if setup is None and hold is None:
             continue
-        worst = min(slacks)
-        return {"wns_ps": worst, "paths": len(slacks), "met": worst >= 0, "src": os.path.basename(path)}
+        return {
+            "wns_setup_ps": setup,
+            "wns_hold_ps": hold,
+            "setup_met": setup is None or setup >= 0,
+            "hold_met": hold is None or hold >= 0,
+            "paths": sum(count.values()),
+            "src": os.path.basename(path),
+        }
     return None
 
 
@@ -139,8 +162,13 @@ def run_report(args: list) -> None:
         print(f"Fmax      : {f['clock']} = {f['fmax']}  (min period {f['period']})")
     w = _parse_wns(work, top)
     if w:
-        status = "MET" if w["met"] else "VIOLATED"
-        print(f"WNS       : {w['wns_ps']} ps  ({status}, worst of {w['paths']} paths, {w['src']})")
+        s = w["wns_setup_ps"]
+        h = w["wns_hold_ps"]
+        print(f"WNS setup : {'+' if s is not None and s >= 0 else ''}{s} ps  "
+              f"({'MET' if w['setup_met'] else 'VIOLATED'})")
+        if h is not None:
+            print(f"WNS hold  : {'+' if h >= 0 else ''}{h} ps  ({'MET' if w['hold_met'] else 'VIOLATED'})")
+        print(f"            (worst of {w['paths']} reported paths, {w['src']})")
     u = _parse_util(work)
     if u:
         print(f"Utilization ({u['src']}):")

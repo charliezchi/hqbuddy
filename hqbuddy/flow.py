@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 from . import launcher
 
@@ -197,6 +198,21 @@ def _resolve_hqfpga() -> str:
     return version['hqfpga_path']
 
 
+def _check_bitstream(work_dir: str, since: float) -> None:
+    """Verify a fresh bitstream was produced; the flow can exit 0 while
+    bitgen actually failed, so the artifact (not the exit code) is truth."""
+    candidates = []
+    for pat in ("*.bin", "*.bit"):
+        candidates.extend(glob.glob(os.path.join(work_dir, pat)))
+        candidates.extend(glob.glob(os.path.join(work_dir, "hq_run", pat)))
+    fresh = [p for p in candidates if os.path.getmtime(p) >= since]
+    if not fresh:
+        print("")
+        print("Error: flow finished but no fresh .bin/.bit was produced "
+              "(bitgen likely failed). Check hqfpga.log and the .rpt reports.")
+        sys.exit(1)
+
+
 def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
     """
     Run the flow command: generate temp TCL and execute via hqfpga (normal mode).
@@ -215,6 +231,7 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
     # Generate temporary TCL
     temp_tcl = _generate_temp_tcl(hqprj_path, output_tcl)
 
+    started = time.time()
     try:
         print(f"Generated temp TCL: {temp_tcl}")
         _run_hqfpga(hqfpga_path, temp_tcl, work_dir)
@@ -223,6 +240,8 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
             os.remove(temp_tcl)
             print(f"")
             print(f"Cleaned up temp TCL: {temp_tcl}")
+
+    _check_bitstream(work_dir, started)
 
 
 def run_flow_looptdo(hqprj_path: str, output_tcl: str | None = None) -> None:
