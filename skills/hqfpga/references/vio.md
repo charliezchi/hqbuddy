@@ -26,7 +26,7 @@ hqbuddy -vio                               :: 查看探针登记
 ```
 
 - `-gen` 生成的模块模板：`vio_reg_0`（输出探针，host→device，`dout=probe_out`）+ `vio_reg_1`（输入探针，device→host，`din=probe_in`）+ `VIO_TAP`（xsJTAG 桥）。hqbuddy 自动改 `LENGTH` defparam 并注入 probe 端口。
-- `-reg` 位打包顺序 = 登记顺序，**第一个登记的探针占最低位端**（板上用 0xA5 旋转特征值实证）：读方向按 LSB 端依次切片；写方向按 GUI 算法拼接（最后登记探针在 `'b` 字面量低位端）。单探针时无歧义。
+- `-reg` 位打包顺序 = 登记顺序（GUI 约定，板上回归实测）：**第一个登记的探针对应读值位串的 MSB 端切片**（切片内反转即为探针值）。RTL 连线时注意 JTAG 链方向与端口序号相反——probe_in[低位字节] 会出现在读值高位端。登记后先 `-read -loop` 用已知翻转特征（如自增计数器）验证对位，不对就交换登记顺序，无需重编译。
 - `-write` 的值支持十进制/`0x`/`0b`；写入立即生效（update 寄存器双拍，无毛刺）。
 - 探针总宽建议 ≤ 32b；VIO 与 LA 组合（VLA 模式）的 CLI 尚未支持。
 

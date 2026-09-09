@@ -220,15 +220,17 @@ def cmd_read(work: str, loop: int, interval: float) -> None:
 
     def one_read():
         raw = _read_raw(hqfpga_exe, cable_exe, work, die, total)
-        # Packing: the FIRST registered probe occupies the LSB end of the read
-        # value (board-verified with a rotating 8-bit pattern; opposite of the
-        # raw TDO MSB-first string the GUI table uses).
+        # Packing (GUI convention, board-verified): the read value is a
+        # MSB-first bit string; the FIRST registered probe takes the first
+        # (MSB-end) slice, each slice reversed to obtain the probe's value.
+        s = format(raw, f"0{total}b")
         results = []
-        rem = raw
+        start = 0
         for p in inputs:
             w = p["width"]
-            results.append((p["name"], rem & ((1 << w) - 1), w))
-            rem >>= w
+            bits = s[start:start + w][::-1]
+            start += w
+            results.append((p["name"], int(bits, 2) if bits else 0, w))
         return results
 
     def show():
