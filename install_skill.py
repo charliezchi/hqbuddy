@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Install the hqfpga skill for Kimi Code CLI and/or Xiaomi MIMO.
+"""Install the hqfpga skill for Kimi Code CLI, Xiaomi MIMO and/or ZCode.
 
 Usage:
     python install_skill.py              # install to all targets (default)
     python install_skill.py --kimi       # only Kimi Code (~/.kimi-code/skills/)
     python install_skill.py --mimo       # only Xiaomi MIMO (~/.claude/skills/)
-    python install_skill.py --kimi --mimo
+    python install_skill.py --zcode      # only ZCode (~/.zcode/skills/)
+    python install_skill.py --kimi --mimo --zcode
 
 Copies skills/hqfpga/ from this repository to the selected user-level skills
 directories, replacing any previous version. For Xiaomi MIMO, also writes
@@ -45,6 +46,11 @@ TARGETS = {
         "dst": os.path.join(os.path.expanduser("~"), ".claude", "skills", SKILL_NAME),
         "restart_hint": "Start a new MiMo Desktop conversation to pick it up.",
     },
+    "zcode": {
+        "label": "ZCode",
+        "dst": os.path.join(os.path.expanduser("~"), ".zcode", "skills", SKILL_NAME),
+        "restart_hint": "Restart ZCode CLI (or start a new session) to pick it up.",
+    },
 }
 
 
@@ -79,7 +85,7 @@ def install_to(target_key):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Install the hqfpga skill to Kimi Code and/or Xiaomi MIMO.",
+        description="Install the hqfpga skill to Kimi Code, Xiaomi MIMO and/or ZCode.",
     )
     parser.add_argument(
         "--kimi",
@@ -91,6 +97,11 @@ def parse_args(argv=None):
         action="store_true",
         help=f"install to Xiaomi MIMO ({TARGETS['mimo']['dst']})",
     )
+    parser.add_argument(
+        "--zcode",
+        action="store_true",
+        help=f"install to ZCode ({TARGETS['zcode']['dst']})",
+    )
     return parser.parse_args(argv)
 
 
@@ -100,7 +111,7 @@ def main(argv=None):
         sys.exit(1)
 
     args = parse_args(argv)
-    selected = [key for key, flag in (("kimi", args.kimi), ("mimo", args.mimo)) if flag]
+    selected = [key for key, flag in (("kimi", args.kimi), ("mimo", args.mimo), ("zcode", args.zcode)) if flag]
     if not selected:
         selected = list(TARGETS.keys())
 

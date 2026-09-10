@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.12.0
+3.13.0
 
 ## 功能特点
 
@@ -517,12 +517,12 @@ hqbuddy/
 │   ├── project.hqprj     # -new_prj 工程模板
 │   └── boards/           # 开发板板卡资料（每板一个 md，FPGA 引脚分配摘要，查阅方法见 skill references/boards.md）
 ├── skills/
-│   └── hqfpga/           # Kimi Code Skill：HqFpga 操作指南（含 references 命令参考）
+│   └── hqfpga/           # AI Agent Skill：HqFpga 操作指南（含 references 命令参考）
 ├── docs/
 │   └── user_manual/      # HqFpga 官方用户手册（md / pdf）
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
 ├── build.py              # 构建 / 清理统一管理，build 成功后自动注册 PATH 并安装 Skill
-├── install_skill.py      # 安装 hqfpga Skill 到 Kimi Code / Xiaomi MIMO 用户级 skills 目录
+├── install_skill.py      # 安装 hqfpga Skill 到 Kimi Code / Xiaomi MIMO / ZCode 用户级 skills 目录
 ├── .gitignore
 ├── .gitattributes
 ├── AGENTS.md
@@ -540,13 +540,15 @@ hqbuddy/
 | --- | --- | --- |
 | Kimi Code | `~/.kimi-code/skills/hqfpga/` | 重启 Kimi Code CLI 或新开会话 |
 | Xiaomi MIMO | `~/.claude/skills/hqfpga/` | 新开 MiMo Desktop 对话（会自动写入 Plugins 页 locales 元数据） |
+| ZCode | `~/.zcode/skills/hqfpga/` | 重启 ZCode 或新开会话 |
 
-运行 `python build.py` 打包时会自动安装到上述两个目标；也可单独手动安装：
+运行 `python build.py` 打包时会自动安装到上述三个目标；也可单独手动安装：
 
 ```bat
-python install_skill.py              # 默认安装到 Kimi Code + Xiaomi MIMO
+python install_skill.py              # 默认安装到 Kimi Code + Xiaomi MIMO + ZCode
 python install_skill.py --kimi       # 仅 Kimi Code
 python install_skill.py --mimo       # 仅 Xiaomi MIMO
+python install_skill.py --zcode      # 仅 ZCode
 ```
 
 Skill 源文件在 `skills/hqfpga/`，随仓库版本管理。
