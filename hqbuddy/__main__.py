@@ -995,12 +995,39 @@ def cmd_dl(args):
 
 
 def cmd_cable(args):
-    """Launch cable.exe with passthrough arguments."""
+    """Launch cable.exe with passthrough arguments.
+
+    Safety net for -insight workflows: when downloading a bit with
+    --sealion/--model, verify --model matches the detected board first —
+    a model/board mismatch silently programs the wrong design and every
+    subsequent trigger/capture reads garbage."""
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
         print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         sys.exit(1)
+    if '--sealion' in args:
+        model = None
+        for i, a in enumerate(args):
+            if a == '--model' and i + 1 < len(args):
+                model = args[i + 1]
+                break
+        if model:
+            import re as _re
+            import tempfile
+            log = os.path.join(tempfile.gettempdir(), 'hqbuddy_detect.log')
+            r = subprocess.run([version['cable_path'], '--detect_model'],
+                               capture_output=True, text=True, errors='replace',
+                               timeout=60)
+            m = _re.search(r'Device Model\s*:\s*(\S+)', r.stdout or '')
+            detected = m.group(1) if m else None
+            if detected and detected != model:
+                print(f"Error: --model {model} 与板上实际型号 {detected} 不符！")
+                print(f"       用错误型号下载会把别的 bit 编进这块板（cable 不校验型号），")
+                print(f"       之后 LA 触发/抓波形会全部异常。请改用 --model {detected}。")
+                sys.exit(1)
+            if detected:
+                print(f"[OK] 板上型号校验通过: {detected}")
     launcher.launch_tool(version, 'cable', args)
 
 
