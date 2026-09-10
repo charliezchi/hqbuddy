@@ -839,20 +839,21 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         print(f"Error: .ddf not found: {proj['ddf']}")
         sys.exit(1)
 
-    # Bit-freshness warning: if the .hqins signal config is newer than the
-    # instrumented bit, the on-board bit cannot contain the current probes and
-    # the capture will produce garbage/X channels for the newer signals.
+    # Bit-freshness warning (stamp-file based): -trig/-capture also rewrite
+    # .hqins, so raw mtime comparison against .hqins false-positives.  -run
+    # records the newest impl-bin mtime in .bit_stamp; -capture compares it
+    # with the newest bin now on disk (stale bin => warn) .
     import glob as _glob
-    prj_stem = os.path.splitext(os.path.basename(proj["hqprj"]))[0]
+    stamp_path = os.path.join(import_dir, ".bit_stamp")
     bit_paths = _glob.glob(os.path.join(import_dir, "hqins_impl", "*.bin"))
-    hqins_mtime = os.path.getmtime(proj["hqins"])
-    if bit_paths:
+    if bit_paths and os.path.isfile(stamp_path):
+        try:
+            stamp_bit_mtime = float(open(stamp_path).read().strip() or 0)
+        except ValueError:
+            stamp_bit_mtime = 0
         newest_bit = max(os.path.getmtime(b) for b in bit_paths)
-        if newest_bit < hqins_mtime:
-            age_min = (hqins_mtime - newest_bit) / 60
-            print(f"Warning: 插桩 bit 早于当前 .hqins 信号配置约 {age_min:.0f} 分钟——"
-                  f"板上 bit 可能不含最新信号（对应通道会是 X/错值）。")
-            print("         如触发/波形异常，先重跑 -insight -run + 下载。")
+        if newest_bit > stamp_bit_mtime + 1:
+            print("Warning: hqins_impl 里有比上次下载更新的 bin——先重新 -cable 下载再验收。")
 
     sections = read_hqins(proj["hqins"])
     depth = int(_section_value(sections.get("MEMORY DEPTH INFO", [])) or 1024)
@@ -1100,6 +1101,9 @@ def run_flow(proj: dict) -> None:
               f"was produced under hqins_run/hq_import/hqins_impl/ (checked for "
               f"{prj_stem}.bin). Check the reports there (place/route errors).")
         sys.exit(1)
+    stamp_dir = import_dir
+    with open(os.path.join(stamp_dir, ".bit_stamp"), "w") as sf:
+        sf.write(str(max(os.path.getmtime(b) for b in fresh)))
     print("[OK] Instrumented flow done.")
 
 
