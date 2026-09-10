@@ -1073,11 +1073,16 @@ def run_flow(proj: dict) -> None:
         sys.exit(1)
     # The flow can exit 0 even when implementation fails (e.g. JTAG capacity
     # overflow); only a fresh instrumented bitstream counts as success.
-    bin_path = os.path.join(proj["hqins_dir"], "hq_import", "hqins_impl", f"{proj['top']}.bin")
-    if not os.path.isfile(bin_path) or os.path.getmtime(bin_path) < flow_start:
+    # The bin is named after the .hqprj (not the top module).
+    import glob as _glob
+    prj_stem = os.path.splitext(os.path.basename(proj["hqprj"]))[0]
+    bin_candidates = _glob.glob(os.path.join(proj["hqins_dir"], "hq_import",
+                                             "hqins_impl", "*.bin"))
+    fresh = [b for b in bin_candidates if os.path.getmtime(b) >= flow_start]
+    if not fresh:
         print(f"Error: flow reported success but no fresh instrumented bitstream "
-              f"was produced ({bin_path}). Check hqins_run/hq_import/hqins_impl/ "
-              f"reports (place/route errors).")
+              f"was produced under hqins_run/hq_import/hqins_impl/ (checked for "
+              f"{prj_stem}.bin). Check the reports there (place/route errors).")
         sys.exit(1)
     print("[OK] Instrumented flow done.")
 
