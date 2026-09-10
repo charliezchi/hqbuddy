@@ -1385,10 +1385,19 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
 
     sig_info, la_info = _la_info_path(proj)
     msl = sig_info.setdefault("module_sample_list", [])
-    clk_entry = next((e for e in msl if e["clk_module_name"] == sig["module"]), None)
-    if clk_entry is None:
+    if msl:
+        # 硬件限制：一个 LA 只支持一个采样时钟（GUI 同样强制）。
+        # 后续信号（无论哪个模块）都并入现有时钟组，绝不允许第二时钟条目。
+        clk_entry = msl[0]
+        clk_name = clk_entry["clk_signal_name"]
+        if clk and clk != clk_name:
+            print(f"Error: 本 LA 已使用采样时钟 {clk_name}（每个 LA 只支持一个采样时钟）。")
+            print(f"       信号 {name}（模块 {sig['module']}）不能使用 -clk {clk}。")
+            print(f"       若该信号确实由 {clk_name} 驱动，请去掉 -clk 直接添加；否则请先 -del 清空后重建。")
+            sys.exit(1)
+    else:
         if not clk:
-            print(f"Error: first signal of module {sig['module']} requires -clk <clock signal>.")
+            print("Error: first signal requires -clk <clock signal>.")
             sys.exit(1)
         clk_entry = {"clk_module_name": sig["module"], "clk_signal_name": clk,
                      "modules_sample_data": []}
