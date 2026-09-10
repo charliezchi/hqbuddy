@@ -1507,6 +1507,10 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
     print("Tip: run -insight -run to rebuild the instrumented bitstream.")
 
 
+class BreakLoop(Exception):
+    pass
+
+
 def del_signal(proj: dict, name: str) -> None:
     """Handle 'hqbuddy -insight -del <signal>'."""
     sig_info, la_info = _la_info_path(proj)
@@ -1529,6 +1533,23 @@ def del_signal(proj: dict, name: str) -> None:
         sys.exit(1)
     _rewrite_hqins_sections(proj, sig_info, la_info)
     _regenerate_ddf(proj, sig_info, la_info)
+    # 悬空触发表达式提示：被删信号若仍被 trigger 条件引用，布防会失效
+    cond_path = os.path.join(proj["hqins_dir"], "hq_import", "trigger_cond.json")
+    if os.path.isfile(cond_path):
+        try:
+            with open(cond_path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            for cgroup in d.get("conditions", {}).values():
+                for cond in cgroup:
+                    for op in cond.get("operands", []):
+                        if op.get("signal_name") == name:
+                            print(f"Warning: 已删除的 {name} 仍被触发条件引用（悬空）。")
+                            print("         请重新 -insight -trig 设置不含它的条件，否则布防可能失效。")
+                            raise BreakLoop
+        except BreakLoop:
+            pass
+        except (OSError, json.JSONDecodeError):
+            pass
     print(f"[OK] Signal removed: {name}")
     print("Tip: run -insight -run to rebuild the instrumented bitstream.")
 
