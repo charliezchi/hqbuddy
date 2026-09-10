@@ -65,6 +65,7 @@ hqbuddy -insight -trig "state RANGE_C 2 5" AND "NOT dq_err GT 0"
 
 - 硬件模型（反编译+实测确认）：每个 trigger-capable 信号有独立的比较单元（EDGE/ARITHM/RANGE 三选一生效），条件链把它们按单一 AND（或 OR）组合，可对每个条件取反、可整体取反。**不支持括号嵌套/混合 AND+OR**（GUI 也只生成扁平链）。
 - 条件数不限于 2：N 个条件生成 N 个操作数。但触发条件里只能引用 trigger/both 类型信号；`sample` 信号会报 `signal is sample-only, cannot trigger`。
+- **同信号多条件自动折叠**：硬件上每个触发信号只有一个比较单元，`sig EQ 128 AND sig NE 0` 这类同信号 AND 链会被自动折叠成语义等价的单条件（EQ 128）；矛盾（EQ 1 AND EQ 2）或不可表达（NE 0 AND NE 7、混用 NOT）会直接报错并给出改写建议。RANGE 相交自动求交集。OR 链不做折叠（同信号 EQ|EQ 已实测可用）。
 - **多条件组合触发：已修复并板级验证**。历史版本存在关键 bug：`la_set_trig_cond` 解析操作数比较值依赖 CWD，必须从 `hqins_run/` 运行（GUI 约定）；从工程根运行会导致操作数比较值丢失——同信号 AND 链变恒真（乱触发）、跨信号 AND 永不触发。当前 hqbuddy 已固定从 `hqins_run/` 运行 SVF 会话，2/3 条件 AND/OR/取反均正确命中（确定性设计双构建验证：触发值与条件精确吻合）。使用前提不变：板上必须是当前 .hqins 对应的插桩 bit。
 - **操作数只能是整个已选信号，不支持位选/表达式**：`counter[7:0] EQ 0` 会报 signal not found。需要"低 8 位为 0"这类条件时，用整信号迂回表达（如 `counter EQ 0` 或 `counter RANGE 0 255`，RANGE 作用于整个向量的数值）。
 - 不带参数 `hqbuddy -insight -trig` 进入交互向导。

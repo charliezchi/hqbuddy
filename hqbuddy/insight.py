@@ -300,6 +300,143 @@ def _check_trigger_signals(proj: dict, parsed: dict) -> list:
     return result
 
 
+def _fold_same_signal(a: dict, b: dict) -> dict:
+    """Fold two conditions on the SAME signal into one compare-unit condition.
+
+    The LA hardware has exactly ONE compare unit per trigger signal, so a
+    second condition on the same signal silently replaces the first.  Fold the
+    semantically expressible cases and error on the rest."""
+
+    def err(msg):
+        print(f"Error: {msg}")
+        print("       硬件上每个触发信号只有一个比较单元，同信号多条件无法组合；")
+        print("       请改写成单条件，或用跨信号条件表达。")
+        sys.exit(1)
+
+    def canon(c):
+        """Push NOT into the operator: NOT EQ v -> NE v etc."""
+        c = dict(c)
+        if not c.get("negate"):
+            return c
+        if c["kind"] == "arith":
+            if c["op"] == "EQ":
+                c["op"] = "NE"
+            elif c["op"] == "NE":
+                c["op"] = "EQ"
+            else:
+                err(f"信号 {c['signal']} 的 NOT {c['op']} 无法合并为单比较单元")
+        elif c["kind"] == "edge":
+            m = {"RISE": "FALL", "FALL": "RISE", "BOTH": "X"}
+            if c["op"] not in m:
+                err(f"信号 {c['signal']} 的 NOT X 无法合并为单比较单元")
+            c["op"] = m[c["op"]]
+        else:
+            err(f"信号 {c['signal']} 的 NOT RANGE 无法合并为单比较单元")
+        c["negate"] = False
+        return c
+
+    def fold_pair(x, y):
+        if x["kind"] == "edge" and y["kind"] == "edge":
+            if x["op"] == "X":
+                return {**y}
+            if y["op"] == "X":
+                return {**x}
+            if x["op"] == "BOTH" or y["op"] == "BOTH" or x["op"] != y["op"]:
+                return {**x, "op": "BOTH"}
+            return {**x}
+
+        if x["kind"] == "edge" or y["kind"] == "edge":
+            edge, other = (x, y) if x["kind"] == "edge" else (y, x)
+            if other["kind"] == "range":
+                err(f"信号 {x['signal']} 的边沿条件与范围条件无法合并")
+            post = {"RISE": 1, "FALL": 0, "BOTH": None, "X": None}[edge["op"]]
+            if other["op"] != "EQ" or post is None or other["value"] != post:
+                err(f"信号 {x['signal']} 的边沿条件与 {other['op']} {other.get('value')} 无法合并（1 位信号上 {edge['op']} 隐含电平={post}）")
+            return {**edge}
+
+        if x["kind"] == "range" and y["kind"] == "range":
+            lo, hi = max(x["lo"], y["lo"]), min(x["hi"], y["hi"])
+            if lo > hi:
+                err(f"信号 {x['signal']} 范围条件相交为空：[{x['lo']},{x['hi']}] ∩ [{y['lo']},{y['hi']}]")
+            return {**x, "op": "RANGE_C", "lo": lo, "hi": hi}
+
+        if x["kind"] == "range" or y["kind"] == "range":
+            rng, pt = (x, y) if x["kind"] == "range" else (y, x)
+            lop, rop = RANGE_OPS[rng["op"]]
+            v = pt["value"]
+            in_lo = rng["lo"] < v or (rng["lo"] == v and lop == "GE")
+            in_hi = rng["hi"] > v or (rng["hi"] == v and rop == "LE")
+            if pt["op"] == "EQ":
+                if in_lo and in_hi:
+                    return {**pt}
+                err(f"信号 {x['signal']} 条件矛盾：EQ {v} 不在范围 [{rng['lo']},{rng['hi']}] 内")
+            err(f"信号 {x['signal']} 的 NE {v} 与范围条件无法合并为单比较单元")
+
+        # arith + arith
+        if x["op"] == "EQ" and y["op"] == "EQ":
+            if x["value"] != y["value"]:
+                err(f"信号 {x['signal']} 条件矛盾：EQ {x['value']} 与 EQ {y['value']} 无法同时成立")
+            return {**x}
+        if x["op"] == "EQ":
+            if y["value"] == x["value"]:
+                err(f"信号 {x['signal']} 条件恒假：EQ {x['value']} 且 NE {x['value']}")
+            return {**x}
+        if y["op"] == "EQ":
+            if x["value"] == y["value"]:
+                err(f"信号 {x['signal']} 条件恒假：NE {x['value']} 且 EQ {x['value']}")
+            err(f"信号 {x['signal']} 的 NE {x['value']} 与 EQ {y['value']} 无法合并为单条件")
+        if x["value"] == y["value"]:
+            return {**x, "op": "NE"}
+        err(f"信号 {x['signal']} 的 NE {x['value']} 与 NE {y['value']} 无法合并为单比较单元条件")
+
+    return fold_pair(canon(a), canon(b))
+
+
+def collapse_same_signal(parsed: dict) -> dict:
+    """Fold same-signal conditions in AND chains into one compare-unit condition.
+
+    The hardware keeps ONE compare unit per trigger signal: in an AND chain a
+    second condition on the same signal silently overwrites the first.  OR
+    chains keep their operands (board-verified for EQ|EQ on one signal)."""
+    if parsed.get("combine") == "OR":
+        return parsed
+    conds = list(parsed["conds"])
+    if len(conds) < 2:
+        return parsed
+    order, groups = [], {}
+    for c in conds:
+        key = (c["signal"], c["negate"])
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(c)
+    # conditions with the same signal but DIFFERENT negate cannot be folded
+    seen_sig = {}
+    for key in order:
+        sig = key[0]
+        if sig in seen_sig:
+            print(f"Error: 信号 {sig} 同时出现带 NOT 与不带 NOT 的条件，硬件无法组合")
+            print("       （每个触发信号只有一个比较单元；跨信号条件不受影响）")
+            sys.exit(1)
+        seen_sig[sig] = True
+    new_conds = []
+    changed = False
+    for key in order:
+        group = groups[key]
+        cur = group[0]
+        for other in group[1:]:
+            changed = True
+            cur = _fold_same_signal(cur, other)
+        new_conds.append(cur)
+    if not changed:
+        return parsed
+    parsed = {**parsed, "conds": new_conds}
+    if len(new_conds) == 1:
+        parsed["combine"] = None
+        parsed["negate_all"] = False
+    return parsed
+
+
 def _write_trigger_expr(proj: dict, parsed: dict, sigs: list) -> None:
     """Write trigger_expr.json (GUI persistence format)."""
     conds_json = []
@@ -472,6 +609,7 @@ def _write_ddf(proj: dict, parsed: dict, sigs: list) -> None:
 
 def write_trigger_files(proj: dict, parsed: dict) -> None:
     """Validate and write all three trigger files consistently."""
+    parsed = collapse_same_signal(parsed)
     sigs = _check_trigger_signals(proj, parsed)
     _write_trigger_expr(proj, parsed, sigs)
     _write_trigger_cond(proj, parsed, sigs)
