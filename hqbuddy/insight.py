@@ -1420,6 +1420,12 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
             sys.exit(1)
         sig = {**sig, "msb": hi, "lsb": lo}
 
+    catalog_names = {c["name"] for c in catalog}
+    if clk and clk not in catalog_names:
+        print(f"Error: 采样时钟 {clk} 不在信号数据库中（assign 中转线/派生网不会被 elaborate 收录）。")
+        print("       请改用 its 驱动信号名（如端口名或寄存器名）作为 -clk。")
+        sys.exit(1)
+
     sig_info, la_info = _la_info_path(proj)
     msl = sig_info.setdefault("module_sample_list", [])
     if msl:
@@ -1469,7 +1475,8 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
         la = {"clk_list": [], "data_in_order": [], "s_list": [], "st_list": [],
               "t_list": [], "trig_in_order": []}
         la_list.append(la)
-    clk_sig = next((c for c in catalog if c["name"] == clk_name and c["module"] == sig["module"]), None)
+    clk_sig = next((c for c in catalog if c["name"] == clk_name
+                    and (c["module"] == sig["module"] or c["module"].split("[")[0] == sig["module"].split("[")[0])), None)
     if not la["clk_list"] and clk_sig:
         la["clk_list"].append({
             "ip_signal_name": _ip_name(clk_name, sig["module"]), "lsb": 0, "msb": 0,
@@ -1619,6 +1626,7 @@ def run_selftest(proj: dict, signal: str, eq_value: int) -> None:
     (b) value increments by exactly 1 per sample post-trigger.  Any HqFPGA
     upgrade that breaks the insight chain will fail here."""
     print(f"Selftest: {signal} == {eq_value} on {proj['hqins']}")
+    write_trigger_files(proj, parse_trig_expr([f"{signal}", "EQ", str(eq_value)]))
     run_capture(proj, timeout=30, force=False)
 
     vcd = os.path.join(proj["hqins_dir"], "hq_import",
