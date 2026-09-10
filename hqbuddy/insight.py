@@ -734,7 +734,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         f"{gen}.la_set_trig_cond {common} {trig_args}",
         f"{gen}.la_reset {common}",
         f"{gen}.write",
-    ], cwd=proj["work_dir"])
+    ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
     _play_svf(cable_exe, svf("arm.svf"))
     print("[OK] Trigger armed.")
 
@@ -744,7 +744,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         f"-device_die {proj['die']} -ddf_file {_tcl_path(ddf)}",
         f"{gen}.la_status {common}",
         f"{gen}.write",
-    ], cwd=proj["work_dir"])
+    ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
 
     overflow, pointer = False, 0
     if force:
@@ -773,7 +773,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         f"{gen}.write",
         f"{gen}.la_waveform {common} -limit {limit}",
         f"{gen}.write",
-    ], cwd=proj["work_dir"])
+    ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
     tdo = _play_svf(cable_exe, svf("dump.svf"))
 
     # TDO lines: the first two are status words (short hex), the rest are
@@ -801,7 +801,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         f"{gen}.dump_vcd {common} -tdo_path {_tcl_path(tdo_path)} -window_num 1 "
         f"-is_hier True -out_path_prefix {_tcl_path(prefix)} "
         f"-diff_info {overflow}|{pointer}",
-    ], cwd=proj["work_dir"])
+    ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
 
     vcd = f"{prefix}_0_ww.vcd"
     if not os.path.isfile(vcd):
