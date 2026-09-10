@@ -132,3 +132,24 @@
   3. GUI 保存重排 [LA SIGNAL INFO]（字母序）并删除 [EXPRESSION OPERATION] 段
      （CLI 写的）——均不影响功能
   4. GUI 的 B 编号按字母序（B1 vs CLI 插入序 B3）——顺序差异不影响各自 ddf 一致性
+
+## 后续轮次计划（Round 10-20，待续）
+
+已验证稳固的能力基线：单/组合触发（值精确）、折叠/报错路径、多模块增删改、
+片选、模型校验、freshness 预警、GUI↔CLI 配置等效、跨 HqFPGA 版本、跨板（SA30K/SA50K）。
+
+待覆盖主题（每轮 3-5 用例，继续用子 agent）：
+- R10: 抓波形质量深化（多信号视角、连续性校验、偏斜窗口跨 run 一致性）
+- R11: 错误路径专项（bit 过期、跨时钟拒绝、矛盾条件、错误 -clk、双板 model 校验）
+- R12: -report 摘要正确性（FMAX/WNS/util 数字与原始报告核对）
+- R13: -vio 读写回归（vio 工程需重建：agent_scored1 心跳工程有 VIO bit）
+- R14: 从零变体（计数器+移位寄存器+多子模块组合，验证多总线存储打包）
+- R15: 触发条件导入导出往返（trigger_expr.json 手改后 -capture 行为）
+- R16: GUI 一致性第二轮（类型切换/删除路径的 GUI↔CLI diff）
+- R17: 长稳回归（selftest 命令 + r7 用例重跑）
+- R18: -init 幂等性（重复 -init 后配置/数据库一致性）
+- R19: 多信号大配置压力（15+ 信号、资源估算边界）
+- R20: 全链路终极回归（从零→增删改→触发→抓波→分析，完全复刻训练标准）
+
+每轮 FAIL 项按"修复→验证→复测"循环处理；修复与新认知同步更新
+skills/hqfpga/references/insight.md 与本日志。
