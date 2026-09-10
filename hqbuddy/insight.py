@@ -838,6 +838,21 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         print(f"Error: .ddf not found: {proj['ddf']}")
         sys.exit(1)
 
+    # Bit-freshness warning: if the .hqins signal config is newer than the
+    # instrumented bit, the on-board bit cannot contain the current probes and
+    # the capture will produce garbage/X channels for the newer signals.
+    import glob as _glob
+    prj_stem = os.path.splitext(os.path.basename(proj["hqprj"]))[0]
+    bit_paths = _glob.glob(os.path.join(import_dir, "hqins_impl", "*.bin"))
+    hqins_mtime = os.path.getmtime(proj["hqins"])
+    if bit_paths:
+        newest_bit = max(os.path.getmtime(b) for b in bit_paths)
+        if newest_bit < hqins_mtime:
+            age_min = (hqins_mtime - newest_bit) / 60
+            print(f"Warning: 插桩 bit 早于当前 .hqins 信号配置约 {age_min:.0f} 分钟——"
+                  f"板上 bit 可能不含最新信号（对应通道会是 X/错值）。")
+            print("         如触发/波形异常，先重跑 -insight -run + 下载。")
+
     sections = read_hqins(proj["hqins"])
     depth = int(_section_value(sections.get("MEMORY DEPTH INFO", [])) or 1024)
     status_bits = depth.bit_length() - 1 + 2
