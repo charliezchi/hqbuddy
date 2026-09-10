@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.10.5
+3.11.0
 
 ## 功能特点
 
@@ -12,7 +12,7 @@
 - **路径解析**：自动将 `$WORK_DIR$` 替换为 `.hqprj` 文件所在目录的绝对路径
 - **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
 - **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式
-- **HqInsight 在线调试**：状态查看、触发条件设置（参数/交互）、波形抓取为 VCD（`-insight`）
+- **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；`-capture` 支持自定义超时与输出前缀
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
 - **新建工程**：从模板创建 `.hqprj` 工程（`-new_prj`）
@@ -25,6 +25,8 @@
 - **版本选择**：通过交互式菜单选择 HqFPGA 版本，支持模糊查找与 latest 自动选择（`-build_sel`）
 - **启动 GUI**：无参数运行或双击 `.hqprj` 直接启动 HqFPGA GUI（hqui）
 - **命令行执行**：通过 hqfpga CLI 执行 TCL 脚本（`-cmd`）
+- **VIO 运行时探针**：生成 VIO IP 模块、登记命名探针、运行时读取/驱动设计信号，无需重编译（`-vio`）
+- **报告摘要**：一键解析实现流程报告——FMAX、setup/hold WNS（分列判定 MET/VIOLATED）、资源利用率、bit 文件清单（`-report`）
 - **下载器**：启动 hqdnload 下载器，自动检测最新 `.bin`（`-dl`）
 - **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
 - **配置管理**：用系统编辑器打开 config.json 管理扫描路径和版本选择（`-cfg`）
