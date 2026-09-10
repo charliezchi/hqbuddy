@@ -45,13 +45,26 @@
 | ↺ 重置 | LA 复制 | 包含在 CLI `-capture` 的布防序列内 |
 | ⬇ 下载图标 | 拉起 hqdnload | CLI 等价 `-cable --sealion <bin> --model <板> --Burst` |
 
-## 3. 层次结构浏览器（左上树）
+## 3. 层次结构浏览器（左上树）——只导航，不加信号
 
 - 三层结构：`ROOT(顶层) → 实例(u_ddrc_operator…) → always块(always_NNN)`
 - **always_NNN = 按驱动信号的 always 块分组**（NNN≈所在源码行号）；点节点跳转 src_0 源码对应行
 - 搜索框：按信号名过滤，树里显示"包含该信号的模块 → always 块"
 - 展开方式：点节点前 ▸ 箭头，或选中后按 **→** 键；`*` 展开全部子树（Qt 惯例）
-- **信号叶子在 always 块下**：叶子即信号本体，双击/右键加入已标记列表
+- ⚠️ **树的 always_* 节点是叶子（双击/右键/拖拽均无效）**：信号添加不在这里！
+
+## 3b. 信号添加/删除/改类型的真实入口：src_0 源码编辑器右键
+
+1. 层次树点 always_NNN（或搜索定位）→ src_0 跳到对应代码行
+2. **右键信号 token（LHS）** → 上下文菜单：
+   「采样且触发 / 仅采样 / 仅触发 / 采样时钟 / 修改片选 / 取消标记 / 复制信号名称」
+3. 点类型即完成添加/改类型；「取消标记」=删除；「修改片选」=总线位选（GUI 的
+   slice_msb/slice_lsb 编辑入口）
+- 已标记列表里同样右键信号行 → 同款菜单（改类型/取消标记）
+- 菜单项建议用 ↓+Enter 键盘选中（鼠标点击坐标易偏差）
+- 文件变化：改完点保存（Ctrl+S）→ .hqins 更新（GUI 以紧凑 JSON 重写
+  [LA SIGNAL INFO]，data_in_order/trig_in_order 按字母重排；**删除**
+  [EXPRESSION OPERATION] 段——CLI 写的这个段会被 GUI 保存移除，属 GUI 行为）
 
 ## 4. 已标记信号列表（左下）
 
@@ -86,7 +99,15 @@
 | 调试运行 | `insight.svf`（运行中存在，结束清空）、`tdo_data.txt`、`<top>_insight_0_ww.vcd`、`gtkwave_0.tcl`；**运行会删除上次调试产物** |
 | 采样参数设置 | `.hqins` [MEMORY DEPTH INFO]/[TRIGGER MULTI-WINDOW]/[TRIGGER LEVEL] |
 
-## 7. 硬件限制（GUI 与 CLI 同）
+## 7. GUI 与 CLI 协同风险（重要）
+
+- **GUI 保存以内存态覆盖磁盘**：GUI 打开期间用 CLI 增删的信号，GUI 一保存就丢
+  （GUI 内存还是打开时的旧状态）。规则：要么全 CLI，要么先关 GUI 再 CLI 改。
+- GUI 保存还会把触发条件回退为其内存值、重排 [LA SIGNAL INFO] 顺序、
+  删除 [EXPRESSION OPERATION] 段——这些差异不影响功能（各写各的合法状态），
+  但 diff 时会看到。
+
+## 8. 硬件限制（GUI 与 CLI 同）
 
 - **一个 LA 只支持一个采样时钟**；跨时钟域信号采样无意义
 - 一个 JTAG 调试槽：VIO+LA 不能同 bit（PHY-PLA-665 JTAG capacity overflow）
