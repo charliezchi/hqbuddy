@@ -1101,7 +1101,7 @@ def run_flow(proj: dict) -> None:
               f"was produced under hqins_run/hq_import/hqins_impl/ (checked for "
               f"{prj_stem}.bin). Check the reports there (place/route errors).")
         sys.exit(1)
-    stamp_dir = import_dir
+    stamp_dir = os.path.join(proj["hqins_dir"], "hq_import")
     with open(os.path.join(stamp_dir, ".bit_stamp"), "w") as sf:
         sf.write(str(max(os.path.getmtime(b) for b in fresh)))
     print("[OK] Instrumented flow done.")
