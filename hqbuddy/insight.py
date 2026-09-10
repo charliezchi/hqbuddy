@@ -3,6 +3,7 @@
 import glob
 import json
 import os
+import re
 import sys
 
 # sample_type encoding in .hqins [SIGNAL JSON INFO]
@@ -1382,8 +1383,18 @@ def _current_context_module(proj: dict) -> str | None:
 
 
 def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str | None = None) -> None:
-    """Handle 'hqbuddy -insight -add <signal> [-clk <clk>] [-type ...] [-module <mod>]'."""
+    """Handle 'hqbuddy -insight -add <signal>[:msb:lsb] [-clk <clk>] [-type ...] [-module <mod>]'."""
     catalog = _signal_catalog(proj)
+    # 总线片选：name[msb:lsb] 只采样总线的一段（硬件按片宽分配捕获位宽）
+    slice_rng = None
+    m = (re.match(r"^(.+)\[(-?\d+):(-?\d+)\]$", name)
+         or re.match(r"^(.+):(-?\d+):(-?\d+)$", name))
+    if m:
+        name = m.group(1)
+        slice_rng = (int(m.group(2)), int(m.group(3)))
+        if slice_rng[0] < slice_rng[1]:
+            print(f"Error: slice msb must be >= lsb: {name}[{slice_rng[0]}:{slice_rng[1]}]")
+            sys.exit(1)
     matches = [c for c in catalog if c["name"] == name]
     if module:
         matches = [c for c in matches if c["module"] == module or c["module"].split("[")[0] == module]
@@ -1402,6 +1413,12 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
         print(f"Error: '{name}' exists in multiple modules: {mods}; pick one with -module")
         sys.exit(1)
     sig = matches[0]
+    if slice_rng:
+        hi, lo = slice_rng
+        if hi > sig["msb"] or lo < sig["lsb"]:
+            print(f"Error: slice {name}[{hi}:{lo}] out of range ({name}[{sig['msb']}:{sig['lsb']}])")
+            sys.exit(1)
+        sig = {**sig, "msb": hi, "lsb": lo}
 
     sig_info, la_info = _la_info_path(proj)
     msl = sig_info.setdefault("module_sample_list", [])
@@ -1438,9 +1455,11 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
         sys.exit(1)
     key = {2: "sample_list", 3: "trigger_list", 4: "sample_and_trigger_list"}[stype]
     mod_data[key].append(name)
+    raw_hi, raw_lo = next((c["msb"], c["lsb"]) for c in catalog
+                          if c["name"] == name and c["module"] == sig["module"])
     mod_data["normal_signals"].append({
         "signal_name": name, "sample_type": stype,
-        "raw_msb": sig["msb"], "raw_lsb": sig["lsb"],
+        "raw_msb": raw_hi, "raw_lsb": raw_lo,
         "slice_msb": sig["msb"], "slice_lsb": sig["lsb"]})
 
     # [LA SIGNAL INFO]
@@ -1593,6 +1612,50 @@ def _regenerate_ddf(proj: dict, sig_info: dict, la_info: dict) -> None:
     _rewrite_hqins_sections(proj, sig_info, la_info)
 
 
+def run_selftest(proj: dict, signal: str, eq_value: int) -> None:
+    """Regression selftest on a deterministic-counter style design.
+
+    Arms `signal == eq_value`, captures, and asserts: (a) contiguous samples,
+    (b) value increments by exactly 1 per sample post-trigger.  Any HqFPGA
+    upgrade that breaks the insight chain will fail here."""
+    print(f"Selftest: {signal} == {eq_value} on {proj['hqins']}")
+    run_capture(proj, timeout=30, force=False)
+
+    vcd = os.path.join(proj["hqins_dir"], "hq_import",
+                       f"{proj['top']}_insight_0_ww.vcd")
+    txt = open(vcd, encoding="utf-8", errors="replace").read()
+    head, body = txt.split("$enddefinitions", 1)
+    sig_id = None
+    for m in re.finditer(r"\$var\s+\w+\s+(\d+)\s+(\S+)\s+(\S+)", head):
+        if m.group(3).split("/")[-1].startswith(f"{signal}["):
+            sig_id = m.group(2)
+    if sig_id is None:
+        print(f"FAIL: signal {signal} not found in VCD")
+        sys.exit(1)
+    samples = []
+    t = 0
+    for line in body.splitlines():
+        line = line.strip()
+        if line.startswith("#"):
+            t = int(line[1:])
+        elif line.startswith("b") and sig_id in line.split()[1:]:
+            samples.append((t, line.split()[0][1:]))
+    if len(samples) < 2:
+        print("FAIL: no sample data")
+        sys.exit(1)
+    contig = all(samples[i + 1][0] - samples[i][0] == 1 for i in range(len(samples) - 1))
+    inc = all(int(samples[i + 1][1], 2) - int(samples[i][1], 2) == 1
+              and samples[i + 1][0] - samples[i][0] == 1 for i in range(len(samples) - 1))
+    hits = [t for t, v in samples if int(v, 2) == eq_value]
+    print(f"samples={len(samples)} contiguous={contig} +1-per-sample={inc} "
+          f"eq_value@{hits[0] if hits else 'never'}")
+    if contig and inc:
+        print("[PASS] insight chain OK (arm/trigger/capture/dump all correct)")
+    else:
+        print("[FAIL] insight chain broken")
+        sys.exit(1)
+
+
 def run_insight(args: list) -> None:
     """Entry point for 'hqbuddy -insight'."""
     hqprj_arg = None
@@ -1687,6 +1750,23 @@ def run_insight(args: list) -> None:
 
     if rest[0] == "-run":
         run_flow(proj)
+        return
+
+    if rest[0] == "-selftest":
+        signal, eq_value = "sig", 128
+        i = 1
+        while i < len(rest):
+            if rest[i] == "-signal" and i + 1 < len(rest):
+                signal = rest[i + 1]
+                i += 1
+            elif rest[i] == "-value" and i + 1 < len(rest):
+                eq_value = int(rest[i + 1], 0)
+                i += 1
+            else:
+                print(f"Error: unknown -selftest option: {rest[i]}")
+                sys.exit(1)
+            i += 1
+        run_selftest(proj, signal, eq_value)
         return
 
     print(f"Error: unknown -insight option: {' '.join(rest)}")

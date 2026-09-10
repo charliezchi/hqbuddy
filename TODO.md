@@ -15,24 +15,24 @@
 - 残留：同信号 OR 链已实测可用但未覆盖折叠；条件级取反 bit 语义（NOT A AND B 的
   硬件传播）未穷尽，遇可疑现象先单条件化再排查
 
-### 2. `-capture` 位流过期预警 ⬜
+### 2. `-capture` 位流过期预警 ✅（2026-09-10 完成）
 - 比较 `hqins_run/hq_import/hqins_impl/<工程>.bin` 与 `.hqins`（及最近 -add）的
   mtime，位流更旧则在 `-capture` 布防前警告"板上 bit 可能过期，先 -run+下载"
 - 动机：本轮两次踩"陈旧 bit → 全 X/垃圾波形"，每次浪费一轮抓取才定位
 - 预计 30 分钟；完成后拉子 agent 盲测（故意用错 bit 验证警告触发）
 
-### 3. `$WORK_DIR$` 约束路径坑写入 skill 文档 ⬜
+### 3. `$WORK_DIR$` 约束路径坑写入 skill 文档 ✅（2026-09-10 完成）
 - insight 流程（run_hqprj2hqins_flow）cwd 是 `hqins_impl/`，FILE_TC/FILE_PC
   相对路径读不到 → 流程"成功"却无 bin（产物校验可兜底，但根因要写文档）
 - 顺带：`-new_prj` 模板补齐后写入 .hqprj 的路径应自动加 `$WORK_DIR$` 前缀
 - 预计 15 分钟；盲测：让 agent 从零建工程跑通 insight 全链路
 
-### 4. `-add` 总线片选 ⬜
+### 4. `-add` 总线片选 ✅（2026-09-10 完成）
 - GUI 支持 `[SIGNAL JSON INFO]` 的 `slice_msb/slice_lsb`（当前恒写全宽）
 - 语法：`hqbuddy -insight -add sig[7:0] ...`；省 LA 位宽资源（深度固定 1024）
 - 涉及 ddf/la_list/VCD 命名联动，中等工程量；盲测：片选后 VCD 位宽与值正确
 
-### 5. 最小回归自测命令 ⬜
+### 5. 最小回归自测命令 ✅（2026-09-10 完成）
 - 把 cli_gui_cmp 确定性对照实验固化为 `hqbuddy -insight -selftest [<dir>]`
 - 内容：下载插桩 bit → 布防 sig EQ 128 → 抓取 → 校验 1024 样本 +1 序列 →
   （可选）CLI/GUI SVF 载荷一致性
