@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.11.0
+3.12.0
 
 ## 功能特点
 
@@ -522,7 +522,7 @@ hqbuddy/
 │   └── user_manual/      # HqFpga 官方用户手册（md / pdf）
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
 ├── build.py              # 构建 / 清理统一管理，build 成功后自动注册 PATH 并安装 Skill
-├── install_skill.py      # 安装 hqfpga Skill 到用户级 skills 目录
+├── install_skill.py      # 安装 hqfpga Skill 到 Kimi Code / Xiaomi MIMO 用户级 skills 目录
 ├── .gitignore
 ├── .gitattributes
 ├── AGENTS.md
@@ -530,17 +530,26 @@ hqbuddy/
 └── README.md
 ```
 
-## Kimi Code Skill：hqfpga
+## AI Agent Skill：hqfpga
 
 仓库内置一个面向 AI agent 的 Skill，让 agent 理解 HqFpga 的操作流程与 U 命令体系（设计流程、99 个命令参考、UDM、SDC/物理约束），由官方用户手册蒸馏而来。
 
-运行 `python build.py` 打包时会自动安装；也可单独手动安装：
+支持安装到：
+
+| 目标 | 目录 | 生效方式 |
+| --- | --- | --- |
+| Kimi Code | `~/.kimi-code/skills/hqfpga/` | 重启 Kimi Code CLI 或新开会话 |
+| Xiaomi MIMO | `~/.claude/skills/hqfpga/` | 新开 MiMo Desktop 对话（会自动写入 Plugins 页 locales 元数据） |
+
+运行 `python build.py` 打包时会自动安装到上述两个目标；也可单独手动安装：
 
 ```bat
-python install_skill.py
+python install_skill.py              # 默认安装到 Kimi Code + Xiaomi MIMO
+python install_skill.py --kimi       # 仅 Kimi Code
+python install_skill.py --mimo       # 仅 Xiaomi MIMO
 ```
 
-安装后重启 Kimi Code CLI 生效。Skill 源文件在 `skills/hqfpga/`，随仓库版本管理。
+Skill 源文件在 `skills/hqfpga/`，随仓库版本管理。
 
 ## License
 
