@@ -223,3 +223,16 @@ skills/hqfpga/references/insight.md 与本日志。
   6. `-ls` 缺 -module 过滤 → 待做
 - **探针陷阱实证**：usr_cmd_burst_cnt 被常量折叠（hqfpga.log "Convert FF to
   constant ZERO"），恒 0 信号只有 EQ 0 恒真语义
+
+## Round 16 — 综合回归（30+ 次真实布防）
+- **任务**：6 条触发矩阵 + 状态零漂移验证（fifo 工程，跨 run 一致性）
+- **结果**：✅ 核心触发链路无回归——BOTH 折叠、RANGE_C 恒真等效、NOT 取反硬件
+  语义正确（NOT 丢失会在布防即触发，实测未发生）、跨信号 AND、电平比较全部
+  确定命中（等待 ≤1.3s）；不可满足条件诚实超时；30+ 轮 -trig/-capture 后
+  -insight 状态零漂移
+- **发现（非 CLI 回归）**：
+  1. 边沿+电平同拍 AND 可能信号层面不可满足（data_err 上升沿恒落后
+     usr_dr_re_dly 恰 +2 拍）——工具诚实超时是正确行为
+  2. 本 bit 边沿标记偏斜 2~104 拍（超出 ±8 窗口）——bit 级现象
+  3. .hqins 与板载 bit 信号集不一致时触发测试不受影响（只要用两集共有的信号），
+     但启用新增信号前必须 -run+下载
