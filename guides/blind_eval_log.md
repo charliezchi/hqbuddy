@@ -176,3 +176,18 @@ skills/hqfpga/references/insight.md 与本日志。
   3. sample-only 报错缺补救指引 → 补 "改 -type both 重跑 -run" 提示
   4. `.bit_stamp` 缺失时位流过期预警静默跳过 → 加一次性基线提示
 - **验证**：修复后实例片段 -module 报错文案清晰可操作 ✓；无戳记提示正确出现 ✓
+
+## Round 12 — -report 摘要正确性（发现高严重度兼容性问题）
+- **任务**：-report 输出与原始报告逐数字核对（两个真实工程）
+- **结果**：❌ 真实（GUI/hqins 流程）工程上 -report 数字输出为空——
+  1. **报告族不兼容**[高]：真实工程报告在 `hq_run/` 且名为 `ratio.rpt`/
+     `<top>_slack.rpt`，hqbuddy 只找工程根的 `fmax.rpt`/`res_place.rpt` 等
+  2. **时序中文格式不支持**[高]：中文环境 slack 报告为 GBK 编码
+     （`时间余量 :`/`类型 : 建立|保持`），解析器只认英文
+  3. bitstream 检测不覆盖 hqins_impl/[低]
+  利用率解析逻辑本身正确（16/16 行数值与原始报告精确一致）
+- **修复**：report.py 全面升级——多根目录候选（root/hq_run/hqins_impl）、
+  ratio.rpt 纳入候选、GBK 兼容读取、中文时序格式（建立/保持）解析、
+  SERDES 行纳入白名单
+- **验证**：fifo 工程 -report 现输出 WNS setup +5830.7ps(MET)/hold +286.5ps(MET)、
+  利用率 8 行——与盲测 agent 的人工核算完全一致 ✓
