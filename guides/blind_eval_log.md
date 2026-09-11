@@ -209,3 +209,17 @@ skills/hqfpga/references/insight.md 与本日志。
   **重新下载插桩 bit 后立即恢复**（board 复位即设计复位）。非修复引入的缺陷。
 - **新增认知**：板卡卡死状态的判定特征 = 数据通道恒值 + clock_cycle 在走 +
   trigger_event 与条件无关；处置 = 重下载 bit
+
+## Round 15 — GUI 建工程 CLI 接管（gui_created 全链路）
+- **任务**：接管 GUI 新建的 gui_created 工程（ddrc_fifo_demo 文件集）→ 插桩 → 下载 → 触发
+- **结果**：✅ 接管成功（5 项工程缺陷修复后全链 PASS：TOP_MODULE 空、_sim.v 重复、
+  片段文件、器件不配套、BGEN bin 未开）；触发点值精确；VCD 校验板上 DDR 真实运行
+- **发现的问题（6 项 hqbuddy 改进点，3 项已修）**：
+  1. insight 流程前 BGEN_1/2 未开 → 已自动开启并写回 .hqprj ✓
+  2. 产物校验不区分"bit-only（BGEN 未开）"与"P&R 失败" → 已区分文案 ✓
+  3. `-init` 缺前置体检（TOP_MODULE 空/片段文件/器件不配套一次性诊断）→ 待做
+  4. 缺 `-del <file>`（移除源文件）命令 → 待做
+  5. 常量探针警告（网表 Convert FF to constant 时汇总提示）→ 待做
+  6. `-ls` 缺 -module 过滤 → 待做
+- **探针陷阱实证**：usr_cmd_burst_cnt 被常量折叠（hqfpga.log "Convert FF to
+  constant ZERO"），恒 0 信号只有 EQ 0 恒真语义
