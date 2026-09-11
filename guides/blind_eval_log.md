@@ -191,3 +191,12 @@ skills/hqfpga/references/insight.md 与本日志。
   SERDES 行纳入白名单
 - **验证**：fifo 工程 -report 现输出 WNS setup +5830.7ps(MET)/hold +286.5ps(MET)、
   利用率 8 行——与盲测 agent 的人工核算完全一致 ✓
+
+## Round 13 — VIO 运行时探针回归（agent_scored1 从零重建后全链路）
+- **任务**：VIO bit 下载 → 探针状态 → 循环读 → 写入 → 异常记录
+- **结果**：✅ PASS——位级精确验证：38 样本 hb 全部精确落在种子 0xA1 的 LFSR 轨道
+  （碰撞概率排除）、ccnt 与墙钟秒数互证、5 次写入全部成功；重下载后首读得到
+  种子/清零初始态（读通路位级精确的直接证据）
+- **发现的问题**：`-vio -read -loop xyz` 非数字抛原始 traceback → 已加友好报错；
+  hb-ccnt 相对相位偶发 +1 漂移为器件侧现象（CLI 读通路已独立证明位级正确）
+- **验证**：修复后 -loop 文案友好 ✓（并入下轮回归）

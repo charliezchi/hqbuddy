@@ -339,10 +339,18 @@ def run_vio(args: list) -> None:
         i = 1
         while i < len(rest):
             if rest[i] == "-loop" and i + 1 < len(rest):
-                loop = int(rest[i + 1])
+                try:
+                    loop = int(rest[i + 1])
+                except ValueError:
+                    print(f"Error: -loop 需要整数: {rest[i + 1]}")
+                    sys.exit(1)
                 i += 1
             elif rest[i] == "-interval" and i + 1 < len(rest):
-                interval = float(rest[i + 1])
+                try:
+                    interval = float(rest[i + 1])
+                except ValueError:
+                    print(f"Error: -interval 需要数字: {rest[i + 1]}")
+                    sys.exit(1)
                 i += 1
             else:
                 print(f"Error: unknown -read option: {rest[i]}")
