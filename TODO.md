@@ -55,6 +55,6 @@
       JTAG 槽冲突（ERROR PHY-PLA-665）案例
 
 ## 四、工程化
-- [ ] 本地 commit 已全部推送（2026-09-10）；后续每完成一项待办 commit+push
+- [x] 本地 commit 已全部推送（2026-09-12）；20 轮盲评完成（guides/blind_eval_log.md）
 - [ ] `hqbuddy/__init__.py` 版本号在下一批功能合并时 bump 到 3.11.0
 - [ ] docs/insight_re/（反编译笔记、实验脚本）保持本地不入库（已在 .gitignore）
