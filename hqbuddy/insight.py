@@ -293,6 +293,7 @@ def _check_trigger_signals(proj: dict, parsed: dict) -> list:
         sig = match[0]
         if sig["sample_type"] not in (3, 4):
             print(f"Error: signal is sample-only, cannot trigger: {cond['signal']}")
+            print(f"       补救：-del {cond['signal']} 后以 -type both 重新 -add，再 -run + 下载。")
             sys.exit(1)
         if cond["kind"] == "edge" and sig["msb"] != sig["lsb"]:
             print(f"Error: edge trigger requires a 1-bit signal: {cond['signal']}")
@@ -854,6 +855,9 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         newest_bit = max(os.path.getmtime(b) for b in bit_paths)
         if newest_bit > stamp_bit_mtime + 1:
             print("Warning: hqins_impl 里有比上次下载更新的 bin——先重新 -cable 下载再验收。")
+    elif bit_paths:
+        print("Note: 无 .bit_stamp 基线（本工程尚未用新版 hqbuddy 跑过 -run），")
+        print("      位流过期预警未启用。跑一次 -insight -run 即可建立基线。")
 
     sections = read_hqins(proj["hqins"])
     depth = int(_section_value(sections.get("MEMORY DEPTH INFO", [])) or 1024)
@@ -1410,6 +1414,12 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
             if len(narrowed) == 1:
                 matches = narrowed
     if not matches:
+        unfiltered = [c for c in catalog if c["name"] == name]
+        if unfiltered:
+            mods = ", ".join(sorted({c["module"] for c in unfiltered}))
+            print(f"Error: 信号 {name} 存在于模块 {mods}，但与 -module 指定的模块不匹配。")
+            print(f"       -module 应为模块名（可带 [N] 实例后缀），不能用实例路径片段（如 u_xxx）。")
+            sys.exit(1)
         print(f"Error: signal not found in design: {name}")
         sys.exit(1)
     if len(matches) > 1:
@@ -1427,7 +1437,7 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
     catalog_names = {c["name"] for c in catalog}
     if clk and clk not in catalog_names:
         print(f"Error: 采样时钟 {clk} 不在信号数据库中（assign 中转线/派生网不会被 elaborate 收录）。")
-        print("       请改用 its 驱动信号名（如端口名或寄存器名）作为 -clk。")
+        print("       请改用其驱动信号名（如端口名或寄存器名）作为 -clk。")
         sys.exit(1)
 
     sig_info, la_info = _la_info_path(proj)
