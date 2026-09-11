@@ -1053,6 +1053,22 @@ def run_flow(proj: dict) -> None:
     import time
     from datetime import datetime, timedelta
 
+    # insight 流程必须产出 .bin（下载验收用）。GUI 新建工程 BGEN_1/2 常为
+    # false（只出 .bit），这里自动打开并写回 .hqprj。
+    _hqprj_lines = open(proj["hqprj"], encoding="utf-8").read().splitlines()
+    _changed = False
+    _out_lines = []
+    for _ln in _hqprj_lines:
+        if _ln.startswith("BGEN_1=false"):
+            _out_lines.append("BGEN_1=true"); _changed = True
+        elif _ln.startswith("BGEN_2=false"):
+            _out_lines.append("BGEN_2=true"); _changed = True
+        else:
+            _out_lines.append(_ln)
+    if _changed:
+        with open(proj["hqprj"], "w", encoding="utf-8") as _f:
+            _f.write(chr(10).join(_out_lines) + chr(10))
+        print("[i] 已在 .hqprj 中开启 BGEN_1/BGEN_2（insight 流程需要产出 .bin）")
     tcl = f"run_hqprj2hqins_flow {{{_tcl_path(proj['hqprj'])}}}\nexit\n"
     with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
         f.write(tcl)
