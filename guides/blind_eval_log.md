@@ -289,3 +289,9 @@ skills/hqfpga/references/insight.md 与本日志。
 | R16 | 综合回归 30+ 布防 | ✅ 零回归 |
 | R17 | -init 幂等+16 信号压力 | ✅ A PASS/B 基础 PASS |
 | R18-20 | 终极三阶段 | ✅ 全 PASS |
+
+## Round 18 补充 — P0 `-build` glob 修复确认
+- R18 agent 发现 `-build` 在 `flow.py` 中 `glob` 未导入导致 NameError 崩溃
+- 已修复（`import glob` 加入文件头）；`-build` 不再崩溃，产物校验正常拦截旧 bin
+- agent_r18 工程的 `-build` 失败是项目自身约束/器件问题（非工具 bug），产物校验
+  正确报告了"无新鲜 bin"

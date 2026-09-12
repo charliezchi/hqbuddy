@@ -1,5 +1,6 @@
 """Flow execution: generate temp TCL and launch hqfpga -cmd."""
 
+import glob
 import os
 import re
 import subprocess
