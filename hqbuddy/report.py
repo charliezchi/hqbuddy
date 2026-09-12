@@ -161,8 +161,57 @@ def _bit_files(work: str) -> list:
     return sorted(set(out))
 
 
+def _extract_paths(work: str, top: Optional[str], n: int) -> list:
+    """Extract top-N violating paths from slack report.
+    Each path: dict(slack_ps, type, from, to, src)."""
+    candidates = []
+    if top:
+        candidates.append(f"{top}_slack.rpt")
+    candidates.append("final_ta.rpt")
+    path = _find_report(work, candidates)
+    if not path:
+        return []
+    txt = _read(path)
+    blocks = re.split(r"\*{4,}\s*\*\s*(?:Path|路径)\s+(\d+)\s*\*{4,}", txt)
+    results = []
+    for seg in blocks[1:]:
+        m_slack = (re.search(r"Slack\s*:\s*(-?[\d.]+)\s*(ps|ns)", seg)
+                   or re.search(r"时间余量\s*[:：]\s*(-?[\d.]+)\s*(ps|ns)", seg))
+        if not m_slack:
+            continue
+        val = float(m_slack.group(1)) * (1000 if m_slack.group(2) == "ns" else 1)
+        m_type = (re.search(r"Type\s*[:：]\s*(\S+)", seg)
+                  or re.search(r"类型\s*[:：]\s*(\S+)", seg))
+        ptype = ""
+        if m_type:
+            raw = m_type.group(1).rstrip(":()")
+            kind_map = {"建立": "Setup", "Setup": "Setup",
+                        "保持": "Hold", "Hold": "Hold",
+                        "释放": "Removal", "Removal": "Removal",
+                        "恢复": "Recovery", "Recovery": "Recovery"}
+            ptype = kind_map.get(raw, raw)
+        m_from = re.search(r"(?:From|起始)\s*[:：]\s*(.+?)(?:\s*\[|$)", seg, re.M)
+        m_to = re.search(r"(?:To|终点)\s*[:：]\s*(.+?)(?:\s*\[|$)", seg, re.M)
+        results.append({
+            "slack_ps": val, "type": ptype,
+            "from": m_from.group(1).strip() if m_from else "?",
+            "to": m_to.group(1).strip() if m_to else "?",
+        })
+    # Sort: setup first (worst slack ascending), then hold, then others
+    results.sort(key=lambda p: (p["type"] != "Setup", p["slack_ps"]))
+    return results[:n]
+
+
 def run_report(args: list) -> None:
-    """Entry point for 'hqbuddy -report [<dir-or-hqprj>]'."""
+    """Entry point for 'hqbuddy -report [<dir-or-hqprj>] [-paths N]'."""
+    n_paths = 0
+    if args and args[0] == "-paths":
+        args = args[1:]
+        if args:
+            try:
+                n_paths = int(args[0]); args = args[1:]
+            except ValueError:
+                pass
     if args and (args[0].endswith(".hqprj") or os.path.isdir(args[0])):
         target = args[0]
         work = (os.path.dirname(os.path.abspath(target))
@@ -230,5 +279,12 @@ def run_report(args: list) -> None:
         print(f"Utilization ({u['src']}):")
         for key, (used, avail, ratio) in u["rows"].items():
             print(f"  {key:16s}: {used:6d} / {avail:6d}  ({ratio}%)")
+    if n_paths > 0:
+        paths = _extract_paths(work, top, n_paths)
+        if paths:
+            print(f"\nTop {len(paths)} violating paths (worst first):")
+            for i, p in enumerate(paths, 1):
+                print(f"  #{i}: {p['type']:6s} slack={p['slack_ps']:.1f} ps  "
+                      f"{p['from'][:40]}  →  {p['to'][:40]}")
     if not (_parse_fmax(work) or w or u):
         print("No reports found. Run the implementation flow first (hqbuddy -build).")

@@ -1124,6 +1124,34 @@ def run_flow(proj: dict) -> None:
     stamp_dir = os.path.join(proj["hqins_dir"], "hq_import")
     with open(os.path.join(stamp_dir, ".bit_stamp"), "w") as sf:
         sf.write(str(max(os.path.getmtime(b) for b in fresh)))
+
+    # 常量探针预警：扫描实现目录的 log，报告被综合器常量折叠的探针信号
+    impl_dir = os.path.join(proj["hqins_dir"], "hq_import", "hqins_impl")
+    const_probes: set = set()
+    for log_name in os.listdir(impl_dir):
+        if not log_name.endswith(".log"):
+            continue
+        log_path = os.path.join(impl_dir, log_name)
+        for enc in ("utf-8", "gbk", "latin-1"):
+            try:
+                log_txt = open(log_path, "r", encoding=enc, errors="replace").read()
+                break
+            except Exception:
+                continue
+        else:
+            continue
+        for m in re.finditer(r"Convert\s+\S+\s+(\S+__INS_\S+)\s", log_txt):
+            const_probes.add(m.group(1))
+        for m in re.finditer(r"(\S+)\s+to constant ZERO", log_txt):
+            const_probes.add(m.group(1))
+    if const_probes:
+        print(f"\n⚠ 常量探针预警：{len(const_probes)} 个探针信号被综合器常量折叠，")
+        print("  这些信号的任何触发条件都不会命中（探针陷阱）。")
+        print("  建议：改用寄存器型信号做触发，或对目标信号加 (* keep *) 属性。")
+        for p in sorted(const_probes):
+            base = p.split("/")[-1].split("__INS")[0] if "__INS" in p else p
+            print(f"    - {base}")
+
     print("[OK] Instrumented flow done.")
 
 
@@ -1255,10 +1283,86 @@ def _dump_metadata(dump_path: str) -> dict:
             "sub_module_inst_list": sub_module_inst_list}
 
 
+def _preflight_check(proj: dict) -> None:
+    """Pre-flight diagnostics before -insight -init.  Reports ALL issues at
+    once instead of failing one at a time during elaborate/run."""
+    issues: list = []
+    warns: list = []
+
+    hqprj = proj["hqprj"]
+    if not os.path.isfile(hqprj):
+        print(f"Error: .hqprj not found: {hqprj}")
+        sys.exit(1)
+
+    fields: dict = {}
+    file_src: list = []
+    file_disabled: list = []
+    for line in open(hqprj, encoding="utf-8", errors="replace"):
+        line = line.strip()
+        if "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        if key == "FILE_SRC":
+            file_src.append(val)
+        elif key == "FILE_SRC_DISABLED":
+            file_disabled.append(val)
+        elif key not in fields:
+            fields[key] = val
+
+    if not fields.get("TOP_MODULE"):
+        issues.append("TOP_MODULE 为空——请用 `hqbuddy -set_top <模块名>` 设置顶层")
+    if fields.get("TOP_MODULE") and not re.search(r"^\d+$", fields.get("STEP_CURR", "0")):
+        pass  # normal
+    if fields.get("IS_PC_AUTO_CONS", "false") == "false" and fields.get("FILE_PC", "NONE") == "NONE":
+        warns.append("无管脚约束文件（FILE_PC=NONE）——bitgen 阶段会报 BIT-11")
+
+    for f in file_src:
+        resolved = f.replace("$WORK_DIR$", proj["work_dir"].replace(os.sep, "/"))
+        resolved = os.path.normpath(resolved)
+        if not os.path.isfile(resolved):
+            issues.append(f"FILE_SRC 文件不存在: {resolved}")
+    for f in file_disabled:
+        resolved = f.replace("$WORK_DIR$", proj["work_dir"].replace(os.sep, "/"))
+        if not os.path.isfile(resolved):
+            warns.append(f"FILE_SRC_DISABLED 文件不存在: {resolved}")
+
+    # _sim.v / testbench 文件不应出现在 FILE_SRC（会引发 SFE-E-58 重复声明）
+    for f in file_src + file_disabled:
+        base = os.path.basename(f)
+        if "_sim.v" in base or "tb_" in base:
+            warns.append(f"源文件疑似 testbench/仿真模型: {base}（可能引发重复声明错误）")
+
+    # .hqip 器件一致性
+    hqips = glob.glob(os.path.join(proj["work_dir"], "**", "*.hqip"), recursive=True)
+    die = fields.get("DIE", "")
+    for h in hqips:
+        try:
+            for line in open(h, encoding="utf-8", errors="replace"):
+                if line.startswith("device="):
+                    dev = line.split("=", 1)[1].strip()
+                    if dev and die and dev != die:
+                        warns.append(f"IP 器件不匹配: {os.path.basename(h)} device={dev} != DIE={die}")
+                    break
+        except OSError:
+            pass
+
+    if issues:
+        print("Pre-flight 检查发现问题（必须修复才能 -init）：")
+        for i, msg in enumerate(issues, 1):
+            print(f"  {i}. {msg}")
+        sys.exit(1)
+    if warns:
+        print("Pre-flight 警告（不阻塞，但可能影响后续流程）：")
+        for w in warns:
+            print(f"  ⚠ {w}")
+
+
 def run_init(proj: dict) -> None:
     """Handle 'hqbuddy -insight -init': create hqins_run skeleton and elaborate."""
     from . import launcher
     from .hqprj_parser import extract_filelist
+
+    _preflight_check(proj)
 
     version = launcher.resolve_hqfpga_version()
     if not version:
