@@ -429,3 +429,21 @@ skills/hqfpga/references/insight.md 与本日志。
   3. 底层合并工具回显误导（报错误的 output 名）→ soc_workflow.md 注明以
      `Merged image:` 为准
   4. soc_workflow.md 补 `-remap` 参数记载
+
+## Round 29 — 违例工程 -paths 提取盲测（定时轮 #7，r29viol 离线）
+- **任务**：4ns 收紧约束构造真实 setup 违例（WNS -252.5ps），验证 `-report -paths`
+  违例场景准确性（此前只测过全 MET）
+- **结果**：**抓到 S1 并修复**——
+  1. **S1 slack.rpt 重复段不去重**：报告把每条路径在 `[User Specified Path]` 段
+     重列一遍，top-N 被复制品挤占（N=5 时 4/5 错位）、"worst of 40"计数虚增一倍。
+     **已修**：抽公共解析 `_slack_records` 按完整四元组去重，-extract 与 WNS 计数
+     共用；复验 worst of 20、MET 对照组 205.7/241.3/241.3 与人工核对一致
+  2. **S2 端点截断**：`led[0]_c/BQ` 被截成 `led`（正则停在名字内第一个 `[`）——
+     **已修**：整行捕获后仅剥离 `[launch/capture clock…]` 注释，端点全名保留
+  3. **S3 标签名实不符**：混入 MET 路径时仍自称 violating → 已改三态标注
+     （all MET / 全 violating / N violating）；`-paths -1` 补非负校验
+- **可信度结论**：修复后 -paths 输出与 slack 报告逐字可溯（最差单条 -252.5 精确、
+  FMAX 235.2MHz 一致、违例不阻断 build 属预期）；排序语义=全局 slack 升序
+  （跨 setup/hold），与"报告分节顺序"不同——文档已注明
+- **顺带确认**：.hqprj 复制含绝对路径自引用（复制工程需改 FILE_SRC）——已知行为，
+  TODO 记一条 `-copy_prj` 候选

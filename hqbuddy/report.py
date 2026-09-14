@@ -93,22 +93,10 @@ def _parse_wns(work: str, top: Optional[str]) -> Optional[dict]:
     path = _find_report(work, candidates)
     if not path:
         return None
-    txt = _read(path)
-    kind_map = {"建立": "Setup", "Setup": "Setup", "保持": "Hold", "Hold": "Hold",
-                "Removal": "Removal", "Recovery": "Recovery"}
     worst: dict = {}
     count: dict = {}
-    blocks = re.split(r"\*{4,}\s*\*\s*(?:Path|路径)\s+(\d+)\s*\*{4,}", txt)
-    for seg in blocks[1:]:
-        m = (re.search(r"Slack\s*:\s*(-?[\d.]+)\s*(ps|ns)", seg)
-             or re.search(r"时间余量\s*[:：]\s*(-?[\d.]+)\s*(ps|ns)", seg))
-        if not m:
-            continue
-        val = float(m.group(1)) * (1000 if m.group(2) == "ns" else 1)
-        tm = (re.search(r"Type\s*[:：]\s*(\S+)", seg)
-              or re.search(r"类型\s*[:：]\s*(\S+)", seg))
-        raw_kind = (tm.group(1) if tm else "").rstrip(":").rstrip("()")
-        kind = kind_map.get(raw_kind, kind_map.get(raw_kind[:2], ""))
+    for rec in _slack_records(_read(path)):
+        val, kind = rec["slack_ps"], rec["type"]
         cur = worst.get(kind)
         if cur is None or val < cur:
             worst[kind] = val
@@ -161,6 +149,41 @@ def _bit_files(work: str) -> list:
     return sorted(set(out))
 
 
+_PATH_KIND_MAP = {"建立": "Setup", "Setup": "Setup", "保持": "Hold", "Hold": "Hold",
+                  "释放": "Removal", "Removal": "Removal",
+                  "恢复": "Recovery", "Recovery": "Recovery"}
+
+
+def _slack_records(txt: str) -> list:
+    """Parse path records from a slack report.  The tool echoes every path
+    again under the [User Specified Path] section (R29), so identical records
+    are deduplicated; from/to keep the full endpoint (leaf pin + bus index),
+    only stripping the trailing '[launch/capture clock ...]' annotation."""
+    records: list = []
+    seen: set = set()
+    blocks = re.split(r"\*{4,}\s*\*\s*(?:Path|路径)\s+(\d+)\s*\*{4,}", txt)
+    for seg in blocks[1:]:
+        m_slack = (re.search(r"Slack\s*:\s*(-?[\d.]+)\s*(ps|ns)", seg)
+                   or re.search(r"时间余量\s*[:：]\s*(-?[\d.]+)\s*(ps|ns)", seg))
+        if not m_slack:
+            continue
+        val = float(m_slack.group(1)) * (1000 if m_slack.group(2) == "ns" else 1)
+        m_type = (re.search(r"Type\s*[:：]\s*(\S+)", seg)
+                  or re.search(r"类型\s*[:：]\s*(\S+)", seg))
+        raw = (m_type.group(1) if m_type else "").rstrip(":()")
+        ptype = _PATH_KIND_MAP.get(raw, raw)
+        m_from = re.search(r"(?:From|起始)\s*[:：]\s*(.+)", seg, re.M)
+        m_to = re.search(r"(?:To|终点)\s*[:：]\s*(.+)", seg, re.M)
+        frm = re.split(r"\s+\[", m_from.group(1))[0].strip() if m_from else "?"
+        to = re.split(r"\s+\[", m_to.group(1))[0].strip() if m_to else "?"
+        key = (round(val, 3), ptype, frm, to)
+        if key in seen:
+            continue
+        seen.add(key)
+        records.append({"slack_ps": val, "type": ptype, "from": frm, "to": to})
+    return records
+
+
 def _extract_paths(work: str, top: Optional[str], n: int) -> list:
     """Extract top-N violating paths from slack report.
     Each path: dict(slack_ps, type, from, to, src)."""
@@ -171,32 +194,7 @@ def _extract_paths(work: str, top: Optional[str], n: int) -> list:
     path = _find_report(work, candidates)
     if not path:
         return []
-    txt = _read(path)
-    blocks = re.split(r"\*{4,}\s*\*\s*(?:Path|路径)\s+(\d+)\s*\*{4,}", txt)
-    results = []
-    for seg in blocks[1:]:
-        m_slack = (re.search(r"Slack\s*:\s*(-?[\d.]+)\s*(ps|ns)", seg)
-                   or re.search(r"时间余量\s*[:：]\s*(-?[\d.]+)\s*(ps|ns)", seg))
-        if not m_slack:
-            continue
-        val = float(m_slack.group(1)) * (1000 if m_slack.group(2) == "ns" else 1)
-        m_type = (re.search(r"Type\s*[:：]\s*(\S+)", seg)
-                  or re.search(r"类型\s*[:：]\s*(\S+)", seg))
-        ptype = ""
-        if m_type:
-            raw = m_type.group(1).rstrip(":()")
-            kind_map = {"建立": "Setup", "Setup": "Setup",
-                        "保持": "Hold", "Hold": "Hold",
-                        "释放": "Removal", "Removal": "Removal",
-                        "恢复": "Recovery", "Recovery": "Recovery"}
-            ptype = kind_map.get(raw, raw)
-        m_from = re.search(r"(?:From|起始)\s*[:：]\s*(.+?)(?:\s*\[|$)", seg, re.M)
-        m_to = re.search(r"(?:To|终点)\s*[:：]\s*(.+?)(?:\s*\[|$)", seg, re.M)
-        results.append({
-            "slack_ps": val, "type": ptype,
-            "from": m_from.group(1).strip() if m_from else "?",
-            "to": m_to.group(1).strip() if m_to else "?",
-        })
+    results = _slack_records(_read(path))
     # Worst slack first globally (hold +205 ps is more critical than setup +34 ns)
     results.sort(key=lambda p: p["slack_ps"])
     return results[:n]
@@ -217,6 +215,9 @@ def run_report(args: list) -> None:
                 n_paths = int(args[i + 1])
             except ValueError:
                 print(f"Error: -paths expects an integer, got: {args[i + 1]}")
+                sys.exit(1)
+            if n_paths < 0:
+                print(f"Error: -paths expects a non-negative integer, got: {n_paths}")
                 sys.exit(1)
             i += 2
         elif a.startswith("-"):
@@ -300,12 +301,16 @@ def run_report(args: list) -> None:
     if n_paths > 0:
         paths = _extract_paths(work, top, n_paths)
         if paths:
-            label = ("Top {} violating paths (worst first):".format(len(paths))
-                     if paths[0]["slack_ps"] < 0
-                     else f"Top {len(paths)} tightest paths (all paths MET):")
+            n_viol = sum(1 for p in paths if p["slack_ps"] < 0)
+            if n_viol == 0:
+                label = f"Top {len(paths)} tightest paths (all paths MET):"
+            elif n_viol == len(paths):
+                label = f"Top {len(paths)} violating paths (worst first):"
+            else:
+                label = f"Top {len(paths)} paths worst-first ({n_viol} violating):"
             print(f"\n{label}")
             for i, p in enumerate(paths, 1):
                 print(f"  #{i}: {p['type']:6s} slack={p['slack_ps']:.1f} ps  "
-                      f"{p['from'][:40]}  →  {p['to'][:40]}")
+                      f"{p['from'][:44]}  →  {p['to'][:44]}")
     if not (_parse_fmax(work) or w or u):
         print("No reports found. Run the implementation flow first (hqbuddy -build).")

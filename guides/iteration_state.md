@@ -26,13 +26,25 @@
 | R26 | 修复复验+基线重建+-o 崩溃修复 | T1 | ✅ R25 两修复板上有效；新 S1 -o 已修复验（3.13.3） |
 | R27 | 错误路径矩阵复验（R11 六项） | T1 | ✅ 9/9 全 PASS 无回归 |
 | R28 | SoC 离线链路（-list_soc/-new_soc/-build 至 route） | T3 | ✅ 6/6 PASS；3 条 S3 修复 |
-| R29 | 违例工程 -report -paths 提取（需真实违例） | T3 | 待做 |
+| R29 | 违例工程 -report -paths 提取（需真实违例） | T3 | ✅ 抓到 S1 去重/S2 截断已修，ground truth 核对通过 |
 | R30 | R22-C 实现：-insight -depth/-windows/-level/-reg | T4/T1 | 待做（设计已入 GUI 地图 §8） |
 
 小项池：`cnt[7]`/`cnt[7:7]` 片选行为不一致（S3）；BOTH 折叠缺文案（S3）；
 报错文案中英统一（S2）；-selftest 进 -h（S3）。
 
 ## 执行记录（时间序）
+
+- 09-15 06:41 定时轮启动 R29（违例工程 -paths 提取，离线）。**判据先于执行**：
+  ①复制 r21a → r29viol，SDC 时钟周期改严 10 倍（40ns→4ns）→ `-build` 成功
+  （违例不是流程失败——bitgen 照出，报告标 VIOLATED）；
+  ②`-report .` 显示 WNS VIOLATED（负 slack）；
+  ③`-report . -paths 5` 提取 5 条，slack 升序排列且与 slack 报告人工核对的最差
+  5 条逐一相等（负值含符号）；from/to 路径名与报告对应；
+  ④对照：全 MET 工程（原 r21a）显示 "tightest paths (all paths MET)"；
+  ⑤任何解析遗漏/排序错如实落账。
+- 09-15 07:05 R29 收账：抓到 S1 重复段不去重（已修：_slack_records 四元组去重，
+  -paths 与 WNS 计数共用）+ S2 端点截断（已修：整行捕获剥注释）+ S3 标签三态。
+  对照 ground truth 逐字核对通过；exe 已重建。排序语义=全局 slack 升序（文档注明）。
 
 - 09-15 05:41 定时轮启动 R28（SoC 离线链路，不下板）。**判据先于执行**：
   ①`-list_soc` 列出 cm3/star 预设（19-20 个/族）；
