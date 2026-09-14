@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.13.1
+3.13.2
 
 ## 功能特点
 
@@ -172,7 +172,12 @@ hqbuddy -insight -capture                  # 布防并等待触发，抓取波�
 hqbuddy -insight -capture -timeout 120     # 自定义超时
 hqbuddy -insight -capture -force           # 强制触发，立即抓取
 hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin；自动关闭其拉起的 hqdnload 窗口）
+hqbuddy -insight -selftest                 # 回归自测：布防 sig EQ 128 → 抓取 → 校验样本连续且 +1 递增
+hqbuddy -insight -selftest -signal cnt -value 200    # 指定信号与比较值
 ```
+
+`-selftest` 面向确定性计数器类设计（采样的信号每拍 +1），一条命令验证
+"下载 → 布防 → 触发 → 抓取 → VCD 样本完整性"整条链路；HqFPGA 升级后先跑它。
 
 ### VIO 虚拟 IO（运行时读/驱动设计信号，无需重编译）
 
@@ -182,6 +187,7 @@ hqbuddy -vio -reg -in cnt:8 -out led:2     # 登记探针（hqvla_vio/probes.jso
 hqbuddy -vio -read [-loop N]               # 运行时读输入探针
 hqbuddy -vio -write led=0b10               # 运行时驱动输出探针
 hqbuddy -report [<dir>]                    # 主流程报告摘要：Fmax/WNS/资源利用率/bit 文件
+hqbuddy -report . -paths 5                 # 另提取最差 5 条违例时序路径（源自 slack 报告）
 ```
 
 添加/移除信号后需执行 `-insight -run` 重新生成插桩 bitstream，并用 cable.exe 下载后方可抓取（`-run` 现已自动关闭流程末尾拉起的 hqdnload 窗口，不再阻塞）。注意：插桩探针只能 tap 综合后仍存在的 net——若触发信号被综合吸收，任何触发条件都不会命中（详见 `skills/hqfpga/references/insight.md` 的"插桩探针陷阱"）。
@@ -468,6 +474,8 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-insight -init`                    | 初始化 HqInsight 工程（无需 GUI）                                      |
 | `-insight -ls [关键字]`             | 列出设计信号                                                           |
 | `-insight -add/-del <信号>`         | 添加/移除采样/触发信号                                                 |
+| `-insight -selftest [-signal s] [-value N]` | 回归自测：布防 → 抓取 → 校验样本连续且逐拍 +1（升级后必跑）      |
+| `-report [<dir>] [-paths N]`        | 报告摘要（Fmax/WNS/利用率/bit）；`-paths N` 另提取最差 N 条违例路径    |
 | `-cfg`                              | 用系统编辑器打开 config.json（scan_path + selected_build）               |
 
 ## 开发与打包

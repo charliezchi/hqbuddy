@@ -14,7 +14,7 @@ import time
 from . import __version__
 from . import config, launcher, build_selector, soc
 from .hqprj_parser import extract_filelist
-from .flow import run_flow, run_flow_bin_only, run_flow_looptdo
+from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstream
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .device import run_device
@@ -705,6 +705,7 @@ def cmd_build_fpga(args):
     print("")
     print(f"Running implementation flow: {os.path.basename(flow_tcl)}")
     print("")
+    started = time.time()
     proc = subprocess.Popen([version['hqfpga_path'], '-cmd', flow_tcl], cwd=work_dir)
     try:
         proc.wait()
@@ -720,6 +721,7 @@ def cmd_build_fpga(args):
         print("")
         print(f"Warning: hqfpga exited with code {proc.returncode}")
         sys.exit(proc.returncode)
+    _check_bitstream(work_dir, started)
 
 
 def cmd_set_top(args):

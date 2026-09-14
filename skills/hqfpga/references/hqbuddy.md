@@ -54,7 +54,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - **insight 流程约束路径坑**：`.hqprj` 的 FILE_TC/FILE_PC 若被 insight 流程
   （run_hqprj2hqins_flow）使用，必须是 `$WORK_DIR$` 前缀（其 cwd 是 hqins_impl/）；
   相对路径会导致流程"成功"却无 bin
-- `hqbuddy -report [<dir>|<file>]`- `hqbuddy -report [<dir>|<file>]` — **主流程报告摘要（agent 必用）**：实现流程后运行，一眼拿到 FMAX（各时钟）、WNS（最差 slack，标注 MET/VIOLATED）、资源利用率表（IO/SLICE/LUT/FF/BRAM/DSP）、bin 文件与时间戳、各报告文件存在性。省去 grep 原始 .rpt。报告源：`fmax.rpt`/`<top>_slack.rpt`/`res_place.rpt`（res_pack/res_rtl 兜底）
+- `hqbuddy -report [<dir>|<file>] [-paths N]` — **主流程报告摘要（agent 必用）**：实现流程后运行，一眼拿到 FMAX（各时钟）、WNS（最差 slack，标注 MET/VIOLATED）、资源利用率表（IO/SLICE/LUT/FF/BRAM/DSP）、bin 文件与时间戳、各报告文件存在性。省去 grep 原始 .rpt。报告源：`fmax.rpt`/`<top>_slack.rpt`/`res_place.rpt`（insight 流程取 `ratio.rpt`；res_pack/res_rtl 兜底）；`-paths N` 额外从 slack 报告提取最差 N 条违例时序路径（起始寄存器→结束寄存器+slack）
 - 省略 `.hqprj` 参数时，自动检测当前目录下的工程文件
 - **bitgen 需要引脚约束**：工程无 `.upc`（FILE_PC）时，bitgen 必停于 `ERROR(BIT-11): pads have no location constraint`——跑到 route 成功、bitgen 报这个错是预期行为，补 `.upc` 后即可
 

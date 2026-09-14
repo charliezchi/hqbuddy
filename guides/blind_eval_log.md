@@ -295,3 +295,36 @@ skills/hqfpga/references/insight.md 与本日志。
 - 已修复（`import glob` 加入文件头）；`-build` 不再崩溃，产物校验正常拦截旧 bin
 - agent_r18 工程的 `-build` 失败是项目自身约束/器件问题（非工具 bug），产物校验
   正确报告了"无新鲜 bin"
+
+## Round 21 — FT091226 新版本升级回归（自回归迭代 R21+ 首轮，SA50K 板）
+> 起用 `guides/autoregressive_cycle.md` 框架：判据先于执行、S0-S3 分级、修复必复验。
+- **任务**：新 HqFPGA FT091226 上从零全链路（counter8+LFSR 双模块，器件
+  SA5Z-50-D0-7F484C，时钟 J15）+ selftest + 组合触发 + report 对照 + 错误路径抽测
+- **结果**：**核心链路完好**——触发值零偏斜（cnt=200/77 严格命中）、LFSR 推导
+  状态圈 1024 拍全吻合、clock_cycle 连续、报告数字与原始 .rpt 零误差、错误路径
+  拒绝正确且状态零漂移；selftest 组合触发秒级命中
+- **发现的问题（4 项，全部已修+复验）**：
+  1. **S1 `-selftest` 假阴性**：`+1-per-sample` 检查不容忍计数器自然回绕
+     （255→0 差 -255；8 位计数器 1024 样本窗口必含回绕 → 永远 FAIL），
+     另有 dump 工具终止时尾部重 dump 伪影（255→255）→ 修：按信号位宽取模 +
+     丢弃尾部重复样本；板上复验 PASS（width=8, +1-per-sample=True）
+  2. **S1 `-report -paths` 静默失效**：只在 `args[0]=="-paths"` 时解析
+     （`-report . -paths 3` 被吞），未知旗标也静默 exit 0 → 修：任意位置解析 +
+     未知旗标报错；且排序改为全局 slack 升序（原 setup 优先会把 +34ns 排在
+     hold +205ps 前面），全 MET 时标注 "tightest paths"；复验提取值与原始
+     slack 报告逐字一致（205.7/205.7/241.3）
+  3. **S1 `-build` 只生成不执行**：产物校验 `_check_bitstream` 误放在
+     `run_flow`（生成阶段）末尾，执行前就报 "no fresh bin" 退出 → 修：校验移到
+     `cmd_build_fpga` 真正执行完 run_hqprj.tcl 之后；顺带修复普通 `-flow`
+     生成模式的总是 exit 1；端到端复验：生成→执行（bitgen 5s）→校验→exit 0
+  4. **S2 `-init` 预检相对路径误报**：`-add rtl/x.v` 写 `$WORK_DIR$rtl/x.v`
+     （无分隔符），预检裸 replace 拼成 `r21artl` 假路径拒绝 init → 修：展开时
+     补分隔符（与 hqprj_parser._resolve 语义对齐）；两种形态单测通过
+  - **S2 附带修复**：`-selftest` 覆写触发条件后不恢复 → 快照/恢复三文件
+    （trigger_expr/cond/ddf），板上复验自检后条件逐字还原
+- **版本差异（vs FT090926，已同步文档）**：
+  1. `-insight -run` 拉起的 hqdnload 窗口现被自动关闭（不再阻塞）——insight.md 已更新
+  2. `--detect_model` 可能缺 UID/Package 行（model 仍在）——download.md 已注明
+  3. 利用率来源出现 ratio.rpt（insight 流程）——hqbuddy.md 已补
+- **遗留（未修，进 TODO）**：报错文案中英混排不统一（S2）；`-selftest` 未列入 -h（S3）
+- **结论**：FT091226 升级无链路损伤；4 项辅助层缺陷全部修复并复验，版本 bump 3.13.2

@@ -232,7 +232,6 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
     # Generate temporary TCL
     temp_tcl = _generate_temp_tcl(hqprj_path, output_tcl)
 
-    started = time.time()
     try:
         print(f"Generated temp TCL: {temp_tcl}")
         _run_hqfpga(hqfpga_path, temp_tcl, work_dir)
@@ -241,8 +240,6 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
             os.remove(temp_tcl)
             print(f"")
             print(f"Cleaned up temp TCL: {temp_tcl}")
-
-    _check_bitstream(work_dir, started)
 
 
 def run_flow_looptdo(hqprj_path: str, output_tcl: str | None = None) -> None:

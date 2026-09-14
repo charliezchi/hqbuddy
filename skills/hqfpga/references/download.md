@@ -26,6 +26,7 @@ Package:SA5Z-30-D1-8U213
 ```
 
 关键信息：`Device Model`（下载时的 `--model` 参数值）、`Package`（器件封装）、`Device ID`。**下载前先跑这个确认板子连接正常、拿到 model**。
+> FT091226 实测：新板上 `--detect_model` 可能只报 `Device ID` + `Device Model`（无 UID/Package 行，带 `Warning! no package info`）——Device Model 仍在，足够做 `--model` 参数。
 
 ## 下载比特流（突发模式）
 

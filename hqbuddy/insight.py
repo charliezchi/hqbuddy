@@ -1316,13 +1316,14 @@ def _preflight_check(proj: dict) -> None:
     if fields.get("IS_PC_AUTO_CONS", "false") == "false" and fields.get("FILE_PC", "NONE") == "NONE":
         warns.append("无管脚约束文件（FILE_PC=NONE）——bitgen 阶段会报 BIT-11")
 
+    # $WORK_DIR$ entries may omit the separator ($WORK_DIR$rtl/x.v); expand with one
+    work_dir_url = proj["work_dir"].replace(os.sep, "/").rstrip("/") + "/"
     for f in file_src:
-        resolved = f.replace("$WORK_DIR$", proj["work_dir"].replace(os.sep, "/"))
-        resolved = os.path.normpath(resolved)
+        resolved = os.path.normpath(f.replace("$WORK_DIR$", work_dir_url))
         if not os.path.isfile(resolved):
             issues.append(f"FILE_SRC 文件不存在: {resolved}")
     for f in file_disabled:
-        resolved = f.replace("$WORK_DIR$", proj["work_dir"].replace(os.sep, "/"))
+        resolved = os.path.normpath(f.replace("$WORK_DIR$", work_dir_url))
         if not os.path.isfile(resolved):
             warns.append(f"FILE_SRC_DISABLED 文件不存在: {resolved}")
 
@@ -1781,17 +1782,34 @@ def run_selftest(proj: dict, signal: str, eq_value: int) -> None:
     (b) value increments by exactly 1 per sample post-trigger.  Any HqFPGA
     upgrade that breaks the insight chain will fail here."""
     print(f"Selftest: {signal} == {eq_value} on {proj['hqins']}")
-    write_trigger_files(proj, parse_trig_expr([f"{signal}", "EQ", str(eq_value)]))
-    run_capture(proj, timeout=30, force=False)
+    trig_files = [
+        os.path.join(proj["hqins_dir"], "hq_import", "trigger_expr.json"),
+        os.path.join(proj["hqins_dir"], "hq_import", "trigger_cond.json"),
+        proj["ddf"],
+    ]
+    snapshot = {}
+    for p in trig_files:
+        if os.path.isfile(p):
+            with open(p, "rb") as f:
+                snapshot[p] = f.read()
+    try:
+        write_trigger_files(proj, parse_trig_expr([f"{signal}", "EQ", str(eq_value)]))
+        run_capture(proj, timeout=30, force=False)
+    finally:
+        for p, data in snapshot.items():
+            with open(p, "wb") as f:
+                f.write(data)
 
     vcd = os.path.join(proj["hqins_dir"], "hq_import",
                        f"{proj['top']}_insight_0_ww.vcd")
     txt = open(vcd, encoding="utf-8", errors="replace").read()
     head, body = txt.split("$enddefinitions", 1)
     sig_id = None
+    width = 0
     for m in re.finditer(r"\$var\s+\w+\s+(\d+)\s+(\S+)\s+(\S+)", head):
         if m.group(3).split("/")[-1].startswith(f"{signal}["):
             sig_id = m.group(2)
+            width = int(m.group(1))
     if sig_id is None:
         print(f"FAIL: signal {signal} not found in VCD")
         sys.exit(1)
@@ -1806,12 +1824,24 @@ def run_selftest(proj: dict, signal: str, eq_value: int) -> None:
     if len(samples) < 2:
         print("FAIL: no sample data")
         sys.exit(1)
+    dropped = 0
+    while len(samples) >= 2 and samples[-1][1] == samples[-2][1]:
+        samples.pop()
+        dropped += 1
+    if dropped:
+        print(f"(dropped {dropped} trailing re-dump artifact sample(s))")
     contig = all(samples[i + 1][0] - samples[i][0] == 1 for i in range(len(samples) - 1))
-    inc = all(int(samples[i + 1][1], 2) - int(samples[i][1], 2) == 1
-              and samples[i + 1][0] - samples[i][0] == 1 for i in range(len(samples) - 1))
+    # +1 per sample, modulo the signal width (a free counter wraps 255->0)
+    mod = 1 << width if width else None
+    if mod:
+        inc = all((int(samples[i + 1][1], 2) - int(samples[i][1], 2)) % mod == 1
+                  and samples[i + 1][0] - samples[i][0] == 1
+                  for i in range(len(samples) - 1))
+    else:
+        inc = False
     hits = [t for t, v in samples if int(v, 2) == eq_value]
-    print(f"samples={len(samples)} contiguous={contig} +1-per-sample={inc} "
-          f"eq_value@{hits[0] if hits else 'never'}")
+    print(f"samples={len(samples)} width={width or '?'} contiguous={contig} "
+          f"+1-per-sample={inc} eq_value@{hits[0] if hits else 'never'}")
     if contig and inc:
         print("[PASS] insight chain OK (arm/trigger/capture/dump all correct)")
     else:

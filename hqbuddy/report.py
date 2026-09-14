@@ -197,31 +197,49 @@ def _extract_paths(work: str, top: Optional[str], n: int) -> list:
             "from": m_from.group(1).strip() if m_from else "?",
             "to": m_to.group(1).strip() if m_to else "?",
         })
-    # Sort: setup first (worst slack ascending), then hold, then others
-    results.sort(key=lambda p: (p["type"] != "Setup", p["slack_ps"]))
+    # Worst slack first globally (hold +205 ps is more critical than setup +34 ns)
+    results.sort(key=lambda p: p["slack_ps"])
     return results[:n]
 
 
 def run_report(args: list) -> None:
     """Entry point for 'hqbuddy -report [<dir-or-hqprj>] [-paths N]'."""
     n_paths = 0
-    if args and args[0] == "-paths":
-        args = args[1:]
-        if args:
+    target = None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-paths":
+            if i + 1 >= len(args):
+                print("Error: -paths requires a number: -report [<dir>|<.hqprj>] -paths N")
+                sys.exit(1)
             try:
-                n_paths = int(args[0]); args = args[1:]
+                n_paths = int(args[i + 1])
             except ValueError:
-                pass
-    if args and (args[0].endswith(".hqprj") or os.path.isdir(args[0])):
-        target = args[0]
-        work = (os.path.dirname(os.path.abspath(target))
-                if target.endswith(".hqprj") else os.path.abspath(target))
-    else:
+                print(f"Error: -paths expects an integer, got: {args[i + 1]}")
+                sys.exit(1)
+            i += 2
+        elif a.startswith("-"):
+            print(f"Error: unknown -report option: {a} (supported: -paths N)")
+            sys.exit(1)
+        elif target is None:
+            target = a
+            i += 1
+        else:
+            print(f"Error: unexpected extra argument: {a}")
+            sys.exit(1)
+    if target is None:
         matches = glob.glob("*.hqprj")
         if not matches:
             print("Error: no .hqprj in current directory; pass a project or directory.")
             sys.exit(1)
         work = os.getcwd()
+    elif target.endswith(".hqprj") or os.path.isdir(target):
+        work = (os.path.dirname(os.path.abspath(target))
+                if target.endswith(".hqprj") else os.path.abspath(target))
+    else:
+        print(f"Error: not a project file or directory: {target}")
+        sys.exit(1)
 
     print(f"Project dir : {work}")
     top = _top_name(work)
@@ -282,7 +300,10 @@ def run_report(args: list) -> None:
     if n_paths > 0:
         paths = _extract_paths(work, top, n_paths)
         if paths:
-            print(f"\nTop {len(paths)} violating paths (worst first):")
+            label = ("Top {} violating paths (worst first):".format(len(paths))
+                     if paths[0]["slack_ps"] < 0
+                     else f"Top {len(paths)} tightest paths (all paths MET):")
+            print(f"\n{label}")
             for i, p in enumerate(paths, 1):
                 print(f"  #{i}: {p['type']:6s} slack={p['slack_ps']:.1f} ps  "
                       f"{p['from'][:40]}  →  {p['to'][:40]}")

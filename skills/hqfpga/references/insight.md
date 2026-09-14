@@ -156,9 +156,22 @@ hqbuddy -insight -capture -o hqins_run/hq_import/run1   :: 自定义输出前缀
 - GUI 调试运行前要在已标记信号列表里选中触发信号行，否则报"请先选择一个LA触发信号"。
 - GUI 运行会清理同目录旧调试产物；CLI 侧用 `-o` 命名可避免被清/混淆。
 
+## 回归自测（-selftest）
+
+HqFPGA 升级或环境变化后，一条命令验证整条 insight 链路没坏：
+
+```bat
+hqbuddy -insight -selftest                        # 默认信号 sig、比较值 128
+hqbuddy -insight -selftest -signal cnt -value 200 # 指定采样信号与比较值
+```
+
+前提：工程是确定性计数器类设计（被采样的信号每拍恰好 +1），且已 `-run`+下载
+插桩 bit。自测自动完成：布防 `sig EQ <value>` → 抓取 → 断言 VCD 样本连续
+（clock_cycle 零缺口）且触发后逐样本 +1。任何一环坏了都会 FAIL 并指明环节。
+
 ## 注意事项
 
-- `-insight -run` 末尾会自动拉起 hqdnload 下载器 GUI 窗口（flow 内置步骤，无开关），**且 hqbuddy 进程会等该窗口关闭才退出**——批处理/自动化场景要在另一端把窗口关掉，或直接等 bitgen 完成后终止。下载用 cable 命令完成，不经过 hqdnload。
+- `-insight -run` 末尾流程会拉起 hqdnload 下载器 GUI 窗口，hqbuddy 会**自动关闭它**（3.13 起，日志 `[i] Auto-closed hqdnload window...`），批处理/自动化无需人工干预。下载本身用 cable 命令完成，不经过 hqdnload。
 - 所有 `-insight` 子命令都可加 `.hqprj` 路径指定工程，缺省用当前目录检测到的第一个。
 - `-insight`（无参数）打印工程状态：已选信号（s/t/st 类型、宽度、时钟）、当前触发条件、depth/offset——动手前先跑这个。
 - 若 capture 报 "no trigger condition set"，说明信号增删后 ddf 被重建、条件已重置，重新 `-trig` 即可。
