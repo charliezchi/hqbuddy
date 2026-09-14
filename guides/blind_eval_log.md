@@ -343,3 +343,20 @@ skills/hqfpga/references/insight.md 与本日志。
 - **认知修正（vio.md 已更新）**：MHz 窄计数器+秒级软件采样为欠采样，读数差不具
   等差性——对位验证应联合"活性分化行为 + -write 回读"判定；评测向量须含非回文值
 - **顺带确认**：`-build` 修复后在全新工程上工作正常（13s 出 bin，无 hqdnload 卡窗）
+
+## Round 24 — VLA/MLA 探索（定时轮 #2，反编译源码 + GUI 实测，纯探索零改动）
+- **任务**：弄清 VLA（VIO+LA 同 bit）与 MLA（多 LA）的编译/配置/运行时全貌，
+  产出 CLI 可行性设计（判据 a-d 全达成）
+- **结果**：✅ 全部逆向清楚并落档——
+  1. **vla.cfg 全格式**（hq_ins --vla_cfg 独立工程导入）：[DEVICE INFO] +
+     [TRIGGER PARAM]（dep/add_reg/pos/ram_full/win_num/trigger_level，多 LA 用
+     `:` 分隔；vio_flag 开关 VIO UI）+ [SIGNAL INFO]（`名=类型=LA序号=模块=位宽=
+     是否片选[=MSB=LSB]`）；导入时 .cfg 触发条件自动转 JSON
+  2. **MLA 运行时**：按 LA 循环布防（svf 调用全带 la_num/la_idx），状态轮询
+     TDO=4×窗口数×LA 数；`insight.sealion.mla.*` 命令族
+  3. **GUI 多 LA 入口实测**：采集模式已标记列表「+」按钮直接建空 LA_1（无对话框），
+     「−」删除；关闭时提示保存（取消=放弃内存态）——GUI 全程未保存，工程逐字未变
+- **交付**：GUI 地图新增 §8（VLA/MLA 全节）+ CLI 三级实现设计
+  （①深度/窗口/级数/-reg → ②MLA（前置：多 LA bit 的插桩流程验证）→ ③VLA 编译
+  编排走 vla.cfg + 运行侧 is_vla_mode）；insight.md 逆向节同步
+- **无缺陷发现**（本轮纯探索/设计，无代码改动）

@@ -111,7 +111,36 @@
   删除 [EXPRESSION OPERATION] 段——这些差异不影响功能（各写各的合法状态），
   但 diff 时会看到。
 
-## 8. 硬件限制（GUI 与 CLI 同）
+## 8. VLA / MLA（R24 逆向 + GUI 实测，FT091226）
+
+**多 LA 添加入口**：采集模式下已标记信号列表的「+」按钮（LA_0 页旁）——直接创建空
+LA_1 页（+src_1 源码视图），无对话框；「−」删除当前 LA；第二个采样时钟在给 LA_1
+加信号时指定。关闭窗口会提示保存（取消=放弃内存态）。
+
+**`--vla_cfg <vla.cfg>` 独立启动**（hq_ins 契约之一，is_indep_mode）：从 vla.cfg 导入
+整个 VLA 工程——`[DEVICE INFO]`（device_die/device_name）+ `[TRIGGER PARAM]`
+（dep/add_reg/pos/ram_full/win_num/trigger_level，多 LA 用 `:` 分隔；`vio_flag=true`
+启用 VIO UI）+ `[SIGNAL INFO]`（每行 `信号名=类型=LA序号=模块=位宽=是否片选[=MSB=LSB]`，
+类型 ∈ Sample Only/Trigger Only/Sample and Trigger/Sample Clock）。导入时把
+trigger_expr.cfg/trigger_cond.cfg 转成 JSON 并删除 .cfg；la_num>1 时自动为每个 LA
+建信号页与波形视图。
+
+**MLA 运行时（svf_debugger_run.start_debugger_mla）**：按 LA 逐个布防
+（`add_la_reset/add_la_window_num/add_la_offset/add_la_set_trig_cond` 都带
+`la_num, la_idx`），状态轮询每 LA 每窗口 `add_la_status_window+add_la_status`
+（TDO 长度 = 4×窗口数×LA 数）；`la_opt_list` 掩码决定哪些 LA 参与连续触发不支持
+（RE 旧结论）。TCL 族：`insight.sealion.mla.condition_te/offset/reset/status`+`mlas.status`。
+
+**CLI 可行性设计（未实现，按序）**：
+1. `-depth/-windows/-level/-reg`（R22 设计，.hqins 四段键已明）——改后必须 -run+重下载；
+2. MLA：`-add -la 1 ...`（LA_1 信号集）；触发/布防/capture 按 la_num 循环，
+   VCD 按 LA 输出；前置：插桩流程需产出多 LA bit（hqprj2hqins_flow 的 la_list
+   双条目是否足够待验证——这是 MLA 的第一个板上实验）；
+3. VLA（VIO+LA 同 bit）：编译侧走 vla.cfg（hqbuddy 生成 cfg + 调 flow）；
+   运行侧 vio_read/vio_write 加 `-is_vla_mode True` + LA 布防传 `vio_out_value`——
+   hqbuddy 的 vio.py 已复用 svf_generator，改造量集中在编译流程编排。
+
+## 9. 硬件限制（GUI 与 CLI 同）
 
 - **一个 LA 只支持一个采样时钟**；跨时钟域信号采样无意义
 - 一个 JTAG 调试槽：VIO+LA 不能同 bit（PHY-PLA-665 JTAG capacity overflow）

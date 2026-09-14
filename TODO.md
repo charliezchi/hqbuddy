@@ -18,9 +18,11 @@
       （写四段 + 改后强制 -run 提示 + capture 按 depth/窗口适配，多窗口出 N 份 VCD）
 - [x] R23：VIO 读写回归（2026-09-15）——链路完好，判据 a-e 全 PASS；
       S2 修复 `-reg` 逗号静默错登记（拆分+名校验）；vio.md 对位验证法修正
-- [ ] 待排：VLA（VIO+LA 组合）探索；多窗口/多级触发 CLI 化；X 通配触发；
-      `-vio -read -interval`；SoC 回归；SA5T 板卡实测；`-insight` 报错文案中英统一；
-      `-selftest` 列入 -h 帮助
+- [x] R24：VLA/MLA 探索（2026-09-15）——vla.cfg 全格式逆向（DEVICE INFO/TRIGGER PARAM
+      逐 LA `:` 分隔/SIGNAL INFO 行格式）、MLA 布防与轮询机制、GUI 多 LA 入口（+按钮）；
+      CLI 三级实现设计入 GUI 地图 §8。**实现待做**（深度/窗口 → MLA → VLA 编译编排）
+- [ ] 待排：`-vio -read -interval`；SoC 回归；SA5T 板卡实测；X 通配触发；
+      多窗口/多级触发 CLI 化（并入 R22-C 实现项）
 - [ ] 小项：`-insight` 报错文案中英混排统一（S2，R21）；`-selftest` 列入 -h 帮助（S3，R21）
 
 ## 一、insight CLI 完善（按用户批准顺序）

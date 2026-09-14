@@ -183,7 +183,8 @@ hqbuddy -insight -selftest -signal cnt -value 200 # 指定采样信号与比较�
 
 - **VIO（Virtual IO，运行时驱动/采样管脚）**：独立于 LA 的调试 IP，工程目录 `hqvla_vio/`（`hq_vio.prj` + `[SIGNAL INFO]` 段：`序号=信号名=input|output=位宽[=初值]`）。编译流程 `run_hqprj2hqvio_flow`；运行时 `insight.svf_generator.vio_write -value <N>'b<LSBfirst串> -radix_type Binary -is_vla_mode True` 写输出探针、`vio_read -bit_length <总输入位宽>` 读输入探针（TDO 取低 N 位、按 LSB-first 切分）。SVF 生成无需 ddf。LA+VIO 联合模式叫 VLA（`-is_ip_mode`，采样参数对话框里的 VLA_0）。**multi-LA 下不支持 trigger-VIO**。
 - **多窗口触发（multi-window）**：`[TRIGGER MULTI-WINDOW]` >1 时每 LA 的存储划成 N 个窗口，合法触发位置 `0 ≤ pos ≤ depth/窗口数 − 5`（窗口数取 2 的幂）。布防时多发 `la_window_num`，状态轮询读 `4×窗口数` 个 TDO、每窗口 done 全真才算完；dump_vcd 一次出 N 个 VCD。
-- **多 LA（MLA，最多 2 个）**：不同时钟域各挂一个 LA（右键 LA_0 页添加 LA_1）。`insight.sealion.mla.*` 命令族；同时运行时两个 LA 都要设触发条件；不支持连续触发。
+- **多 LA（MLA，最多 2 个）**：不同时钟域各挂一个 LA（采集模式已标记列表的「+」按钮直接建空 LA_1 页，第二采样时钟在给 LA_1 加信号时指定）。`insight.sealion.mla.*` 命令族；同时运行时两个 LA 都要设触发条件；不支持连续触发。
+- **vla.cfg（VLA 独立工程交接格式，R24 全格式逆向）**：`hq_ins --vla_cfg <vla.cfg>` 独立导入 VLA 工程。`[DEVICE INFO]`：device_die/device_name；`[TRIGGER PARAM]`：dep/add_reg/pos/ram_full/win_num/trigger_level（多 LA 值用 `:` 分隔）、vio_flag=true|false；`[SIGNAL INFO]`：每行 `信号名=类型=LA序号=模块=位宽=是否片选[=MSB=LSB]`（类型 ∈ Sample Only/Trigger Only/Sample and Trigger/Sample Clock）。导入时 trigger_expr.cfg/trigger_cond.cfg 自动转 JSON。MLA 布防按 LA 循环（`la_num,la_idx`），状态轮询 TDO=4×窗口数×LA 数。完整设计与现状见仓库 `guides/hqinsight_gui_map.md` §8。
 - **连续触发**：采集模式下拉的"连续触发"= 布防→抓→再布防循环（`is_continuous True`），GUI 间隔 `continuous_interval_time`；CLI 用脚本循环单次抓取等效。
 - **`[EXPRESSION OPERATION]`（.hqins 段）**：`00`=AND、`01`=NOT(AND)、`10`=OR、`11`=NOT(OR)，与 `-expr_op` 编码一致；GUI 调试器靠它恢复组合状态。
 - **组合触发编码（已实证）**：SVF 由 `trigger_cond.json` 每个操作数的 `operation` 4bit 驱动：`0011`=AND 链、`0101`=OR 链、bit3=该单元取反（`1011`/`1101`）；`signal_id`（B0/B1/...）纯符号可任意改名（SVF 逐位不变，已 diff 实证）；`expression` 字符串 GUI 记账用，hqfpga 不解析。B 编号在 GUI 界面按触发信号的**添加顺序**显示（B0=最先加的 trigger 信号）。
