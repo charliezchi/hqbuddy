@@ -394,12 +394,40 @@ def _fold_same_signal(a: dict, b: dict) -> dict:
     return fold_pair(canon(a), canon(b))
 
 
+_ARITH_NEGATE = {"EQ": "NE", "NE": "EQ", "GT": "LE", "GE": "LT",
+                 "LT": "GE", "LE": "GT"}
+
+
+def _eliminate_arith_negate(parsed: dict) -> None:
+    """Rewrite NOT on arithmetic conditions into the complementary operator.
+
+    R25 board finding (FT091226): a single condition's hardware negate bit is
+    dropped downstream (NOT cnt EQ 7 fired at cnt==7, 4/4, while
+    trigger_cond.json correctly recorded negate) -- so never send a negated
+    arith compare; express it as the complementary op instead.  NOT on
+    range/edge has no single-op complement and stays with a warning."""
+    for c in parsed.get("conds", []):
+        if not c.get("negate"):
+            continue
+        if c.get("kind") == "arith":
+            new_op = _ARITH_NEGATE[c["op"]]
+            print(f"Note: NOT {c['signal']} {c['op']} {c['value']} 改写为 "
+                  f"{c['signal']} {new_op} {c['value']}（硬件取反位实测会被丢弃）")
+            c["op"] = new_op
+            c["negate"] = False
+        else:
+            print(f"Warning: {c['signal']} 上的 NOT（{c.get('op')}）无等价单算子，"
+                  f"硬件取反位实测会被丢弃（R25），该条件可能按未取反执行——"
+                  f"建议改写为可表达的等价条件")
+
+
 def collapse_same_signal(parsed: dict) -> dict:
     """Fold same-signal conditions in AND chains into one compare-unit condition.
 
     The hardware keeps ONE compare unit per trigger signal: in an AND chain a
     second condition on the same signal silently overwrites the first.  OR
     chains keep their operands (board-verified for EQ|EQ on one signal)."""
+    _eliminate_arith_negate(parsed)
     if parsed.get("combine") == "OR":
         return parsed
     conds = list(parsed["conds"])
@@ -866,6 +894,24 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
     expr_op = _capture_expr_op(cond_path)
     is_ct = _is_combined_trigger(cond_path)
 
+    # Signal-set freshness: warn when .hqins signals differ from the set the
+    # on-board bit was built with (R25: silent misplaced data view otherwise).
+    sig_stamp_path = os.path.join(import_dir, ".bit_signals")
+    info = _load_signal_info(proj)
+    if info is not None and os.path.isfile(sig_stamp_path):
+        now = sorted(f"{s['name']}:{s['msb']}:{s['lsb']}"
+                     for s in _collect_signals(info))
+        try:
+            built = [l for l in open(sig_stamp_path).read().splitlines() if l]
+        except OSError:
+            built = []
+        if built and now != built:
+            only_now = [s for s in now if s not in built]
+            only_built = [s for s in built if s not in now]
+            print("Warning: .hqins 信号集与插桩 bit 不一致"
+                  f"（多: {only_now or '-'} / 少: {only_built or '-'}）——"
+                  "新信号在板上不存在、被删信号读数错位；先 -insight -run 并重新下载！")
+
     if force:
         ddf = _write_force_ddf(proj)
     else:
@@ -1124,6 +1170,14 @@ def run_flow(proj: dict) -> None:
     stamp_dir = os.path.join(proj["hqins_dir"], "hq_import")
     with open(os.path.join(stamp_dir, ".bit_stamp"), "w") as sf:
         sf.write(str(max(os.path.getmtime(b) for b in fresh)))
+    # record the signal set this bit was built with, so -capture can detect
+    # -add/-del since the last -run (stale signal set => misplaced data view)
+    info = _load_signal_info(proj)
+    if info is not None:
+        sigs = sorted(f"{s['name']}:{s['msb']}:{s['lsb']}"
+                      for s in _collect_signals(info))
+        with open(os.path.join(stamp_dir, ".bit_signals"), "w") as sf:
+            sf.write("\n".join(sigs))
 
     # 常量探针预警：扫描实现目录的 log，报告被综合器常量折叠的探针信号
     impl_dir = os.path.join(proj["hqins_dir"], "hq_import", "hqins_impl")

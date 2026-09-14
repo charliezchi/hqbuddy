@@ -189,4 +189,12 @@ hqbuddy -insight -selftest -signal cnt -value 200 # 指定采样信号与比较�
 - **`[EXPRESSION OPERATION]`（.hqins 段）**：`00`=AND、`01`=NOT(AND)、`10`=OR、`11`=NOT(OR)，与 `-expr_op` 编码一致；GUI 调试器靠它恢复组合状态。
 - **组合触发编码（已实证）**：SVF 由 `trigger_cond.json` 每个操作数的 `operation` 4bit 驱动：`0011`=AND 链、`0101`=OR 链、bit3=该单元取反（`1011`/`1101`）；`signal_id`（B0/B1/...）纯符号可任意改名（SVF 逐位不变，已 diff 实证）；`expression` 字符串 GUI 记账用，hqfpga 不解析。B 编号在 GUI 界面按触发信号的**添加顺序**显示（B0=最先加的 trigger 信号）。
 - **ddf 合法值（insight.load 实测）**：EDGE `<op>` 只认 `RISE`/`FALL`（BOTH 边沿 = RISE + `<mask>` 全 1；X = 该单元 ignore=yes）；ARITHM op ∈ EQ/NE/GT/LT/GE/LE（mask 来自值的 X 通配位，operand=值 LSB-first、X 按 0）；RANGE op 为 `GT,LT`/`GE,LE`/`GT,LE`/`GE,LT`，operand=`左值,右值`（各 LSB-first）。合法边界（GUI 触发位置对话框同款）：`0 ≤ offset ≤ depth/窗口数 − 5`。
+- **NOT 取反（R25 板上实测，FT091226）**：单条件的硬件取反位会被下游丢弃——
+  `NOT cnt EQ 7` 在 cnt==7 命中（4/4，且 trigger_cond.json 的 negate 记录正确）。
+  hqbuddy 3.13.3 起**算术取反自动改写为等价算子**（NOT EQ→NE、NOT GT→LE 等），
+  改写时打印 Note；range/edge 上的 NOT 无等价单算子，保留但打印硬件丢弃警告。
+- **混合位宽打包错位（R6 发现、R25 复现加重）**：探针信号位宽不一致（尤其混入
+  1-bit 信号）时，存储字打包可能错位——2×8b 干净，追加 1b 后 8b 通道转移违例
+  770/1023。**探针集合尽量同位宽**；hqbuddy 3.13.3 起 -run 记录信号集戳记，
+  -capture 发现 .hqins 信号集与 bit 不一致（-add/-del 后未 -run）会强警告。
 - 相关 TCL 命令全表：`references/tcl_commands_help.md` 搜 `insight.`（51 条）。
