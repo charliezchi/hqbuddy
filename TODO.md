@@ -12,7 +12,10 @@
 - [x] R21-A：FT091226 新版本升级回归——链路完好；4 项缺陷（selftest 假阴性/
       -paths 失效/-build 不执行/预检路径）全部修复+复验，bump 3.13.2（2026-09-15）
 - [x] R21-B：文档债 `-selftest` / `-report -paths N` 补入 README 与 skill（2026-09-14）
-- [ ] R22-C：GUI 采样参数对话框（深度/窗口/次数/offset）逆向 → CLI 暴露
+- [x] R22-C：GUI 采样参数对话框探索完成（2026-09-15）——实为「虚拟逻辑分析仪(VLA)配置」：
+      深度 256~65536、窗口数、触发级数、加寄存、预存拍数；.hqins 键 `0_LA:*`；
+      启动契约已入 GUI 地图。**CLI 实现待做**：`-insight -depth/-windows/-level/-reg`
+      （写四段 + 改后强制 -run 提示 + capture 按 depth/窗口适配，多窗口出 N 份 VCD）
 - [ ] R23+：VLA（VIO+LA 组合）探索；多窗口/多级触发 CLI 化；X 通配触发；
       `-vio -read -interval`；SoC 回归；SA5T 板卡实测
 - [ ] 小项：`-insight` 报错文案中英混排统一（S2，R21）；`-selftest` 列入 -h 帮助（S3，R21）

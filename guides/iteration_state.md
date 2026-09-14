@@ -18,7 +18,7 @@
 | # | 主题 | 轨道 | 状态 |
 |---|---|---|---|
 | R21 | FT091226 新版升级回归：从零全链路+selftest+组合触发+report(-paths)+错误路径抽测 | 全轨道 | ✅ 完成（链路完好；4 项缺陷修复+复验，bump 3.13.2，详见 blind_eval_log R21） |
-| R22 | GUI 探索：HqInsight 采样参数对话框（深度/窗口数/触发次数/offset）逆向 → CLI 暴露设计（先文档后代码） | T4/T1 | 🔄 主会话执行中（2026-09-15 00:35 起） |
+| R22 | GUI 探索：HqInsight 采样参数对话框（深度/窗口数/触发次数/offset）逆向 → CLI 暴露设计（先文档后代码） | T4/T1 | ✅ 探索完成（VLA 配置对话框全字段+启动契约入 GUI 地图）；**CLI 实现待做**（-depth/-windows/-level/-reg） |
 | R23 | VIO 回归：从零 VIO 工程 → 读写位级校验 → `-loop` 异常输入报错（R13 用例在 FT091226 复演） | T2 | 待做 |
 | R24 | GUI 探索：VLA（VIO+LA）入口与 FT091226 release note 的 VLA 修复验证可行性 | T4/T2 | 待做 |
 | R25 | 触发矩阵回归：R16 六条（BOTH 折叠/RANGE_C/NOT/跨信号 AND/电平/诚实超时）在新版复验 | T1 | 待做 |
@@ -33,8 +33,17 @@
   -build 不执行、预检 $WORK_DIR$ 拼接——4 项全修+复验；3.13.2 已构建安装；
   文档三处同步（insight.md/download.md/hqbuddy.md）。commit 待落。
 - 小项插队池：报错文案中英统一（S2）；-selftest 进 -h（S3）。
+- 2026-09-15 01:05 R22 收账：VLA 配置对话框全字段捕获（深度 256~65536/窗口/级数/
+  加寄存 YES-NO/预存拍数）；hq_ins 启动契约实锤（--hqprj/--hqexe/--hqlang，裸参数报
+  "project doesn't exist"）；.hqins 键形 `0_LA:*`（[MEMORY DEPTH INFO]/[ADD REGISTER]/
+  [TRIGGER MULTI-WINDOW]/[TRIGGER LEVEL]），预存拍数为布防期参数不落盘。
+  GUI 全程未保存、工程逐字未变。
 
-## 下一轮建议
+## 下一轮建议（下一次定时触发执行）
 
-- R22（主会话进行中）：采样参数对话框逆向。之后触发轮按队列：R23 VIO 回归。
-- 定时轮注意：板卡在 r21a 工程 bit 上（SA50K），GUI 探索与 CLI 板卡操作互斥（锁协议）。
+- **R23 VIO 回归**（板上 SA50K）：从零建 VIO 工程（hqbuddy_test/r23vio/）→
+  -vio -gen/-reg → -build → 下载 → -read 位级校验（LFSR/计数器已知序列）→
+  -write 生效验证 → `-loop xyz` 友好报错。判据先写状态文件再执行。
+- 之后：R24 VLA 探索 → R25 触发矩阵回归 → R26 错误路径矩阵 → R27 SoC 离线。
+- 定时轮注意：板卡当前载有 r21a 插桩 bit（SA50K）；GUI 与 CLI 板卡操作互斥（锁协议）；
+  hq_ins/HqFPGA GUI 进程若在，先核对无工程占用再用 CLI 改工程（协同风险）。

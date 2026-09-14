@@ -5,6 +5,10 @@
 
 ## 0. 两种模式（核心概念）
 
+> **hq_ins.exe 启动契约（R22 实测）**：`hq_ins.exe --hqprj <.hqprj> --hqexe <hqfpga.exe 绝对路径> --hqlang chs`
+> （可选 `--hqins <独立.hqins工程>`、`--vla_cfg <vla.cfg>`、`--hqlog <log>`）。**裸位置参数不被认**
+> ——报 "HqFpga project file doesn't exist!"；无参数启动则 cx_Freeze IndexError。agent 用 GUI 自动化时按此契约拉起。
+
 | 模式 | 能做什么 | 对应 CLI |
 |---|---|---|
 | **采集模式**（插桩器） | 增删信号、改采样/触发类型、保存工程、跑插桩实现 | `-insight -init/-ls/-add/-del/-run` |
@@ -38,7 +42,7 @@
 | 按钮 | 作用 | 背后行为 / CLI 对应 |
 |---|---|---|
 | 💾 保存 | 保存工程（含 LA 配置） | 写 `.hqins`（[SIGNAL JSON INFO]+[LA SIGNAL INFO]）+ `.hqins.save` 备份；CLI 等价 `-insight -add/-del`（即时写盘） |
-| ⚙ 采样参数 | 弹「采样参数设置」：采样深度(1024/2048/…)、触发窗口个数、触发次数、触发首次条件满足时的拍数据(是/否) | 写 `.hqins` 的 [MEMORY DEPTH INFO]/[TRIGGER MULTI-WINDOW]/[TRIGGER LEVEL]；CLI 暂未暴露（固定 1024/1/1） |
+| ⚙ 采样参数 | 弹「**虚拟逻辑分析仪(VLA)配置**」对话框（R22 实测 FT091226）：当前VLA(VLA_0)、对被调试信号加寄存(YES/NO)、采样深度(256/512/1024/2048/4096/8192/16384/32768/65536)、触发窗口个数(spinbox)、触发级数(spinbox)、触发前必须预存足够拍数据(是/否 radio) | 写 `.hqins` 的 [MEMORY DEPTH INFO]/[ADD REGISTER]/[TRIGGER MULTI-WINDOW]/[TRIGGER LEVEL]（键形如 `0_LA:1024`，按 LA 编号）；「预存拍数」不落盘=布防期运行时参数。CLI 暂未暴露，设计：`-insight -depth N [-windows W] [-level L] [-reg yes|no]`，改后必须 -run+重下载；capture 解析须按 depth/窗口数适配（合法 offset `0 ≤ pos ≤ depth/窗口数−5`，多窗口一次出 N 份 VCD） |
 | 📊 波形应用 | 打开 hqwave 波形视图查看已抓 VCD | CLI 等价 `hqbuddy -wave [vcd]` |
 | ▶ 运行（调试模式） | 布防→等触发→抓波形→自动开波形 | CLI 等价 `-insight -trig` + `-capture`；背后同一套 `insight.svf_generator.*` |
 | ⏸ 停止 | 中止等待触发 | CLI 无对应（Ctrl-C） |
