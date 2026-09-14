@@ -70,6 +70,10 @@ def _parse_probe(spec: str) -> dict:
     """Parse 'name:width' (width optional, default 1)."""
     name, _, w = spec.rpartition(":")
     name = name or spec
+    if name != name.strip() or not name:
+        print(f"Error: invalid probe name in '{spec}' (use name:width; "
+              f"repeat -in/-out or comma-separate for multiple probes)")
+        sys.exit(1)
     try:
         width = int(w) if w else 1
     except ValueError:
@@ -168,8 +172,13 @@ def cmd_gen(work: str, module: str, in_width: int, out_width: int) -> None:
 
 def cmd_reg(work: str, ins: list, outs: list) -> None:
     reg = load_registry(work)
-    reg["inputs"] = [_parse_probe(s) for s in ins]
-    reg["outputs"] = [_parse_probe(s) for s in outs]
+
+    def expand(specs):
+        # accept comma-separated probes in one -in/-out: "-in cnt:8,fb:8"
+        return [t for s in specs for t in s.split(",") if t]
+
+    reg["inputs"] = [_parse_probe(s) for s in expand(ins)]
+    reg["outputs"] = [_parse_probe(s) for s in expand(outs)]
     reg["in_width"] = sum(p["width"] for p in reg["inputs"])
     reg["out_width"] = sum(p["width"] for p in reg["outputs"])
     save_registry(work, reg)

@@ -16,8 +16,11 @@
       深度 256~65536、窗口数、触发级数、加寄存、预存拍数；.hqins 键 `0_LA:*`；
       启动契约已入 GUI 地图。**CLI 实现待做**：`-insight -depth/-windows/-level/-reg`
       （写四段 + 改后强制 -run 提示 + capture 按 depth/窗口适配，多窗口出 N 份 VCD）
-- [ ] R23+：VLA（VIO+LA 组合）探索；多窗口/多级触发 CLI 化；X 通配触发；
-      `-vio -read -interval`；SoC 回归；SA5T 板卡实测
+- [x] R23：VIO 读写回归（2026-09-15）——链路完好，判据 a-e 全 PASS；
+      S2 修复 `-reg` 逗号静默错登记（拆分+名校验）；vio.md 对位验证法修正
+- [ ] 待排：VLA（VIO+LA 组合）探索；多窗口/多级触发 CLI 化；X 通配触发；
+      `-vio -read -interval`；SoC 回归；SA5T 板卡实测；`-insight` 报错文案中英统一；
+      `-selftest` 列入 -h 帮助
 - [ ] 小项：`-insight` 报错文案中英混排统一（S2，R21）；`-selftest` 列入 -h 帮助（S3，R21）
 
 ## 一、insight CLI 完善（按用户批准顺序）

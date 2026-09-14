@@ -19,7 +19,7 @@
 |---|---|---|---|
 | R21 | FT091226 新版升级回归：从零全链路+selftest+组合触发+report(-paths)+错误路径抽测 | 全轨道 | ✅ 完成（链路完好；4 项缺陷修复+复验，bump 3.13.2，详见 blind_eval_log R21） |
 | R22 | GUI 探索：HqInsight 采样参数对话框（深度/窗口数/触发次数/offset）逆向 → CLI 暴露设计（先文档后代码） | T4/T1 | ✅ 探索完成（VLA 配置对话框全字段+启动契约入 GUI 地图）；**CLI 实现待做**（-depth/-windows/-level/-reg） |
-| R23 | VIO 回归：从零 VIO 工程 → 读写位级校验 → `-loop` 异常输入报错（R13 用例在 FT091226 复演） | T2 | 待做 |
+| R23 | VIO 回归：从零 VIO 工程 → 读写位级校验 → `-loop` 异常输入报错（R13 用例在 FT091226 复演） | T2 | ✅ 完成（链路完好 a-e 全 PASS；`-reg` 逗号 S2 修复+复验；vio.md 对位法修正；exe 已重建） |
 | R24 | GUI 探索：VLA（VIO+LA）入口与 FT091226 release note 的 VLA 修复验证可行性 | T4/T2 | 待做 |
 | R25 | 触发矩阵回归：R16 六条（BOTH 折叠/RANGE_C/NOT/跨信号 AND/电平/诚实超时）在新版复验 | T1 | 待做 |
 | R26 | 错误路径矩阵复验（R11 六项防护+失败无副作用） | T1 | 待做 |
@@ -27,6 +27,17 @@
 | R28 | `-report -paths N` 违例工程上的提取（找一个真实有违例的工程；当前全 MET） | T3 | 待做 |
 
 ## 执行记录（每轮收尾追加一行）
+
+- 2026-09-15 00:56 定时轮启动 R23（VIO 回归）。**判据先于执行**：
+  a) r23vio 从零建工程（计数器→probe_in；probe_out 双寄存回环→probe_in 高位），
+     -vio -gen/-reg/-build 全 exit 0 且产物 bin 存在；
+  b) 下载成功后 `-read -loop` 读到计数器推进特征（对位按 vio.md MSB 规则核验）；
+  c) `-write X` 后连读 ≥2 次高位字节收敛到 X（回环闭环证据）；
+  d) `-vio -read -loop xyz`（非数字）友好报错 exit≠0，不抛 traceback；
+  e) 全程无 insight 交互（VIO/LA 同板互斥，当前板载 r21a 插桩 bit，须先下载 VIO bit）。
+- 2026-09-15 01:12 R23 收账：a-e 全 PASS（写入回读第 1 次收敛；0xA5/0x3C 为回文向量、
+  以 0xC1 补证位序；欠采样认知修正进 vio.md）；S2 `-reg` 逗号静默错登记已修
+  （拆分+名校验）并复验；3.13.2 exe 重建同步。板卡现载 r23vio VIO bit（SA50K）。
 
 - 2026-09-14 23:30 主会话启动 R21（盲评 agent 已派出，独立判读）。
 - 2026-09-15 00:35 R21 收账：链路完好；selftest 回绕/伪影假阴性、-paths 静默失效、
@@ -41,9 +52,10 @@
 
 ## 下一轮建议（下一次定时触发执行）
 
-- **R23 VIO 回归**（板上 SA50K）：从零建 VIO 工程（hqbuddy_test/r23vio/）→
-  -vio -gen/-reg → -build → 下载 → -read 位级校验（LFSR/计数器已知序列）→
-  -write 生效验证 → `-loop xyz` 友好报错。判据先写状态文件再执行。
-- 之后：R24 VLA 探索 → R25 触发矩阵回归 → R26 错误路径矩阵 → R27 SoC 离线。
-- 定时轮注意：板卡当前载有 r21a 插桩 bit（SA50K）；GUI 与 CLI 板卡操作互斥（锁协议）；
-  hq_ins/HqFPGA GUI 进程若在，先核对无工程占用再用 CLI 改工程（协同风险）。
+- **R24 VLA 探索**（GUI，主 agent 亲自用 computer-use，不派子 agent）：
+  按 GUI 地图 §0 契约拉起 hq_ins（r23vio 工程亦可）→ 观察多 LA/VLA 配置入口 →
+  对照 docs/insight_re 反编译笔记查 `--vla_cfg`/`vla.cfg` 格式与 `insight.sealion.mla.*`
+  → 产出 CLI 可行性设计写入 GUI 地图+TODO；**只探索不布防、不保存**。
+- 之后：R25 触发矩阵回归 → R26 错误路径矩阵 → R27 SoC 离线 → R28 违例工程 -paths。
+- 定时轮注意：每轮修复后 `python build.py` 同步 exe（R23 起惯例）；GUI 与 CLI 板卡
+  操作互斥（锁协议）。
