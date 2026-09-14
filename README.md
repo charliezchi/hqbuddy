@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.13.0
+3.13.1
 
 ## 功能特点
 
@@ -515,9 +515,11 @@ hqbuddy/
 │   ├── compile_xist.tcl  # XiST 仿真库编译脚本（手动或自动均使用此脚本，支持 .v / .vp）
 │   ├── config.json       # -cfg 配置模板
 │   ├── project.hqprj     # -new_prj 工程模板
-│   └── boards/           # 开发板板卡资料（每板一个 md，FPGA 引脚分配摘要，查阅方法见 skill references/boards.md）
+│   └── soc/              # SoC 工作流预设（-new_soc 等，打包进 exe）
 ├── skills/
 │   └── hqfpga/           # AI Agent Skill：HqFpga 操作指南（含 references 命令参考）
+│       └── references/
+│           └── boards/   # 开发板板卡资料（每板一个 md，FPGA 引脚分配摘要，随 skill 安装）
 ├── docs/
 │   └── user_manual/      # HqFpga 官方用户手册（md / pdf）
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
@@ -551,7 +553,7 @@ python install_skill.py --mimo       # 仅 Xiaomi MIMO
 python install_skill.py --zcode      # 仅 ZCode
 ```
 
-Skill 源文件在 `skills/hqfpga/`，随仓库版本管理。
+Skill 源文件在 `skills/hqfpga/`，随仓库版本管理；开发板板卡资料（`skills/hqfpga/references/boards/`）也随 skill 一起安装，安装后 agent 可直接查阅。
 
 ## License
 

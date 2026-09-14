@@ -1,6 +1,8 @@
-# 开发板板卡资料查阅（templates/boards/）
+# 开发板板卡资料查阅（boards/）
 
-`hqbuddy/templates/boards/` 下每块开发板一个 markdown 文件，是**给 agent 读的板卡手册摘要**——从官方《开发板用户指南》PDF 提炼的全部 FPGA 引脚分配。做引脚约束（.upc / phycst.*）、例程对接、板级调试时按本文件方法查阅。
+本文件同级的 `boards/` 目录（即本 skill 的 `references/boards/`，随 skill 一起安装）下每块开发板一个 markdown 文件，是**给 agent 读的板卡手册摘要**——从官方《开发板用户指南》PDF 提炼的全部 FPGA 引脚分配。做引脚约束（.upc / phycst.*）、例程对接、板级调试时按本文件方法查阅。
+
+> 路径说明：这些文件位于**已安装 skill 的 `references/boards/` 目录内**（与当前 `boards.md` 同目录下的 `boards/`），不是工程目录。用绝对路径引用，例如 `~/.kimi-code/skills/hqfpga/references/boards/SA5Z-50.md`（Kimi Code）；其它目标（MIMO/ZCode）把前缀换成各自 skills 目录即可。
 
 ## 板卡清单
 
@@ -20,7 +22,7 @@
 
 ## 典型用法
 
-- **查某信号的引脚**：在目标板文件内直接 grep net 名，如 `grep "FPGA_LED1" templates/boards/SA5Z-30-D1.md`
+- **查某信号的引脚**：在目标板文件内直接 grep net 名，如 `grep "FPGA_LED1" <skill>/references/boards/SA5Z-30-D1.md`
 - **写引脚约束**：从表内取 net→pin，io_std 用头部默认值（LVCMOS33）或小节标注值；差分对查"差分对速查"
 - **对接例程/排针**：40P 座、FMC、GPIO 等扩展口在小节标题注明了电平与差分能力
 - **方向语义**：一律为 **FPGA 视角**（output = FPGA 驱动外设）
@@ -33,4 +35,4 @@
 
 ## 新增板卡
 
-照现有任一文件的结构新建 `templates/boards/<板名>.md`：头部要点 + 每外设一节 + 默认值写标题、差异写表内；并在本文件的板卡清单表加一行。原始 PDF 引脚表逐行录入，宁多勿漏。
+照现有任一文件的结构新建 `boards/<板名>.md`（置于本 skill 的 `references/boards/` 下）：头部要点 + 每外设一节 + 默认值写标题、差异写表内；并在本文件的板卡清单表加一行。原始 PDF 引脚表逐行录入，宁多勿漏。
