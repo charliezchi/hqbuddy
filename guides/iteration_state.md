@@ -24,7 +24,7 @@
 | R24 | VLA/MLA 探索 | T4/T2 | ✅ vla.cfg 全格式+设计入 GUI 地图 §8 |
 | R25 | 触发矩阵回归 | T1 | ✅ 抓到 2×S1 已修（NOT 改写+信号集戳记，3.13.3）；S2 边沿语义待复测 |
 | R26 | 修复复验+基线重建+-o 崩溃修复 | T1 | ✅ R25 两修复板上有效；新 S1 -o 已修复验（3.13.3） |
-| R27 | 错误路径矩阵复验（R11 六项） | T1 | 待做 |
+| R27 | 错误路径矩阵复验（R11 六项） | T1 | ✅ 9/9 全 PASS 无回归 |
 | R28 | SoC 离线链路（-list_soc/-new_soc/-build 至 route） | T3 | 待做 |
 | R29 | 违例工程 -report -paths 提取（需真实违例） | T3 | 待做 |
 | R30 | R22-C 实现：-insight -depth/-windows/-level/-reg | T4/T1 | 待做（设计已入 GUI 地图 §8） |
@@ -39,6 +39,16 @@
   lfsr 递推 1023/1023 拟合）。新 S1：-o 相对路径崩溃（dump_vcd 目录不存在 exit -1）
   ——已修（前缀绝对化+目录自动创建）并板上复验；S2 陈旧布防假触发已补提示。
   板载 r21a 2 信号干净 bit（3.13.3 夜间构建）。
+- 09-15 04:41 定时轮启动 R27（错误路径矩阵）。**判据先于执行**：
+  ①六项防护逐条复演（r21a 干净基线，cnt/lfsr both）：错误 --model 拒下载、
+  跨采样时钟 -add 拒绝、矛盾条件折叠报错（cnt EQ 5 AND cnt EQ 9）、sample-only
+  触发拒绝、错误 -clk 拒绝、错误 -module 报错文案清晰——各项 exit≠0 且失败后
+  `-insight` 状态零漂移；
+  ②位流过期预警：touch hqins_impl/*.bin 后 -capture 提示有更新 bin；
+  ③顺带：`-vio -read -loop xyz` 友好报错（无工程也应干净报错不崩）；
+  ④任何异常（崩、traceback、状态污染）如实落账。
+- 09-15 04:52 R27 收账：**9/9 全 PASS 无回归**；S3 两条评测观察（坏时钟出题形式、
+  overflow 判读语义进小项池）。板载/工程均零改动（capture 覆盖默认 VCD 属已知行为）。
 
 - 09-15 03:41 定时轮启动 R26。**判据先于执行**：
   ①`-del fb` → `-run` → 下载：恢复 2×8b 干净基线（exit 0、型号校验通过）；
@@ -74,7 +84,11 @@
   ②位流过期预警：touch hqins_impl/*.bin 后 -capture 应提示有更新 bin；
   ③`-vio -read -loop xyz` 类异常输入（顺带）；
   ④收尾 -insight 零漂移。
-- 之后：R28 SoC 离线 → R29 违例 -paths → R30 R22-C 实现起步。
+- **R28 SoC 离线链路**（不下板）。判据先于执行：`-list_soc` 正常列出预设；
+  `-new_soc r28soc -core cm3 -preset ex4_uart` 生成工程树（FPGA_Prj+MCU_Prj、
+  PROJ_NAME 改写、合并脚本替换）；`-build` 在 FPGA_Prj 至少跑到 route 不崩
+  （产物校验语义正确）；`-mcu_build` 若 Keil 不在则干净报错。
+- 之后：R29 违例 -paths → R30 R22-C 实现起步。
 - 小项池（不变）：片选行为不一致、BOTH 折叠缺文案、中英文案统一、-selftest 进 -h、
   陈旧布防代际自动检测（R26 S2）。
 - 7:40 触发为收官轮：写 guides/night_report_20260915.md，勿开新工作。
