@@ -860,6 +860,17 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
 
     import_dir = os.path.join(proj["hqins_dir"], "hq_import")
     prefix = out_prefix or os.path.join(import_dir, f"{proj['top']}_insight")
+    # dump_vcd resolves -out_path_prefix against hqfpga's cwd and crashes
+    # (exit -1) when the target directory doesn't exist -- absolutize and
+    # create the directory ourselves, with a clean error on failure.
+    prefix = os.path.abspath(prefix)
+    prefix_dir = os.path.dirname(prefix)
+    if not os.path.isdir(prefix_dir):
+        try:
+            os.makedirs(prefix_dir, exist_ok=True)
+        except OSError as e:
+            print(f"Error: -o 输出目录无法创建: {prefix_dir} ({e})")
+            sys.exit(1)
     cond_path = os.path.join(import_dir, "trigger_cond.json")
     if not os.path.isfile(cond_path):
         print("Error: no trigger condition set. Use -insight -trig first.")
@@ -910,7 +921,9 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
             only_built = [s for s in built if s not in now]
             print("Warning: .hqins 信号集与插桩 bit 不一致"
                   f"（多: {only_now or '-'} / 少: {only_built or '-'}）——"
-                  "新信号在板上不存在、被删信号读数错位；先 -insight -run 并重新下载！")
+                  "新信号在板上不存在、被删信号读数错位，读数不可信；"
+                  "先 -insight -run 并重新下载，且布防上下文随信号集变化，"
+                  "下载后必须重新 -trig 再 -capture！")
 
     if force:
         ddf = _write_force_ddf(proj)
