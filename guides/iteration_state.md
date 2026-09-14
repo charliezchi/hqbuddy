@@ -25,7 +25,7 @@
 | R25 | 触发矩阵回归 | T1 | ✅ 抓到 2×S1 已修（NOT 改写+信号集戳记，3.13.3）；S2 边沿语义待复测 |
 | R26 | 修复复验+基线重建+-o 崩溃修复 | T1 | ✅ R25 两修复板上有效；新 S1 -o 已修复验（3.13.3） |
 | R27 | 错误路径矩阵复验（R11 六项） | T1 | ✅ 9/9 全 PASS 无回归 |
-| R28 | SoC 离线链路（-list_soc/-new_soc/-build 至 route） | T3 | 待做 |
+| R28 | SoC 离线链路（-list_soc/-new_soc/-build 至 route） | T3 | ✅ 6/6 PASS；3 条 S3 修复 |
 | R29 | 违例工程 -report -paths 提取（需真实违例） | T3 | 待做 |
 | R30 | R22-C 实现：-insight -depth/-windows/-level/-reg | T4/T1 | 待做（设计已入 GUI 地图 §8） |
 
@@ -33,6 +33,19 @@
 报错文案中英统一（S2）；-selftest 进 -h（S3）。
 
 ## 执行记录（时间序）
+
+- 09-15 05:41 定时轮启动 R28（SoC 离线链路，不下板）。**判据先于执行**：
+  ①`-list_soc` 列出 cm3/star 预设（19-20 个/族）；
+  ②`-new_soc r28soc -core cm3 -preset ex4_uart` 生成工程树：FPGA_Prj+MCU_Prj、
+  .hqprj 的 PROJ_NAME=r28soc、合并脚本已替换为基于 -merge_bin 的版本；
+  ③`hqbuddy -build` 在 FPGA_Prj/hq_prj 执行：exit 0 且工程目录产出 .bin
+  （修复后的产物校验应通过）；若约束/器件问题失败，判据=失败信息清晰且为
+  工程自身问题（如实区分工具缺陷 vs 工程问题）；
+  ④`-mcu_build`：Keil 不在 PATH/config 时干净报错（不 traceback）；
+  ⑤全程无板卡交互；异常如实落账。
+- 09-15 05:55 R28 收账：6/6 PASS 链路完好（build 出 bin 双 MET、Keil 0 错 0 警
+  自动合并）；3 条 S3 已修（star ex9_watchdog 拼写、ex15 两族统一、文档补
+  -remap/合并回显说明），exe 已重建。板卡未动。
 
 - 09-15 03:41-04:15 R26（定时轮#4，板上）：R25 两修复板上复验**均有效**（NOT 改写
   Note+NE 布防+cnt==7 反证；信号集警告+整字错位实证）；干净基线恢复（AND 3/3、

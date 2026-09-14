@@ -29,9 +29,9 @@
     "device": "SA5Z-50-D0-7F484-C",
     "bin": "uart.bin"
   },
-  "ex15_extint": {
+  "ex15_ext_int": {
     "core": "star",
-    "preset": "ex15_extint",
+    "preset": "ex15_ext_int",
     "device": "SA5Z-50-D0-7F484-C",
     "bin": "extint.bin"
   },
@@ -113,9 +113,9 @@
     "device": "SA5Z-50-D0-7F484-C",
     "bin": "dualtimer.bin"
   },
-  "ex9_watcgdog": {
+  "ex9_watchdog": {
     "core": "star",
-    "preset": "ex9_watcgdog",
+    "preset": "ex9_watchdog",
     "device": "SA5Z-50-D0-7F484-C",
     "bin": "watchdog.bin"
   }

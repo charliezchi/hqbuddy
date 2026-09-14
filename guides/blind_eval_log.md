@@ -415,3 +415,17 @@ skills/hqfpga/references/insight.md 与本日志。
   先行），后续出题直接用该形式；②overflow=True 时（touch bin 后 capture）触发点
   判读语义与常规不同（pointer=4 且标记点值不满足条件），判读文档未覆盖——列入
   数据完整性专项（TODO 小项池），非本轮缺陷
+
+## Round 28 — SoC 离线链路（定时轮 #6，不下板）
+- **任务**：-list_soc / -new_soc / -build / -mcu_build / -merge_bin 全链路（FT091226）
+- **结果**：✅ **完好，6/6 PASS**——预设清单完整（cm3 19/star 20）；工程树生成正确
+  （PROJ_NAME 改写、hqbuddy 版合并脚本）；**-build 一键全流程出 bin（1,059,067 B，
+  WNS setup/hold 双 MET，R21 修复在 SoC 工程复验成立）**；Keil 自动发现+无人值守
+  编译 0 错 0 警、自动合并镜像算术吻合且未下板；-merge_bin 异常参数干净；-report
+  无报告时优雅提示
+- **发现 4 条 S3，3 条已修**：
+  1. star 族预设拼写 `ex9_watcgdog` → 已改 `ex9_watchdog`（目录+manifest），exe 重建
+  2. 两族命名不一致 `ex15_extint`/`ex15_ext_int` → 已统一为 `ex15_ext_int`
+  3. 底层合并工具回显误导（报错误的 output 名）→ soc_workflow.md 注明以
+     `Merged image:` 为准
+  4. soc_workflow.md 补 `-remap` 参数记载

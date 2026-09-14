@@ -17,9 +17,11 @@ hqbuddy -mcu_build                               # Keil 无人值守编译（工
 hqbuddy -dl -f my_app\FPGA_Prj\hq_prj\my_app_merged.bin          # 下载到板
 ```
 
-手动合并（不编译 MCU 时）：`hqbuddy -merge_bin <fpga.bin> <mcu.bin> [-o out.bin] [-model SA30K|SA50K] [-dl]`。
+手动合并（不编译 MCU 时）：`hqbuddy -merge_bin <fpga.bin> <mcu.bin> [-o out.bin] [-model SA30K|SA50K] [-remap 000] [-dl]`。
 注意：mcu_build 后自动执行的 merge 是**合并但不下板**；`mergeBinFileAndProgram.bat -dl` 或上面 `-dl` 才真正下载。
 `-build` 的 FPGA bin 输出在 `.hqprj` 同目录（CLI 流程不写入 hq_run，那是 GUI 的 OUT_DIR 习惯）。
+-merge_bin 实际支持 `[-remap <3位>]`（README 有载）；mcu_build 自动合并时底层合并工具会回显一个错误的 output 文件名，以 hqbuddy 打印的 `Merged image:` 为准（R28 实测）。
+预设名以 `-list_soc` 实时输出为准（R28 已统一两族命名：ex9_watchdog、ex15_ext_int）。
 
 ## 生成工程的结构（-new_soc）
 
