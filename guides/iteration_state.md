@@ -1,119 +1,56 @@
-# 夜间自回归迭代状态（2026-09-14 晚 → 09-15 08:30）
+# 自回归迭代状态·第二夜（2026-09-15 晚 → 09-16 08:30）
 
-> 本文件是整夜迭代的**接力棒**：定时自动化（automation-a3fca125，9月15日
-> 0:40-7:40 每小时触发，至多 8 次；7:40 那轮=收官总结，8:00 后硬停）每次先读本
-> 文件设定本轮目标（自动目标设定），收尾时必须更新本文件 + blind_eval_log.md +
-> 本地 commit。框架与规则见 `autoregressive_cycle.md`。
+> 接力棒：定时自动化（9月15日 23:40 → 9月16日 7:40 每小时触发，至多 9 次；
+> 7:40 那轮=收官总结，8:00 后硬停）。每次先读本文件设定本轮目标，收尾必须更新
+> 本文件 + blind_eval_log.md + 本地 commit。框架：`autoregressive_cycle.md`。
 > **硬性边界：只本地 commit，禁止 push；08:00 后不再开新工作。**
-> 每轮修复后 `python build.py` 同步 exe（R23 起惯例）；GUI 与 CLI 板卡操作互斥。
+> 每轮修复后 `python build.py` 同步 exe（注意先 taskkill 残留 hqbuddy.exe 再装）。
+> 上一夜状态存档：`guides/iteration_state_20260915.md`（R21-R29，收官报告
+> night_report_20260915.md）。
 
 ## 锁协议（防两轮并行撞板）
 
 - 板卡/GUI 工作前：检查 `C:\Users\XiST\Desktop\hqbuddy_test\.round_lock`，
   存在且 <90 分钟 → 本次触发直接结束（不等待）。
-- 取锁：覆盖写入 `{session, started_at, round, purpose}`。
-- 收尾：删除锁文件。>90 分钟视为 stale，可接管。
+- 取锁：覆盖写入 `{session, started_at, round, purpose}`；收尾删除。>90 分钟可接管。
 
-## 队列（S0 修复永远最优先插队；每轮一个主题，45 分钟尺度）
+## 今晚主题：第三方综合协同（新能力）+ 遗留清账
+
+已验货（主会话 21:30-22:40）：Vivado 2018.3 / Synplify 2013.03
+（**bin\mbin\synbatch.exe**，bin 包装器的 win64 路径 license 失效）→ EDF →
+HqFpga P&R → bin → 下载 SA50K 全通。skill 新文档
+`skills/hqfpga/references/thirdparty_synthesis.md` 已写入（含 mbin license 坑、
+technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要省略、
+.hqprj 不认 .edf 必须显式 TCL）。
+
+## 队列（S0/S1 修复永远最优先）
 
 | # | 主题 | 轨道 | 状态 |
 |---|---|---|---|
-| R21 | FT091226 新版升级回归 | 全轨道 | ✅ 链路完好；4 缺陷修复复验（3.13.2） |
-| R22 | GUI 采样参数对话框探索 | T4/T1 | ✅ VLA 配置对话框+启动契约；CLI 实现待做 |
-| R23 | VIO 读写回归 | T2 | ✅ 链路完好；-reg 逗号 S2 修复（3.13.2） |
-| R24 | VLA/MLA 探索 | T4/T2 | ✅ vla.cfg 全格式+设计入 GUI 地图 §8 |
-| R25 | 触发矩阵回归 | T1 | ✅ 抓到 2×S1 已修（NOT 改写+信号集戳记，3.13.3）；S2 边沿语义待复测 |
-| R26 | 修复复验+基线重建+-o 崩溃修复 | T1 | ✅ R25 两修复板上有效；新 S1 -o 已修复验（3.13.3） |
-| R27 | 错误路径矩阵复验（R11 六项） | T1 | ✅ 9/9 全 PASS 无回归 |
-| R28 | SoC 离线链路（-list_soc/-new_soc/-build 至 route） | T3 | ✅ 6/6 PASS；3 条 S3 修复 |
-| R29 | 违例工程 -report -paths 提取（需真实违例） | T3 | ✅ 抓到 S1 去重/S2 截断已修，ground truth 核对通过 |
-| R30 | R22-C 实现：-insight -depth/-windows/-level/-reg | T4/T1 | 待做（设计已入 GUI 地图 §8） |
+| R30 | 第三方综合链路盲评：agent 只按新 skill 文档从零复现，挑文档毛病 | T3/新 | ✅ 链路通；10 条文档缺陷全数补齐（.prj 模板/文件衔接/约束前置/退出码语义/bitgen 假成功/端点全名等） |
+| R31 | 边沿方向专项：RTL 加 1-bit 直出信号 → -add → -run → RISE/FALL 方向核验（清 R25/R26 S2 遗留） | T1 | 待做 |
+| R32 | R22-C 实现：`-insight -depth N [-windows W] [-level L]`（写 .hqins 四段 + 提示必须 -run；板上盲测 depth=2048 生效） | T1/T4 | 待做 |
+| R33 | EDF→Verilog 网表 ↔ ModelSim 门级仿真链验证（modelsim.md + 第三方网表 a.v） | T3 | 待做 |
+| R34 | 第三方网表+VLA：GUI 路径探索（computer-use：hqui 生成 VLA IP 的入口与产物格式） | T4/T2 | 待做 |
+| R35 | -copy_prj 实现（复制工程+改写 FILE_SRC 路径，R29 发现） | T3 | 待做 |
+| R36 | 小项清理：报错文案中英统一；片选 cnt[7] vs cnt[7:7] 行为；-vio -read -interval | T1-T3 | 待做 |
 
-小项池：`cnt[7]`/`cnt[7:7]` 片选行为不一致（S3）；BOTH 折叠缺文案（S3）；
-报错文案中英统一（S2）；-selftest 进 -h（S3）。
+小项池：陈旧布防代际自动检测（R26 S2）；overflow 判读已入文档（R27）。
 
 ## 执行记录（时间序）
 
-- 09-15 06:41 定时轮启动 R29（违例工程 -paths 提取，离线）。**判据先于执行**：
-  ①复制 r21a → r29viol，SDC 时钟周期改严 10 倍（40ns→4ns）→ `-build` 成功
-  （违例不是流程失败——bitgen 照出，报告标 VIOLATED）；
-  ②`-report .` 显示 WNS VIOLATED（负 slack）；
-  ③`-report . -paths 5` 提取 5 条，slack 升序排列且与 slack 报告人工核对的最差
-  5 条逐一相等（负值含符号）；from/to 路径名与报告对应；
-  ④对照：全 MET 工程（原 r21a）显示 "tightest paths (all paths MET)"；
-  ⑤任何解析遗漏/排序错如实落账。
-- 09-15 07:05 R29 收账：抓到 S1 重复段不去重（已修：_slack_records 四元组去重，
-  -paths 与 WNS 计数共用）+ S2 端点截断（已修：整行捕获剥注释）+ S3 标签三态。
-  对照 ground truth 逐字核对通过；exe 已重建。排序语义=全局 slack 升序（文档注明）。
-
-- 09-15 05:41 定时轮启动 R28（SoC 离线链路，不下板）。**判据先于执行**：
-  ①`-list_soc` 列出 cm3/star 预设（19-20 个/族）；
-  ②`-new_soc r28soc -core cm3 -preset ex4_uart` 生成工程树：FPGA_Prj+MCU_Prj、
-  .hqprj 的 PROJ_NAME=r28soc、合并脚本已替换为基于 -merge_bin 的版本；
-  ③`hqbuddy -build` 在 FPGA_Prj/hq_prj 执行：exit 0 且工程目录产出 .bin
-  （修复后的产物校验应通过）；若约束/器件问题失败，判据=失败信息清晰且为
-  工程自身问题（如实区分工具缺陷 vs 工程问题）；
-  ④`-mcu_build`：Keil 不在 PATH/config 时干净报错（不 traceback）；
-  ⑤全程无板卡交互；异常如实落账。
-- 09-15 05:55 R28 收账：6/6 PASS 链路完好（build 出 bin 双 MET、Keil 0 错 0 警
-  自动合并）；3 条 S3 已修（star ex9_watchdog 拼写、ex15 两族统一、文档补
-  -remap/合并回显说明），exe 已重建。板卡未动。
-
-- 09-15 03:41-04:15 R26（定时轮#4，板上）：R25 两修复板上复验**均有效**（NOT 改写
-  Note+NE 布防+cnt==7 反证；信号集警告+整字错位实证）；干净基线恢复（AND 3/3、
-  lfsr 递推 1023/1023 拟合）。新 S1：-o 相对路径崩溃（dump_vcd 目录不存在 exit -1）
-  ——已修（前缀绝对化+目录自动创建）并板上复验；S2 陈旧布防假触发已补提示。
-  板载 r21a 2 信号干净 bit（3.13.3 夜间构建）。
-- 09-15 04:41 定时轮启动 R27（错误路径矩阵）。**判据先于执行**：
-  ①六项防护逐条复演（r21a 干净基线，cnt/lfsr both）：错误 --model 拒下载、
-  跨采样时钟 -add 拒绝、矛盾条件折叠报错（cnt EQ 5 AND cnt EQ 9）、sample-only
-  触发拒绝、错误 -clk 拒绝、错误 -module 报错文案清晰——各项 exit≠0 且失败后
-  `-insight` 状态零漂移；
-  ②位流过期预警：touch hqins_impl/*.bin 后 -capture 提示有更新 bin；
-  ③顺带：`-vio -read -loop xyz` 友好报错（无工程也应干净报错不崩）；
-  ④任何异常（崩、traceback、状态污染）如实落账。
-- 09-15 04:52 R27 收账：**9/9 全 PASS 无回归**；S3 两条评测观察（坏时钟出题形式、
-  overflow 判读语义进小项池）。板载/工程均零改动（capture 覆盖默认 VCD 属已知行为）。
-
-- 09-15 03:41 定时轮启动 R26。**判据先于执行**：
-  ①`-del fb` → `-run` → 下载：恢复 2×8b 干净基线（exit 0、型号校验通过）；
-  ②R25 修复复验 A：`-trig "NOT cnt EQ 7"` 打印改写 Note、布防为 NE 7、
-    触发点 cnt≠7（本 bit 零偏斜可严格判读）；
-  ③R25 修复复验 B：`-add fb` 后直接 `-capture -timeout 5` 必须打印信号集不一致
-    强警告（Warning: .hqins 信号集与插桩 bit 不一致…）；
-  ④S2 边沿复测（干净基线上）：`-del fb` 后无 1-bit 信号可测边沿——改为在损坏
-    判读无关的 2×8b 基线上用 `cnt EQ <边界值> AND lfsr NE 0` 复核 AND 链仍精确，
-    边沿方向问题标注为"需含 1-bit 信号的专用设计"遗留（本轮不重建工程）；
-  ⑤收尾 `-insight` 零漂移；板上终态=r21a 2 信号干净 bit。
-
-- 09-14 23:30 主会话启动 R21（盲评 agent）→ 00:35 收账：FT091226 链路完好；
-  selftest 回绕假阴性/-paths 失效/-build 不执行/预检路径 4 项全修+复验；3.13.2。
-- 09-15 00:40-01:05 R22（主会话，GUI）：VLA 配置对话框全字段+hq_ins 启动契约；
-  工程未动。
-- 09-15 00:56-01:12 R23（定时轮#1，板上）：VIO 链路完好（a-e 全 PASS，写入回读
-  首读收敛）；-reg 逗号 S2 修复+复验；exe 同步。板载 r23vio VIO bit。
-- 09-15 01:40-02:00 R24（定时轮#2，GUI+源码）：vla.cfg 全格式逆向+MLA 布防轮询
-  机制+GUI 多 LA「+」入口；CLI 三级设计入 GUI 地图 §8。零改动。
-- 09-15 02:40-03:35 R25（定时轮#3，板上）：触发矩阵——算术/RANGE_C/跨信号 AND/
-  折叠/持久化无回归；**NOT 取反硬件丢弃（S1，已修：算术改写等价算子）+混合位宽
-  打包损坏复现（S1，已修：.bit_signals 信号集戳记+capture 强警告）**；S2 边沿
-  语义待干净复测；勘误 LFSR 圈含 0x00。bump 3.13.3，exe 已重建。
-  **板载 r21a 3 信号 bit（fb 通道损坏，勿用于数据判读）。**
+- 09-15 22:30 主会话启动 R30（新 skill 文档盲评，agent 已派）。板载 r30syn.bin
+  （Vivado 网表编译产物，已验下载）。agent 会用自己的构建覆盖，属预期。
+- 09-15 23:05 R30 收账：链路通（Synplify 路线独立复现成功并上板）；文档 10 条缺陷
+  （3 硬缺口+退出码语义+bitgen 假成功等）全部补齐进 thirdparty_synthesis.md。
+  板载 r30tb 复现 bin（agent 下载验证）。
 
 ## 下一轮建议（下一次定时触发执行）
 
-- **R27 错误路径矩阵复验**（板上 SA50K，r21a 干净基线）。判据先于执行：
-  ①R11 六项防护逐条复演：model 校验（--model 与板不符拒下载）、跨采样时钟 -add
-  拒绝、矛盾条件折叠报错（cnt EQ 5 AND cnt EQ 9）、sample-only 触发拒绝、
-  错误 -clk 拒绝、错误 -module 报错文案——各项 exit≠0、文案清晰、失败零副作用；
-  ②位流过期预警：touch hqins_impl/*.bin 后 -capture 应提示有更新 bin；
-  ③`-vio -read -loop xyz` 类异常输入（顺带）；
-  ④收尾 -insight 零漂移。
-- **R28 SoC 离线链路**（不下板）。判据先于执行：`-list_soc` 正常列出预设；
-  `-new_soc r28soc -core cm3 -preset ex4_uart` 生成工程树（FPGA_Prj+MCU_Prj、
-  PROJ_NAME 改写、合并脚本替换）；`-build` 在 FPGA_Prj 至少跑到 route 不崩
-  （产物校验语义正确）；`-mcu_build` 若 Keil 不在则干净报错。
-- 之后：R29 违例 -paths → R30 R22-C 实现起步。
-- 小项池（不变）：片选行为不一致、BOTH 折叠缺文案、中英文案统一、-selftest 进 -h、
-  陈旧布防代际自动检测（R26 S2）。
-- 7:40 触发为收官轮：写 guides/night_report_20260915.md，勿开新工作。
+- R31 边沿方向专项（板上）：先读 R30 结果防重复踩坑。判据先于执行：
+  ①RTL 改动：顶层加 1-bit 直出信号（如 `reg t7; always@(posedge clk) t7<=cnt[7];`
+  `assign dbg=t7;` 引出管脚）或尝试片选 -add cnt[7]（若工具支持）；
+  ②-run+下载成功；③RISE 连抓 3 次：事件样本必须 0→1；FALL 连抓 3 次：必须 1→0；
+  ④对照 R25"边沿疑似恒真"结论给出清欠判定，落账。
+- 之后按队列 R32 → R33 → R34 → R35 → R36。
+- 7:40 触发=收官轮：写 guides/night_report_20260916.md，勿开新工作。
