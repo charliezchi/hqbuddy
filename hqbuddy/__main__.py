@@ -17,6 +17,7 @@ from .hqprj_parser import extract_filelist
 from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstream
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
+from .netlist import run_edf2v, run_netlist_build
 from .device import run_device
 from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
@@ -61,6 +62,11 @@ Project:
   -mcu_build [-p <file.uvprojx>]       Build MCU_Prj firmware via Keil UV4 (headless)
   -merge_bin <fpga.bin> <mcu.bin>      Merge FPGA+MCU bins for download (cable.exe)
      [-o <file>] [-model SA30K] [-dl]    (-dl: download after merge)
+  -edf2v <a.edif> [-o <file>]          Convert a third-party EDIF netlist to Verilog
+     [-device <part>]                   (family SEAL, for gate-level sim)
+  -netlist_build <a.edif> --upc <u.upc> --sdc <s.sdc>
+     [-o <file>] [-device <part>]       Netlist P&R + bitgen (flatten before pack;
+                                        needs .upc/.sdc, else bitgen BIT-11)
   -add <file1> [<file2> ...]           Add source/constraint files to project
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
                                         to match FILE_SRC/FILE_TC/FILE_PC
@@ -815,6 +821,56 @@ def cmd_xpn2bin(args):
     run_xpn2bin(xpn_path, bin_path)
 
 
+def cmd_edf2v(args):
+    """Convert a third-party EDIF netlist to a Verilog netlist."""
+    edif_path = None
+    output_v = None
+    device = None
+    i = 0
+    while i < len(args):
+        if args[i] == '-o' and i + 1 < len(args):
+            output_v = args[i + 1]
+            i += 2
+        elif args[i] == '-device' and i + 1 < len(args):
+            device = args[i + 1]
+            i += 2
+        elif not args[i].startswith('-') and edif_path is None:
+            edif_path = args[i]
+            i += 1
+        else:
+            i += 1
+    run_edf2v(edif_path, output_v, device)
+
+
+def cmd_netlist_build(args):
+    """Run netlist P&R + bitgen for a third-party EDIF netlist."""
+    edif_path = None
+    upc_path = None
+    sdc_path = None
+    output_bin = None
+    device = None
+    i = 0
+    while i < len(args):
+        if args[i] == '--upc' and i + 1 < len(args):
+            upc_path = args[i + 1]
+            i += 2
+        elif args[i] == '--sdc' and i + 1 < len(args):
+            sdc_path = args[i + 1]
+            i += 2
+        elif args[i] == '-o' and i + 1 < len(args):
+            output_bin = args[i + 1]
+            i += 2
+        elif args[i] == '-device' and i + 1 < len(args):
+            device = args[i + 1]
+            i += 2
+        elif not args[i].startswith('-') and edif_path is None:
+            edif_path = args[i]
+            i += 1
+        else:
+            i += 1
+    run_netlist_build(edif_path, upc_path, sdc_path, output_bin, device)
+
+
 def cmd_get_device(args):
     """Show device part of an .hqprj."""
     hqprj_path = _resolve_hqprj(args[0] if args else None)
@@ -1272,6 +1328,16 @@ def main():
     # FPGA+MCU bin merge (+ optional download)
     if first == '-merge_bin':
         soc.cmd_merge_bin(args[1:])
+        return
+
+    # Third-party EDIF netlist -> Verilog
+    if first == '-edf2v':
+        cmd_edf2v(args[1:])
+        return
+
+    # Third-party netlist P&R + bitgen
+    if first == '-netlist_build':
+        cmd_netlist_build(args[1:])
         return
 
     # Add files

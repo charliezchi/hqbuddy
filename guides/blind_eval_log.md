@@ -480,3 +480,16 @@ skills/hqfpga/references/insight.md 与本日志。
   -h 已收录
 - **遗留**：深度生效需打通"插桩 IP 生成读 .hqins 深度"链路（TODO，候选方向：
   逆向 GUI 写深度后 elaborate 的消费点）
+
+## Round 33 — -edf2v / -netlist_build 产品化（第二夜，离线实现+验收）
+- **实现**：新增 `hqbuddy/netlist.py` + dispatch + help/README——
+  `hqbuddy -edf2v <a.edif> [-o a.v] [-device part]`（EDF→XIST 原语 Verilog）；
+  `hqbuddy -netlist_build <a.edif> --upc <u> --sdc <s> [-o bin] [-device part]`
+  （edif.read→flatten→约束→pack/place/route→bitgen + ERROR( 汇总 + 产物校验 +
+  输出目录 makedirs 防 bitgen 静默假成功）
+- **验收**：5/5 PASS——edf2v 产出含 13×xsDFFSA 的 a.v；netlist_build 产物
+  1,787,906 B 与手工链路逐字节同尺寸；缺文件/缺约束/坏约束三条错误路径干净
+  （坏约束意外实证了 ERROR( 汇总防御：CDEV008×2 → exit 1）
+- **素材勘误**：netlist_build 验收约束应为 r30syn\cons（R31 改过 r21a\cons 加
+  dbg_out 脚，与 R30 的 a.edif 端口不匹配——正确地被 CDEV008 拦下）
+- exe 已重建安装，smoke：安装版 -edf2v 产出 smoke.v 含 13×xsDFFSA ✓

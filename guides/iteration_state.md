@@ -30,7 +30,7 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 | R30 | 第三方综合链路盲评：agent 只按新 skill 文档从零复现，挑文档毛病 | T3/新 | ✅ 链路通；10 条文档缺陷全数补齐（.prj 模板/文件衔接/约束前置/退出码语义/bitgen 假成功/端点全名等） |
 | R31 | 边沿方向专项：专用 1-bit 翻转信号核验 | T1 | ✅ 边沿语义正确，R25 恒真结论推翻；混位宽损坏复现→-add 警告已加（3.13.4） |
 | R32 | `-insight -depth/-windows/-level` 实现+板上验证 | T1/T4 | ✅ 写入/校验/幂等全通过；发现 -run 不消费深度（S1）→ capture 不一致拒绝已上线；windows 仅写入 |
-| R33 | EDF→Verilog 网表 ↔ ModelSim 门级仿真链验证（modelsim.md + 第三方网表 a.v） | T3 | 待做 |
+| R33 | -edf2v / -netlist_build 实现（第三方 TCL 链产品化） | T3 | ✅ 5/5 验收 PASS（bin 同尺寸）；smoke 通过；docs 同步。ModelSim 门级仿真链移 R34b |
 | R34 | 第三方网表+VLA：GUI 路径探索（computer-use：hqui 生成 VLA IP 的入口与产物格式） | T4/T2 | 待做 |
 | R35 | -copy_prj 实现（复制工程+改写 FILE_SRC 路径，R29 发现） | T3 | 待做 |
 | R36 | 小项清理：报错文案中英统一；片选 cnt[7] vs cnt[7:7] 行为；-vio -read -interval | T1-T3 | 待做 |
@@ -59,6 +59,9 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
   （3 硬缺口+退出码语义+bitgen 假成功等）全部补齐进 thirdparty_synthesis.md。
   板载 r30tb 复现 bin（agent 下载验证）。
 
+- 09-16 00:45 R33 收账：netlist.py 新增（_run_tcl_streamed/_fail_on_tcl_errors/
+  run_edf2v/run_netlist_build）；dispatch+help+README 同步；验收 5/5（含 ERROR(
+  汇总防御意外实证）；exe 重建安装 smoke 通过。
 - 09-16 00:25 R32 收账：-depth/-windows/-level 实现完成（写入/校验/幂等/
   触发位置上界全通过）；板上发现 -run 不消费 .hqins 深度（S1，深度生效链路待
   逆向）→ capture 一致性拒绝已上线并实测。板上终态=干净 1024/1/1 基线，

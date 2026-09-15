@@ -90,12 +90,25 @@ edif.read a.edif
 nl.write a.v -eqn
 ```
 
-执行 `hqbuddy -cmd edn.tcl`，产出 `a.v`（内含 `xsDFFSA_K1/xsLUTSA/xsMUXCY_L/xsSRL16E` 等 XIST 原语，R30 实测 13×DFF+LUT+SRL 与设计规模吻合）。
+执行 `hqbuddy -cmd edn.tcl`，或直接用产品化命令（3.13.4 起）：
+
+```bat
+hqbuddy -edf2v a.edif -o a.v
+```
+
+产出 `a.v`（内含 `xsDFFSA_K1/xsLUTSA/xsMUXCY_L/xsSRL16E` 等 XIST 原语，R30 实测 13×DFF+LUT+SRL 与设计规模吻合）。
 
 ## 第三方网表 → 位流（全 CLI，实测通过并下载上板）
 
+产品化命令（3.13.4 起，封装下方整条 TCL 链 + 产物校验 + 目录自动创建）：
+
+```bat
+hqbuddy -netlist_build a.edif --upc cons/r21a.upc --sdc cons/r21a.sdc -o r30syn.bin
+```
+
+等价手工 TCL（`pnr.tcl` + `hqbuddy -cmd pnr.tcl`）：
+
 ```tcl
-# pnr.tcl —— hqbuddy -cmd pnr.tcl
 dv.setup SEAL SA5Z-50-D0-7F484C
 edif.read a.edif
 design.flatten

@@ -453,6 +453,8 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-build [<file>]`                   | 生成 run_hqprj.tcl 并执行完整 FPGA 实现流程                          |
 | `-mcu_build [-p <uvprojx>]`         | Keil UV4 无人值守编译 MCU 固件                                       |
 | `-merge_bin <fpga> <mcu>`           | 合并 FPGA+MCU bin（`-o`/`-model`/`-dl`）                             |
+| `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族） |
+| `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11）        |
 | `-add <files...>`                   | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程         |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
 | `-set_top <name>`                   | 设置顶层模块`TOP_MODULE`                                             |
