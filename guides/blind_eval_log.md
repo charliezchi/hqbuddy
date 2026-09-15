@@ -581,3 +581,6 @@ skills/hqfpga/references/insight.md 与本日志。
 ## Round 41 — 静默回归（VIO 抽测，r23vio）
 - r23vio bit 重下载后 `-read -loop 3`：cnt 槽持续变化、fb 槽恒 0（分化正确）。
   板上已恢复 r21a 基线 bit。无异常。
+
+## Round 42 — 静默回归（基线抓取复验，3 小时间隔）
+- 触发点 cnt=200 严格、lfsr=0x86 满足条件。无异常。下一触发进入收官。
