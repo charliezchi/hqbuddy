@@ -573,3 +573,7 @@ skills/hqfpga/references/insight.md 与本日志。
 ## Round 39 — 静默回归（-copy_prj 工程 -init 幂等）
 - r36cp 双次 -init 产出 hq_import.hqins md5 一致（R18 幂等性在复制工程上成立）。
   无异常。
+
+## Round 40 — 静默回归（文档一致性审计）
+- README 参数表 51 个旗标 vs `-h` 全量比对：发现 `-copy_prj` 缺帮助行
+  （R35 实现时漏加）——已补齐、重建安装；其余 50 项三方对齐。

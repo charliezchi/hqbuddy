@@ -71,6 +71,7 @@ Project:
                                         needs .upc/.sdc, else bitgen BIT-11)
   -add <file1> [<file2> ...]           Add source/constraint files to project
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
+  -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
                                         to match FILE_SRC/FILE_TC/FILE_PC
   -set_top <name>                      Set top module name
   -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
