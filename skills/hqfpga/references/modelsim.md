@@ -1,5 +1,19 @@
 <!-- 来源：hqbuddy/simlib.py 实现 + XiST 仿真约定 -->
 
+## 门级网表仿真要点（R34c 实测）
+
+- XiST 原语库用 `hqbuddy -simlib` 编译（已存在时**删除重建**，约 48s；
+  modelsim.ini 映射 `XiST = $MODEL_TECH/../XiST`）。
+- 第三方网表（如 HqFpga `nl.write` 产出的 XIST 原语 Verilog）直接
+  `vlib work; vlog a.v` 即可编译（原语解析自 XiST 库）。
+- **`vsim -c` 默认优化会把 VCD dump 清空（只留 header）**——必须加
+  `-voptargs=+acc` 保留内部信号可见性。
+- 解析 VCD 的两个坑：①ModelSim 对等值网**复用同一 id**，按单 id 取值会读成
+  错位序列；②整型变量按二进制串转储（`b10`=十进制 2）。
+- 门级 TB 需强制例化 `xsGSR(.GSR(1'b1))` 与 `xsPWR(.PUR(1'b1))`（见上方模板），
+  否则寄存器不初始化。
+
+
 # ModelSim/QuestaSim 仿真指南
 
 用 ModelSim（或 QuestaSim）仿真包含 XiST 器件原语的设计（如 IP 网表、布线后网表）的标准流程。

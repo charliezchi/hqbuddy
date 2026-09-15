@@ -28,6 +28,7 @@
 - [x] R36b：`-vla -gen` 半自动上线（2026-09-16）——按 R34b 契约调起官方向导+
       产物自动检测（端到端验证）；全自动模板化（probe_port 解析）与运行侧
       （VLA 抓取 ddf/SVF）继续逆向
+- [x] R34c：第三方网表 ModelSim 门级仿真链验证（2026-09-16）——simlib/vlog/25µs 仿真全通，LFSR 序列 2492 拍零失配；vsim -voptargs=+acc 与 VCD 解析坑入档
 - [ ] 待排：`-edf2v`/`-netlist_build` 已上线（R33）；`-vio -read -interval`；
       SA5T 板卡实测；X 通配触发；
       多窗口/多级触发 CLI 化（并入 R22-C 实现项）；边沿方向专项（1-bit 专用设计）；

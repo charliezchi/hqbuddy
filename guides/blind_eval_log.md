@@ -549,3 +549,16 @@ skills/hqfpga/references/insight.md 与本日志。
   hqbuddy 自动检测产物（xsIP_VLA.v 102,062B + hqip + cfg + t.tcl）
 - **定位**：免 IP Creator 导航的半自动生成；全自动模板化（属性行参数化）仍在
   TODO（probe 端口结构随信号个数变化，需按 hqip 的 probe_port_N 解析）
+
+## Round 34c — 第三方网表 ModelSim 门级仿真（第二夜，离线）
+- **任务**：把 r30syn 的 XIST 原语网表 a.v（Vivado→EDIF→nl.write 产物）编进
+  ModelSim 2020.4 做门级仿真 smoke
+- **结果**：✅ **可用**——simlib 重建 454 单元 0 错误；vlog 零错误；强制
+  xsGSR/xsPWR 后 25µs 门级仿真全程无 error；led[0]（counter MSB）精确每 128 拍
+  翻转；**led[1]（LFSR）连续 2492 拍与 XNOR 规则零失配，周期 255 实证**
+- **认知修正（LFSR 可观测等价式）**：R31 推导的 `q <= {q[6:0], ~q[7]^q[5]^q[4]^q[3]}`
+  的可观测式是 `led(n) = ~(led(n-4)^led(n-5)^led(n-6)^led(n-8))`——反馈端与观测端
+  相差移位级数，直觉的滞后形式 (8,10,11,12) 会 100% 失配（经 VCD 内部信号逐级
+  取证：SRL16E 模型 Q=D 延迟 3 拍、LUT INIT=0x9669 解码吻合）
+- **S3 补文档**：vsim -c 需 `-voptargs=+acc` 否则 VCD 只剩 header；VCD 等值网
+  复用 id + 整型按二进制串转储两个解析坑——均入 modelsim.md

@@ -53,6 +53,16 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 执行记录（时间序）
 
+- 09-16 04:25 R34c 收账：ModelSim 门级仿真【可用】——simlib 重建 454 单元 0 错、vlog 零错、25µs 无 error、LFSR 可观测规则 2492 拍零失配（周期 255 实证）；LFSR 可观测等价式修正 + vsim -voptargs=+acc / VCD 解析坑入 modelsim.md。无板卡交互。
+
+- 09-16 03:38 定时轮启动 R34c（ModelSim 门级仿真，离线）。**判据先于执行**：
+  ①`hqbuddy -simlib` 把 XiST 原语仿真库编进 ModelSim（exit 0；modelsim.ini 映射生效）；
+  ②r30syn/a.v（第三方网表，xsDFFSA/xsLUTSA 原语）vlog 编译零 error；
+  ③自写 testbench（clk 10ns + 自动检查）跑 ≥20µs：led[1:0] 非恒值、
+  led[1] 与 R31 推导的 LFSR 序列（taps 3,4,5,7 XNOR 左移）吻合为加分证据；
+  ④全程无板卡交互；ModelSim 在 C:\modeltech64_2020.4（vsim 不在 PATH，
+  按 modelsim.md 处理）。
+
 - 09-16 03:10 R36b 收账：`-vla -gen` 上线并端到端验证（调起契约=R34b 逐字一致；产物自动检测+Next 指引）；docs 三处同步；exe 重建安装。
 - 09-16 02:40 R35 收账：-copy_prj 实现并验收（5 文件拷贝+路径改写+时间戳重建；
   -filelist/-init 双验证复制工程在新目录完整可用）。README/hqbuddy.md 同步。
@@ -99,8 +109,7 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 下一轮建议（下一次定时触发执行）
 
-- **R34c ModelSim 门级仿真链**（离线优先）：先 `where vsim` 探测——环境有则按
-  modelsim.md 走 vlib/vlog 把 r30syn 的 a.v（或 -edf2v 产物）编进门级库并 smoke
+- **静默回归轮**（后续触发默认模式）：从 r36cp/r21a/r23vio 挑轻量检查各做一项并落账（如 -filelist/-report/-insight 状态比对），无异常一句话收尾；发现异常按框架升级。  modelsim.md 走 vlib/vlog 把 r30syn 的 a.v（或 -edf2v 产物）编进门级库并 smoke
   仿真；不在环境则如实记录转待排。
 - **之后**：低频静默回归（回归集：selftest 思路 + 触发矩阵抽测 + 错误路径抽测）
   至 8:00；8:00-8:30 收官窗口写 night_report_20260916.md。
