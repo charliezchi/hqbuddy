@@ -99,10 +99,13 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 下一轮建议（下一次定时触发执行）
 
-- R31 边沿方向专项（板上）：先读 R30 结果防重复踩坑。判据先于执行：
-  ①RTL 改动：顶层加 1-bit 直出信号（如 `reg t7; always@(posedge clk) t7<=cnt[7];`
-  `assign dbg=t7;` 引出管脚）或尝试片选 -add cnt[7]（若工具支持）；
-  ②-run+下载成功；③RISE 连抓 3 次：事件样本必须 0→1；FALL 连抓 3 次：必须 1→0；
-  ④对照 R25"边沿疑似恒真"结论给出清欠判定，落账。
-- 之后按队列 R32 → R33 → R34 → R35 → R36。
-- 7:40 触发=收官轮：写 guides/night_report_20260916.md，勿开新工作。
+- **R34c ModelSim 门级仿真链**（离线优先）：先 `where vsim` 探测——环境有则按
+  modelsim.md 走 vlib/vlog 把 r30syn 的 a.v（或 -edf2v 产物）编进门级库并 smoke
+  仿真；不在环境则如实记录转待排。
+- **之后**：低频静默回归（回归集：selftest 思路 + 触发矩阵抽测 + 错误路径抽测）
+  至 8:00；8:00-8:30 收官窗口写 night_report_20260916.md。
+- 已完成轮次：R30 第三方链路盲评 / R31 边沿专项 / R32 depth 参数 / R33
+  -edf2v+-netlist_build / R34 VLA 链 / R34b 向导契约 / R35 -copy_prj /
+  R36 小项清理 / R36b -vla -gen。
+- 定时轮注意：每轮修复后 python build.py 同步 exe（先 taskkill 残留进程）；
+  板上=干净 1024 基线；GUI 与 CLI 板卡操作互斥（锁协议）。
