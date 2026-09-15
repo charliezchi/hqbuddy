@@ -23,8 +23,10 @@
       CLI 三级实现设计入 GUI 地图 §8。**实现待做**（深度/窗口 → MLA → VLA 编译编排）
 - [x] 收官：夜间自回归迭代 R21-R29 完成（2026-09-15 08:00）——总账见
       `guides/night_report_20260915.md`；12 项修复、6×S1 全部闭环；版本 3.13.3
-- [x] R34：VLA 生成链摸清（2026-09-16）——ipdepot vla + 独立生成器
-      hq_vla_ins.exe；CLI 生成待抓向导真实命令行（R34b）
+- [x] R34b：hq_vla_ins.exe 调用契约捕获成功（2026-09-16）——产物四件套
+      （xsIP_VLA.v/hqip/cfg/t.tcl）留存；HQ_VLA0 属性行=第三方综合的配置载体
+- [ ] `-vla -gen`：仿 vio.py 模板化生成 xsIP_VLA.v（HQ_VLA0 属性行参数化，
+      probe_port 定义解析 hqip）；运行侧（VLA 抓取的 ddf/SVF）继续逆向
 - [ ] 待排：`-edf2v`/`-netlist_build` 已上线（R33）；`-vio -read -interval`；
       SA5T 板卡实测；X 通配触发；
       多窗口/多级触发 CLI 化（并入 R22-C 实现项）；边沿方向专项（1-bit 专用设计）；

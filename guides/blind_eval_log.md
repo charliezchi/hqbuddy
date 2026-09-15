@@ -506,3 +506,18 @@ skills/hqfpga/references/insight.md 与本日志。
   后即可像 `-vio -gen` 一样产品化（TODO 排队）
 - **顺带记录**：hqui SmartScreen 每次新启动都拦截（无签名），自动化需处理弹窗；
   欢迎页最近工程列表含本机历史路径（隐私注意）
+
+## Round 34b — VLA 生成器命令行捕获（GUI 向导 + wmic 轮询，成功）
+- **方法**：后台 PowerShell CIM 轮询（500ms）+ GUI 走完 IP Creator 的 VLA 向导
+  （IP管理 → ipcreator.exe -new -lang chs -workdir <工程> -device <part>
+  -hq_exe <hqfpga> → 搜索 VLA → 创建对话框 → 确定）
+- **捕获到的调用契约**：
+  `hq_vla_ins.exe -device SA5Z-50-D0-7F484C -lang chs -output_module VLA
+   -output_fname xsIP_VLA.v -output_dir <ipcore_dir/VLA> -hq_exe <hqfpga.exe>`
+  （该进程弹出"虚拟逻辑分析仪"配置向导：信号个数[1..512]/深度 256..65536/
+  加寄存/窗口数/预存拍数/使用VIO/综合网表直出/触发级数）
+- **产物四件套**（r21a/ipcore_dir/VLA/，已留存）：xsIP_VLA.v（102KB，
+  HQ_VLA0 属性行带 dep/pos/win_num/probe0 全部配置——第三方综合的配置载体）、
+  xsIP_VLA.hqip（INI 全参数）、xsIP_VLA.cfg（has_vio）、t.tcl（IP 自身综合链）
+- **意义**：`-vla -gen` 的参数契约已拿到——可仿 vio.py 模板化生成 .v
+  （属性行参数化），或直接调起向导半自动化；.hqprj 未被向导改动（FILE_SRC 无变化）

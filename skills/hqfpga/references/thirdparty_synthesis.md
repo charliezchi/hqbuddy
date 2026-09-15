@@ -131,6 +131,13 @@ impl.bitgen.xist.seal r30syn.bin -bin
 原理：在 RTL 里例化 **VLA IP**（HqFpga 生成，可勾选带 VIO），随第三方综合进 EDIF；HqFpga FT090925+ 能解析网表里的 VLA IP，编译下载后用【VLA 调试】做在线抓波/VIO。
 
 - **约束**：VLA IP 只允许例化一次（多次报 JTAG 资源溢出），待观测信号统一汇总到单例 VLA；Synplify 必须加 `syn_noprune=1`。
+- **VLA IP 生成（R34b 已捕获契约）**：IP Creator 生成 VLA IP 时实际调起
+  `hq_vla_ins.exe -device <part> -lang chs -output_module VLA -output_fname
+  xsIP_VLA.v -output_dir <dir> -hq_exe <hqfpga.exe>`，其向导收集
+  信号个数/深度/窗口/VIO 等参数后产出 xsIP_VLA.v + xsIP_VLA.hqip + .cfg。
+  生成的 .v 头部带 `HQ_VLA0` 综合属性携带全部配置，第三方综合靠 syn_noprune
+  保留实例、靠属性把配置带进 EDIF。hqbuddy `-vla -gen`（调起向导或模板化）
+  已列入 TODO；运行侧（insight.load 的 ddf + VLA 抓取）仍需逆向。
 - **现状（诚实边界）**：GUI 路径（网表工程编译 → VLA 调试按钮）官方支持；**CLI 路径 hqbuddy 暂未打通**——insight 插桩流程基于 `rtl.elaborate`（对展平网表不适用），`insight.load` 需要 .ddf（由 GUI/插桩流程生成）。CLI 化需逆向 VLA 工程的 ddf/SVF 生成链（见 `guides/hqinsight_gui_map.md` §8 的 vla.cfg 逆向），已列入 TODO。
 
 ## 附：.hqprj 通用坑（与第三方综合无直接关系）

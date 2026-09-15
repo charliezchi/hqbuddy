@@ -53,6 +53,17 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 执行记录（时间序）
 
+- 09-16 01:55 R34b 收账：**hq_vla_ins.exe 调用契约捕获成功**（-device/-lang/
+  -output_module/-output_fname/-output_dir/-hq_exe），产物四件套（xsIP_VLA.v
+  102KB + hqip + cfg + t.tcl）已留存 r21a/ipcore_dir/VLA/；HQ_VLA0 属性行=配置
+  载体（第三方综合关键）。`-vla -gen` 可模板化实现（TODO）。.hqprj 未被动。
+
+- 09-16 01:38 定时轮启动 R34b（向导命令行捕获）。**判据先于执行**：
+  ①后台 wmic 轮询器先启动，持续抓 hq_vla_ins.exe 的 CommandLine 到日志；
+  ②GUI 向导走一遍 VLA IP 生成（默认/最小配置即可）；
+  ③拿到命令行 → 记录参数格式与产物文件清单 → GUI 地图 §8 + TODO 更新；
+  ④若向导无法到达/轮询未捕获 → 如实记录，转 R35；全程不布防不下载。
+
 - 09-16 01:10 R34 探索注记：SmartScreen 拦截 hqui 启动（每次新启动都弹），已按
   弹窗确认运行；两个孤儿 hqui 已清理。
 

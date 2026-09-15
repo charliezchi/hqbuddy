@@ -141,6 +141,27 @@ TCL 是灰置判据（编译后网表含 VLA 才置 1）。生成器向导需 GU
 下一步需 GUI 向导跑一次并抓取其命令行/产物（Procmon 或 wmic）拿到
 hq_vla_ins.exe 的真实调用格式。
 
+**VLA 生成器命令行契约（R34b 实测捕获）**：IP Creator 里双击 VLA → 创建对话框
+（模块名 VLA / 文件名 xsIP_VLA.v / 输出 ipcore_dir/VLA）→ 确定 后调起：
+
+```
+hq_vla_ins.exe -device <part> -lang chs -output_module VLA -output_fname xsIP_VLA.v   -output_dir <ipcore_dir/VLA> -hq_exe <hqfpga.exe>
+```
+
+该进程弹出配置向导（信号个数[1..512]/采样深度/加寄存/触发窗口/预存拍数 128/
+使用VIO/直接输出综合网表☑/触发级数），确定后产出四件套：
+- `xsIP_VLA.v`（102KB 完整 insight 核心 RTL，参数在头部综合属性：
+  `/* synthesis HQ_VLA0 = "dep=1024 add_reg=True pos=128 ram_full=False win_num=1
+  trigger_level=1 probe0=1=0 " */`——第三方综合靠它把配置带进 EDIF）
+- `xsIP_VLA.hqip`（INI：LA_NUM / VLA_0={probe_num, sample_depth, window_num,
+  add_reg, trig_pos, ram_full, generate_net, trigger_level, probe_port_N:宽:类型}）
+- `xsIP_VLA.cfg`（has_vio / dbg_module_name）
+- `t.tcl`（IP 自身综合链：design.analyze→rtlsyn→tdomap -no_ioins→nl.write）
+
+**CLI 化路径已打通一半**：hqbuddy 可按此契约调起向导（半自动），或仿 vio.py
+内嵌模板直接生成 .v（属性行参数化）——probe 端口定义在向导"信号"页收集，
+模板化时需解析 hqip 的 probe_port_N。
+
 **CLI 可行性设计（未实现，按序）**：
 1. `-depth/-windows/-level/-reg`（R22 设计，.hqins 四段键已明）——改后必须 -run+重下载；
 2. MLA：`-add -la 1 ...`（LA_1 信号集）；触发/布防/capture 按 la_num 循环，
