@@ -53,6 +53,7 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 执行记录（时间序）
 
+- 09-16 03:10 R36b 收账：`-vla -gen` 上线并端到端验证（调起契约=R34b 逐字一致；产物自动检测+Next 指引）；docs 三处同步；exe 重建安装。
 - 09-16 02:40 R35 收账：-copy_prj 实现并验收（5 文件拷贝+路径改写+时间戳重建；
   -filelist/-init 双验证复制工程在新目录完整可用）。README/hqbuddy.md 同步。
 - 09-16 01:55 R34b 收账：**hq_vla_ins.exe 调用契约捕获成功**（-device/-lang/
