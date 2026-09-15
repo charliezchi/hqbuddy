@@ -105,7 +105,11 @@ Debug:
                                         Register named probes (bit order = registration order)
   -vio -read [-loop N] [-interval s]    Read input probes (hex/dec per probe)
   -vio -write <name>=<val>[,...]        Drive output probes (val: dec/0x/0b)
-  -report [<dir>|<.hqprj>]              Digest main-flow reports: Fmax/WNS/utilization/bit files
+  -report [<dir>|<.hqprj>] [-paths N]   Digest main-flow reports: Fmax/WNS/utilization/bit files
+                                        (-paths N: extract N worst paths from slack report)
+  -insight -selftest [-signal s] [-value N]
+                                        Regression selftest: arm+capture, verify samples
+                                        increment by 1 per cycle (deterministic counter design)
 """)
 
 

@@ -344,6 +344,9 @@ def _fold_same_signal(a: dict, b: dict) -> dict:
             if y["op"] == "X":
                 return {**x}
             if x["op"] == "BOTH" or y["op"] == "BOTH" or x["op"] != y["op"]:
+                if x["op"] != "BOTH" and y["op"] != "BOTH" and x["op"] != y["op"]:
+                    print(f"Note: {x['signal']} 的 {x['op']} + {y['op']} 折叠为 BOTH"
+                          f"（硬件无方向组合单元，等效于双沿都触发）")
                 return {**x, "op": "BOTH"}
             return {**x}
 

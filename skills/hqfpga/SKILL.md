@@ -51,6 +51,7 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 - `references/download.md` — cable.exe 下载调试（检测开发板、下载 bin，要下载/连接开发板时读）
 - `references/insight.md` — HqInsight 在线逻辑分析仪全 CLI 流程（选信号、触发条件、抓波形为 VCD，做在线调试时读）
 - `references/vio.md` — VIO 虚拟 IO 全 CLI 流程（运行时读/驱动设计信号，不重编译；含与 LA 的互斥关系）
+- `references/thirdparty_synthesis.md` — 第三方综合（Synplify/Vivado → EDIF → HqFpga P&R → bin）全 CLI 链路与 EDF→Verilog 转换、第三方网表+VLA 调试边界（用户要求用第三方综合工具时必读）
 
 ## 注意事项
 

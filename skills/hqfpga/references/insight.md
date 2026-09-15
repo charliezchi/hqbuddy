@@ -156,6 +156,14 @@ hqbuddy -insight -capture -o hqins_run/hq_import/run1   :: 自定义输出前缀
 - GUI 调试运行前要在已标记信号列表里选中触发信号行，否则报"请先选择一个LA触发信号"。
 - GUI 运行会清理同目录旧调试产物；CLI 侧用 `-o` 命名可避免被清/混淆。
 
+## 波形判读补充：overflow=True 时的触发点语义（R27 观察）
+
+`-capture` 输出 `(pointer=N, overflow=True)` 时表示 LA 存储已回绕、触发事件不在
+缓冲起点附近：trigger_event 标记仍插在固定 offset（如 #128），但该位置的样本值
+**不再对应触发时刻**（板上已运行很久，任何满足条件的时刻都可能触发过）。
+判读规则：overflow=False 时触发点样本值必须严格满足条件；overflow=True 时只能
+验证"缓冲内存在满足条件的时刻"，不能拿标记点单样本来判 PASS/FAIL。
+
 ## 回归自测（-selftest）
 
 HqFPGA 升级或环境变化后，一条命令验证整条 insight 链路没坏：
