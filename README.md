@@ -457,6 +457,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11）        |
 | `-add <files...>`                   | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程         |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
+| `-copy_prj <src.hqprj> <dst_dir>`   | 复制工程（源码+约束+.hqprj）到新目录并改写 FILE 路径为 `$WORK_DIR$` 相对引用 |
 | `-set_top <name>`                   | 设置顶层模块`TOP_MODULE`                                             |
 | `-clean [-force]`                   | 按`clean_list.json` 清理工程目录，`-force` 跳过确认                |
 | `-ipgen [<file>] [-lang <lang>]`    | 根据`.hqip` 生成 IP 网表，省略时自动检测                             |

@@ -667,6 +667,94 @@ def cmd_add(args):
         print(f"Updated: {hqprj_abs}")
 
 
+def cmd_copy_prj(args):
+    """Copy a project (sources + constraints + .hqprj) to a new directory and
+    rewrite every FILE_SRC/FILE_TC/FILE_PC to $WORK_DIR$/... of the copy, so
+    the copied project builds from its own files (R29: absolute-path carry-over)."""
+    if not args or len(args) > 2 or args[0].startswith('-'):
+        print("Usage: hqbuddy -copy_prj <src.hqprj> <dst_dir>")
+        sys.exit(1)
+    src_hqprj = os.path.abspath(args[0])
+    dst_dir = os.path.abspath(args[1] if len(args) == 2
+                              else os.path.splitext(os.path.basename(src_hqprj))[0] + "_copy")
+    if not os.path.isfile(src_hqprj):
+        print(f"Error: file not found: {src_hqprj}")
+        sys.exit(1)
+    if os.path.abspath(os.path.dirname(src_hqprj)) == dst_dir:
+        print("Error: destination directory equals source directory")
+        sys.exit(1)
+
+    src_lines = open(src_hqprj, encoding="utf-8", errors="replace").read().splitlines()
+    src_work = os.path.dirname(src_hqprj)
+    new_name = os.path.basename(dst_dir)
+
+    copies = []   # (src_abs, new_rel)
+    out_lines = []
+    time_src, time_cst = [], []
+
+    def rewrite(rel_line_kind, raw):
+        """Copy one referenced file under dst_dir; return new $WORK_DIR$ entry."""
+        path = raw.replace("$WORK_DIR$", src_work + os.sep)
+        path = os.path.normpath(path)
+        if not os.path.isfile(path):
+            print(f"Warning: referenced file missing, skipped: {raw}")
+            return raw
+        inside = os.path.commonpath([os.path.normcase(path), os.path.normcase(src_work)])                  == os.path.normcase(src_work)
+        rel = (os.path.relpath(path, src_work) if inside
+               else os.path.join("_external", os.path.basename(path)))
+        dst_file = os.path.join(dst_dir, rel)
+        os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+        shutil.copyfile(path, dst_file)
+        copies.append((path, dst_file))
+        new_rel = rel.replace(os.sep, "/")
+        stamp = str(int(os.path.getmtime(path)))
+        (time_src if rel_line_kind == "FILE_SRC" else time_cst).append(stamp)
+        return f"{rel_line_kind}=$WORK_DIR${new_rel}"
+
+    for ln in src_lines:
+        st = ln.strip()
+        if st.startswith("FILE_SRC=") and st != "FILE_SRC=NONE":
+            out_lines.append(rewrite("FILE_SRC", st.split("=", 1)[1]))
+        elif st.startswith("FILE_TC=") and st != "FILE_TC=NONE":
+            out_lines.append(rewrite("FILE_TC", st.split("=", 1)[1]))
+        elif st.startswith("FILE_PC=") and st != "FILE_PC=NONE":
+            out_lines.append(rewrite("FILE_PC", st.split("=", 1)[1]))
+        elif st.startswith("FILE_TIME"):
+            continue  # re-emitted below with fresh counts
+        elif st.startswith("PROJ_NAME="):
+            out_lines.append(f"PROJ_NAME={new_name}")
+        else:
+            out_lines.append(ln)
+
+    # re-insert time entries after the last FILE_SRC/TC/PC line
+    final = []
+    for ln in out_lines:
+        final.append(ln)
+        if ln.startswith("FILE_SRC=") or ln.startswith("FILE_TC=") or ln.startswith("FILE_PC="):
+            last = ln
+    if time_src:
+        for t in time_src:
+            final.insert(final.index(last) + 1, f"FILE_TIME={t}")
+    # find position after constraint entries (FILE_TC/PC block end) for FILE_TIME_CST
+    if time_cst:
+        idx = max((i for i, l in enumerate(final)
+                   if l.startswith(("FILE_TC=", "FILE_PC="))), default=None)
+        if idx is not None:
+            for j, t in enumerate(time_cst):
+                final.insert(idx + 1 + j, f"FILE_TIME_CST={t}")
+
+    os.makedirs(dst_dir, exist_ok=True)
+    dst_hqprj = os.path.join(dst_dir, new_name + ".hqprj")
+    with open(dst_hqprj, "w", encoding="utf-8") as f:
+        f.write(chr(10).join(final) + chr(10))
+    soc.refresh_hqprj_times(dst_hqprj)
+    print(f"[OK] Project copied: {src_hqprj}")
+    print(f"     -> {dst_hqprj}  ({len(copies)} files)")
+    for s_abs, d_abs in copies:
+        print(f"     {s_abs}  ->  {d_abs}")
+    print("Tip: 运行 hqbuddy -filelist <dst.hqprj> 验证路径解析。")
+
+
 def cmd_refresh_time(args):
     """Refresh FILE_TIME/FILE_TIME_CST entries to match FILE_SRC/FILE_TC/FILE_PC.
 
@@ -1348,6 +1436,11 @@ def main():
     # Refresh timestamps
     if first == '-refresh_time':
         cmd_refresh_time(args[1:])
+        return
+
+    # Copy project to a new directory (rewrite FILE paths)
+    if first == '-copy_prj':
+        cmd_copy_prj(args[1:])
         return
 
     # Set top module

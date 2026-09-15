@@ -32,7 +32,7 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 | R32 | `-insight -depth/-windows/-level` 实现+板上验证 | T1/T4 | ✅ 写入/校验/幂等全通过；发现 -run 不消费深度（S1）→ capture 不一致拒绝已上线；windows 仅写入 |
 | R33 | -edf2v / -netlist_build 实现（第三方 TCL 链产品化） | T3 | ✅ 5/5 验收 PASS（bin 同尺寸）；smoke 通过；docs 同步。ModelSim 门级仿真链移 R34b |
 | R34 | 第三方网表+VLA：GUI 路径探索（computer-use：hqui 生成 VLA IP 的入口与产物格式） | T4/T2 | ✅ 生成链摸清（ipdepot vla + hq_vla_ins.exe 独立生成器）；CLI 生成不可行（向导参数 GUI 收集）；突破路径=抓真实命令行（R34b） |
-| R35 | -copy_prj 实现（复制工程+改写 FILE_SRC 路径，R29 发现） | T3 | 待做 |
+| R35 | -copy_prj 实现（复制工程+改写 FILE_SRC 路径，R29 发现） | T3 | ✅ 实现并双验证（-filelist/-init） |
 | R36 | 小项清理：报错文案中英统一；片选 cnt[7] vs cnt[7:7] 行为；-vio -read -interval | T1-T3 | 待做 |
 
 小项池：陈旧布防代际自动检测（R26 S2）；overflow 判读已入文档（R27）。
@@ -53,6 +53,8 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 执行记录（时间序）
 
+- 09-16 02:40 R35 收账：-copy_prj 实现并验收（5 文件拷贝+路径改写+时间戳重建；
+  -filelist/-init 双验证复制工程在新目录完整可用）。README/hqbuddy.md 同步。
 - 09-16 01:55 R34b 收账：**hq_vla_ins.exe 调用契约捕获成功**（-device/-lang/
   -output_module/-output_fname/-output_dir/-hq_exe），产物四件套（xsIP_VLA.v
   102KB + hqip + cfg + t.tcl）已留存 r21a/ipcore_dir/VLA/；HQ_VLA0 属性行=配置

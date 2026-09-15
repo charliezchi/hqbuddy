@@ -521,3 +521,12 @@ skills/hqfpga/references/insight.md 与本日志。
   xsIP_VLA.hqip（INI 全参数）、xsIP_VLA.cfg（has_vio）、t.tcl（IP 自身综合链）
 - **意义**：`-vla -gen` 的参数契约已拿到——可仿 vio.py 模板化生成 .v
   （属性行参数化），或直接调起向导半自动化；.hqprj 未被向导改动（FILE_SRC 无变化）
+
+## Round 35 — -copy_prj 实现（第二夜，离线）
+- **实现**：`hqbuddy -copy_prj <src.hqprj> <dst_dir>`——源文件/约束按原相对结构
+  拷贝（工程外的文件归入 _external/），FILE_SRC/TC/PC 全部改写
+  `$WORK_DIR$<rel>`，PROJ_NAME 改为新目录名，时间戳条目按文件数重建
+  （soc.refresh_hqprj_times 复用）
+- **验收**：r21a → r36cp：5 文件拷贝；.hqprj 字段核对（相对引用+PROJ_NAME+
+  FILE_TIME×3+FILE_TIME_CST×2）；`-filelist` 解析到新目录；**`-init` 预检+
+  elaborate 全过（复制工程在新位置完整可用——R29 痛点闭环）**
