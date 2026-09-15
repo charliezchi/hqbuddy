@@ -28,7 +28,7 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 | # | 主题 | 轨道 | 状态 |
 |---|---|---|---|
 | R30 | 第三方综合链路盲评：agent 只按新 skill 文档从零复现，挑文档毛病 | T3/新 | ✅ 链路通；10 条文档缺陷全数补齐（.prj 模板/文件衔接/约束前置/退出码语义/bitgen 假成功/端点全名等） |
-| R31 | 边沿方向专项：RTL 加 1-bit 直出信号 → -add → -run → RISE/FALL 方向核验（清 R25/R26 S2 遗留） | T1 | 待做 |
+| R31 | 边沿方向专项：专用 1-bit 翻转信号核验 | T1 | ✅ 边沿语义正确，R25 恒真结论推翻；混位宽损坏复现→-add 警告已加（3.13.4） |
 | R32 | R22-C 实现：`-insight -depth N [-windows W] [-level L]`（写 .hqins 四段 + 提示必须 -run；板上盲测 depth=2048 生效） | T1/T4 | 待做 |
 | R33 | EDF→Verilog 网表 ↔ ModelSim 门级仿真链验证（modelsim.md + 第三方网表 a.v） | T3 | 待做 |
 | R34 | 第三方网表+VLA：GUI 路径探索（computer-use：hqui 生成 VLA IP 的入口与产物格式） | T4/T2 | 待做 |
@@ -37,6 +37,20 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 小项池：陈旧布防代际自动检测（R26 S2）；overflow 判读已入文档（R27）。
 
+## 今晚探索新增候选（待排入队列，主会话 23:10 离线探测补充）
+
+- **T-A**：hqbuddy 新命令 `-edf2v <a.edif> [-o a.v]`（一键 EDF→Verilog，封装
+  dv.setup+edif.read+nl.write；第三方协同高频动作）
+- **T-B**：hqbuddy 新命令 `-netlist_build <a.edif> --upc <u> --sdc <s> -o bin`
+  （一键第三方网表 P&R+bitgen+产物校验；今晚 pnr.tcl 的产品化）
+- **T-C**：第三方网表流程的报告产出（pnr.tcl 加 nl.report/ta.report → `-report`
+  兼容；当前第三方流程无 fmax/slack 报告可看）
+- **T-D**：`impl.guide.set -keep_hier` 对第三方网表的层次保留（利于调试定位）
+- **T-E**：VLA IP 生成入口（hqui 的 IP 生成器里 VLA/VIO 参数 → .v/.prj 产物
+  格式逆向，为 009 的 CLI 化铺路）
+- **T-F**：`hqbuddy -synprj <rtl...> -device <part>` 生成 Synplify .prj 模板
+  （R30 缺陷 #1 的工具化）
+
 ## 执行记录（时间序）
 
 - 09-15 22:30 主会话启动 R30（新 skill 文档盲评，agent 已派）。板载 r30syn.bin
@@ -44,6 +58,11 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 - 09-15 23:05 R30 收账：链路通（Synplify 路线独立复现成功并上板）；文档 10 条缺陷
   （3 硬缺口+退出码语义+bitgen 假成功等）全部补齐进 thirdparty_synthesis.md。
   板载 r30tb 复现 bin（agent 下载验证）。
+
+- 09-15 23:55 R31 收账：边沿方向【正确】（9/9 + 负控）；R25 恒真误判推翻（坏打包
+  数据所致）；S1 混位宽复现 → -add 混位宽警告上线（板上实测 [1,8] 触发）；
+  overflow 判读规则按 R31 实证改写。主会话误删 cnt 已恢复；工程=干净基线
+  （cnt+lfsr，EQ 200 AND NE 0），bit 已同步下载。小项池新增：-del 段错误（第2次观察）。
 
 ## 下一轮建议（下一次定时触发执行）
 

@@ -1705,6 +1705,13 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
     _rewrite_hqins_sections(proj, sig_info, la_info)
     _regenerate_ddf(proj, sig_info, la_info)
     print(f"[OK] Signal added: {name} (type={stype}, clk={clk_name})")
+    # Mixed-width probe sets corrupt storage packing silently (R25+R31: 8b+8b
+    # clean, +1b => 2/3 channels garbage with zero warnings). Warn proactively.
+    widths = {s["msb"] - s["lsb"] + 1 for s in _collect_signals(sig_info)}
+    if len(widths) > 1:
+        print(f"Warning: 探针位宽不一致（{sorted(widths)}）——存储打包实测会静默错位"
+              f"（R25/R31：8b+8b 正常，混入 1b 后其它通道数据损坏）。"
+              f"建议探针集合保持同位宽，或接受数据不可信的风险后再 -run。")
     print("Tip: run -insight -run to rebuild the instrumented bitstream.")
 
 
