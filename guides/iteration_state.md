@@ -53,6 +53,14 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 执行记录（时间序）
 
+- 09-16 07:05 R41 收账：VIO 抽测通过——r23vio bit 下载成功；`-read -loop 3`
+  cnt 槽持续变化（167→…）、fb 槽恒 0（分化行为正确）。板上已恢复 r21a 基线 bit。
+  无异常，一句话收尾。
+
+- 09-16 06:58 定时轮启动 R41 静默回归（VIO 抽测）。**判据**：下载 r23vio bit 后
+  `-vio -read -loop 3` cnt 槽持续变化、fb 槽恒 0；`-vla -gen -dir` 契约调用再次
+  核对（进程参数=CIM 一致）。完成后板上恢复 r21a 基线 bit。
+
 - 09-16 06:25 R40 收账：README 51 个参数旗标与 -h 全量比对——发现 -copy_prj 缺
   帮助行（实现时漏加），已补齐并重建安装（README vs help vs CLI 三方对齐）。
   其余 50 项全部在案。

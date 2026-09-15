@@ -577,3 +577,7 @@ skills/hqfpga/references/insight.md 与本日志。
 ## Round 40 — 静默回归（文档一致性审计）
 - README 参数表 51 个旗标 vs `-h` 全量比对：发现 `-copy_prj` 缺帮助行
   （R35 实现时漏加）——已补齐、重建安装；其余 50 项三方对齐。
+
+## Round 41 — 静默回归（VIO 抽测，r23vio）
+- r23vio bit 重下载后 `-read -loop 3`：cnt 槽持续变化、fb 槽恒 0（分化正确）。
+  板上已恢复 r21a 基线 bit。无异常。
