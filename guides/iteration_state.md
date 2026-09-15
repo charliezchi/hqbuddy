@@ -31,7 +31,7 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 | R31 | 边沿方向专项：专用 1-bit 翻转信号核验 | T1 | ✅ 边沿语义正确，R25 恒真结论推翻；混位宽损坏复现→-add 警告已加（3.13.4） |
 | R32 | `-insight -depth/-windows/-level` 实现+板上验证 | T1/T4 | ✅ 写入/校验/幂等全通过；发现 -run 不消费深度（S1）→ capture 不一致拒绝已上线；windows 仅写入 |
 | R33 | -edf2v / -netlist_build 实现（第三方 TCL 链产品化） | T3 | ✅ 5/5 验收 PASS（bin 同尺寸）；smoke 通过；docs 同步。ModelSim 门级仿真链移 R34b |
-| R34 | 第三方网表+VLA：GUI 路径探索（computer-use：hqui 生成 VLA IP 的入口与产物格式） | T4/T2 | 待做 |
+| R34 | 第三方网表+VLA：GUI 路径探索（computer-use：hqui 生成 VLA IP 的入口与产物格式） | T4/T2 | ✅ 生成链摸清（ipdepot vla + hq_vla_ins.exe 独立生成器）；CLI 生成不可行（向导参数 GUI 收集）；突破路径=抓真实命令行（R34b） |
 | R35 | -copy_prj 实现（复制工程+改写 FILE_SRC 路径，R29 发现） | T3 | 待做 |
 | R36 | 小项清理：报错文案中英统一；片选 cnt[7] vs cnt[7:7] 行为；-vio -read -interval | T1-T3 | 待做 |
 
@@ -53,12 +53,24 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 执行记录（时间序）
 
+- 09-16 01:10 R34 探索注记：SmartScreen 拦截 hqui 启动（每次新启动都弹），已按
+  弹窗确认运行；两个孤儿 hqui 已清理。
+
+- 09-16 00:59 定时轮启动 R34（VLA GUI 探索，computer-use 亲自）。**判据先于执行**：
+  ①在 hqui 里定位 VLA IP 的生成/例化入口（IP 生成器或独立向导），记录菜单路径；
+  ②捕获 VLA IP 产物（.v 模板的端口/参数、配套 .prj/ddf 雏形）到测试区留存；
+  ③确认工具栏【VLA 调试】按钮的位置与前置条件（tip 009 说编译前灰色）；
+  ④产出：GUI 地图 §8 增补 VLA IP 生成节 + CLI 化可行性结论；全程不布防、不下载。
+
 - 09-15 22:30 主会话启动 R30（新 skill 文档盲评，agent 已派）。板载 r30syn.bin
   （Vivado 网表编译产物，已验下载）。agent 会用自己的构建覆盖，属预期。
 - 09-15 23:05 R30 收账：链路通（Synplify 路线独立复现成功并上板）；文档 10 条缺陷
   （3 硬缺口+退出码语义+bitgen 假成功等）全部补齐进 thirdparty_synthesis.md。
   板载 r30tb 复现 bin（agent 下载验证）。
 
+- 09-16 01:30 R34 收账：VLA IP 生成链=ipdepot vla + 独立生成器 hq_vla_ins.exe
+  （向导参数 GUI 收集，无参挂起；ipcreator -gen 静默）；VLA调试按钮灰置判据=
+  insight.check has_vla。GUI 全程未保存、未布防。hqui 已关闭。
 - 09-16 00:45 R33 收账：netlist.py 新增（_run_tcl_streamed/_fail_on_tcl_errors/
   run_edf2v/run_netlist_build）；dispatch+help+README 同步；验收 5/5（含 ERROR(
   汇总防御意外实证）；exe 重建安装 smoke 通过。

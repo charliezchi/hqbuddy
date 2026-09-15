@@ -493,3 +493,16 @@ skills/hqfpga/references/insight.md 与本日志。
 - **素材勘误**：netlist_build 验收约束应为 r30syn\cons（R31 改过 r21a\cons 加
   dbg_out 脚，与 R30 的 a.edif 端口不匹配——正确地被 CDEV008 拦下）
 - exe 已重建安装，smoke：安装版 -edf2v 产出 smoke.v 含 13×xsDFFSA ✓
+
+## Round 34 — 第三方网表+VLA GUI 探索（第二夜，ipdepot 逆向 + hqui 实测）
+- **任务**：定位 VLA IP 生成链与 hqui 入口，评估技巧 009 流程的 CLI 化路径
+- **结果**：链路结构摸清——VLA IP 属 ipdepot `vla` 条目，由独立生成器
+  `hq_vla_ins.exe` 产出（`[IPGEN] INDEPENDENT=YES` 注册）；hqui 流程栏有
+  【VLA调试】按钮，灰置判据 = `insight.check has_vla`（网表含 VLA 才为真）；
+  `checkVLAandVIO` TCL 在 runSynthesis.tcl 三处调用
+- **可行性结论**：生成器向导需 GUI 收集参数（VIO 勾选/端口位宽），无参运行
+  挂起、`ipcreator -gen` 静默无产物 → **CLI 生成 VLA IP 当前不可行**。突破路径：
+  GUI 向导跑一次 + 抓真实命令行（Procmon/wmic），拿到 hq_vla_ins.exe 参数格式
+  后即可像 `-vio -gen` 一样产品化（TODO 排队）
+- **顺带记录**：hqui SmartScreen 每次新启动都拦截（无签名），自动化需处理弹窗；
+  欢迎页最近工程列表含本机历史路径（隐私注意）

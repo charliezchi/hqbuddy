@@ -131,6 +131,16 @@ trigger_expr.cfg/trigger_cond.cfg 转成 JSON 并删除 .cfg；la_num>1 时自�
 （TDO 长度 = 4×窗口数×LA 数）；`la_opt_list` 掩码决定哪些 LA 参与连续触发不支持
 （RE 旧结论）。TCL 族：`insight.sealion.mla.condition_te/offset/reset/status`+`mlas.status`。
 
+**VLA IP 生成链（R34 实测）**：VLA IP 属 ipdepot 的 `vla` 条目
+（`build/ipcreator/sup_files/ipdepot/vla/`），由**独立生成器**
+`_ipgen_/hq_vla_ins.exe` 产出（`_ipgen_.desc` 注册 `[IPGEN] INDEPENDENT=YES`）。
+hqui 欢迎页/流程栏有【VLA调试】【VIO调试】按钮；`insight.check has_vla/has_vio`
+TCL 是灰置判据（编译后网表含 VLA 才置 1）。生成器向导需 GUI 收集参数
+（VIO 勾选、输入/输出端口数与位宽——tip 009），无参运行挂起待输入，
+`ipcreator.exe -gen <VLA.xml>` 亦静默无产物 → **CLI 生成 VLA IP 尚不可行**，
+下一步需 GUI 向导跑一次并抓取其命令行/产物（Procmon 或 wmic）拿到
+hq_vla_ins.exe 的真实调用格式。
+
 **CLI 可行性设计（未实现，按序）**：
 1. `-depth/-windows/-level/-reg`（R22 设计，.hqins 四段键已明）——改后必须 -run+重下载；
 2. MLA：`-add -la 1 ...`（LA_1 信号集）；触发/布防/capture 按 la_num 循环，
