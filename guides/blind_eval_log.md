@@ -562,3 +562,6 @@ skills/hqfpga/references/insight.md 与本日志。
   取证：SRL16E 模型 Q=D 延迟 3 拍、LUT INIT=0x9669 解码吻合）
 - **S3 补文档**：vsim -c 需 `-voptargs=+acc` 否则 VCD 只剩 header；VCD 等值网
   复用 id + 整型按二进制串转储两个解析坑——均入 modelsim.md
+
+## Round 37 — 静默回归（r21a 基线抓取）
+- 触发点 cnt=200 严格、lfsr=0x80 满足条件；状态零漂移。无异常。

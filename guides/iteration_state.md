@@ -53,6 +53,9 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 执行记录（时间序）
 
+- 09-16 04:20 R37 静默回归：r21a 基线 capture——触发点 cnt=200(0xc8) 严格、
+  lfsr=0x80 满足 NE 0；状态零漂移。无异常，一句话收尾。
+
 - 09-16 04:25 R34c 收账：ModelSim 门级仿真【可用】——simlib 重建 454 单元 0 错、vlog 零错、25µs 无 error、LFSR 可观测规则 2492 拍零失配（周期 255 实证）；LFSR 可观测等价式修正 + vsim -voptargs=+acc / VCD 解析坑入 modelsim.md。无板卡交互。
 
 - 09-16 03:38 定时轮启动 R34c（ModelSim 门级仿真，离线）。**判据先于执行**：
