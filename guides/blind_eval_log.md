@@ -565,3 +565,7 @@ skills/hqfpga/references/insight.md 与本日志。
 
 ## Round 37 — 静默回归（r21a 基线抓取）
 - 触发点 cnt=200 严格、lfsr=0x80 满足条件；状态零漂移。无异常。
+
+## Round 38 — 静默回归（report/filelist/status 抽查）
+- -report 对 netlist 流程工程正确输出"无报告"摘要（无 .rpt 属预期）；
+  -filelist 正常；-insight 状态与基线一致。无异常。

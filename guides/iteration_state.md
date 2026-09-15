@@ -53,6 +53,10 @@ technology 必须写 `Artix7` 无空格、`-family` 在 FT091226 报 DVST001 要
 
 ## 执行记录（时间序）
 
+- 09-16 04:59 R38 静默回归：-report 对第三方网表工程正确输出"无报告"摘要
+  （netlist 流程无 .rpt 属预期）；-filelist 对 r36cp 正常；-insight 状态与基线
+  一致。无异常，一句话收尾。
+
 - 09-16 04:20 R37 静默回归：r21a 基线 capture——触发点 cnt=200(0xc8) 严格、
   lfsr=0x80 满足 NE 0；状态零漂移。无异常，一句话收尾。
 
