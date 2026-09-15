@@ -569,3 +569,7 @@ skills/hqfpga/references/insight.md 与本日志。
 ## Round 38 — 静默回归（report/filelist/status 抽查）
 - -report 对 netlist 流程工程正确输出"无报告"摘要（无 .rpt 属预期）；
   -filelist 正常；-insight 状态与基线一致。无异常。
+
+## Round 39 — 静默回归（-copy_prj 工程 -init 幂等）
+- r36cp 双次 -init 产出 hq_import.hqins md5 一致（R18 幂等性在复制工程上成立）。
+  无异常。
