@@ -20,7 +20,8 @@ hqbuddy -build <工程>.hqprj                :: 标准实现流程（含 HQ_VIO 
 hqbuddy -cable --sealion <bin> --model SA30K --Burst
 hqbuddy -vio -reg -in cnt:8 -out led:2     :: 登记探针名/位宽（hqvla_vio/probes.json）
 hqbuddy -vio -read                         :: 读输入探针（0x.. 每探针一行）
-hqbuddy -vio -read -loop 5 -interval 0.5   :: 连续读 5 次
+hqbuddy -vio -read -loop 5 -interval 0.5   :: 连续读 5 次（-interval 单位秒，缺省 0.5；
+                                           :: 高频轮询可 -interval 0 连续扫，见 R23 欠采样提醒）
 hqbuddy -vio -write led=0b10               :: 驱动输出探针（写完即生效）
 hqbuddy -vio                               :: 查看探针登记
 ```

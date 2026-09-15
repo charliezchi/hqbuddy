@@ -530,3 +530,13 @@ skills/hqfpga/references/insight.md 与本日志。
 - **验收**：r21a → r36cp：5 文件拷贝；.hqprj 字段核对（相对引用+PROJ_NAME+
   FILE_TIME×3+FILE_TIME_CST×2）；`-filelist` 解析到新目录；**`-init` 预检+
   elaborate 全过（复制工程在新位置完整可用——R29 痛点闭环）**
+
+## Round 36 — 小项清理（第二夜，离线）
+- **报错文案中英统一**：insight.py 7 条英文报错改中文并补操作指引
+  （signal not found→"设计中找不到信号（用 -ls 查看）"、sample-only→补完整补救、
+  edge requires 1-bit→补替代方案、already added/数据库缺失等）；
+  板上实测新文案生效（-trig nosig RISE → "设计中找不到信号/trigger-capable:
+  cnt, lfsr"；lfsr RISE → "边沿触发要求 1 位信号…"），状态零漂移
+- **文档查漏**：vio.md 补 -interval 单位与缺省值+欠采样提醒交叉引用；
+  hqbuddy.md 补 -edf2v/-netlist_build/-copy_prj 三条目
+- exe 重建安装

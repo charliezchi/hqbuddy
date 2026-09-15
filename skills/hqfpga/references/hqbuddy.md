@@ -95,3 +95,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -vio -write <name>=<val>[,...]` — 运行时驱动输出探针
 - 详细流程/与 LA 互斥关系/坑：`references/vio.md`
 - `hqbuddy -copy_prj <src.hqprj> <dst_dir>` — 复制工程到新目录：源文件/约束按原相对结构拷贝，FILE_SRC/TC/PC 全部改写为 `$WORK_DIR$` 相对引用，PROJ_NAME 改为新目录名，时间戳条目自动重建。解决"直接复制目录后工程仍引用旧绝对路径"的问题（R29）
+
+- `hqbuddy -edf2v <a.edif> [-o <a.v>] [-device <part>]` — 第三方 EDIF 网表转 XIST 原语 Verilog（详见 thirdparty_synthesis.md）
+- `hqbuddy -netlist_build <a.edif> --upc <u.upc> --sdc <s.sdc> [-o <bin>] [-device <part>]` — 第三方网表一键 P&R+位流（含 flatten/产物校验/目录创建）
+- `hqbuddy -copy_prj <src.hqprj> <dst_dir>` — 复制工程到新目录（改写 FILE 路径，见 -refresh_time 行）

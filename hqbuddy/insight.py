@@ -295,16 +295,16 @@ def _check_trigger_signals(proj: dict, parsed: dict) -> list:
         match = [s for s in signals if s["name"] == cond["signal"]]
         if not match:
             avail = ", ".join(s["name"] for s in signals if s["sample_type"] in (3, 4))
-            print(f"Error: signal not found in HqInsight project: {cond['signal']}")
+            print(f"Error: 信号不在 HqInsight 工程中: {cond['signal']}（先 -insight -add 登记并 -run+下载）")
             print(f"       trigger-capable signals: {avail or '(none)'}")
             sys.exit(1)
         sig = match[0]
         if sig["sample_type"] not in (3, 4):
-            print(f"Error: signal is sample-only, cannot trigger: {cond['signal']}")
+            print(f"Error: 信号 {cond['signal']} 是仅采样（sample-only），不能作为触发；补救：-del 后以 -type both 重新 -add，再 -run+下载")
             print(f"       补救：-del {cond['signal']} 后以 -type both 重新 -add，再 -run + 下载。")
             sys.exit(1)
         if cond["kind"] == "edge" and sig["msb"] != sig["lsb"]:
-            print(f"Error: edge trigger requires a 1-bit signal: {cond['signal']}")
+            print(f"Error: 边沿触发要求 1 位信号: {cond['signal']}（多位总线请改用算术/范围条件，或登记 1 位片选信号）")
             sys.exit(1)
         result.append(sig)
     return result
@@ -1513,7 +1513,7 @@ def _load_dump_json(proj: dict) -> list:
     """Load the elaborate signal database; returns the modules list."""
     dump = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_parser_staticelab_dump.json")
     if not os.path.isfile(dump):
-        print("Error: signal database not found. Run -insight -init first.")
+        print("Error: 找不到信号数据库——请先执行 -insight -init。")
         sys.exit(1)
     with open(dump, "r", encoding="utf-8") as f:
         return json.load(f).get("modules", [])
@@ -1746,7 +1746,7 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
             print(f"Error: 信号 {name} 存在于模块 {mods}，但与 -module 指定的模块不匹配。")
             print(f"       -module 应为模块名（可带 [N] 实例后缀），不能用实例路径片段（如 u_xxx）。")
             sys.exit(1)
-        print(f"Error: signal not found in design: {name}")
+        print(f"Error: 设计中找不到信号: {name}（用 -insight -ls 查看可用信号）")
         sys.exit(1)
     if len(matches) > 1:
         mods = ", ".join(c["module"] for c in matches)
@@ -1797,7 +1797,7 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
         clk_entry["modules_sample_data"].append(mod_data)
 
     if any(s["signal_name"] == name for s in mod_data["normal_signals"]):
-        print(f"Error: signal already added: {name}")
+        print(f"Error: 信号已登记过: {name}（重复 -add 无需执行）")
         sys.exit(1)
     key = {2: "sample_list", 3: "trigger_list", 4: "sample_and_trigger_list"}[stype]
     mod_data[key].append(name)
@@ -1872,7 +1872,7 @@ def del_signal(proj: dict, name: str) -> None:
         la["data_in_order"] = [n for n in la["data_in_order"] if not n.startswith(name + "__INS")]
         la["trig_in_order"] = [n for n in la["trig_in_order"] if not n.startswith(name + "__INS")]
     if not removed:
-        print(f"Error: signal not in HqInsight project: {name}")
+        print(f"Error: 信号不在 HqInsight 工程中: {name}")
         sys.exit(1)
     _rewrite_hqins_sections(proj, sig_info, la_info)
     _regenerate_ddf(proj, sig_info, la_info)
