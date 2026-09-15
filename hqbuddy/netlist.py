@@ -213,3 +213,75 @@ def run_netlist_build(edif_path: str | None, upc_path: str | None = None,
 
     size = os.path.getsize(bin_abs)
     print(f"[OK] Netlist bitstream written: {bin_abs} ({size} bytes)")
+
+
+def run_vla_gen(args: list) -> None:
+    """Handle 'hqbuddy -vla -gen [-name VLA] [-dir <dir>] [-device <part>]'.
+
+    Invokes the official VLA IP generator (hq_vla_ins.exe, same contract as
+    IP Creator's VLA wizard -- R34b captured) and waits for the generated
+    xsIP_VLA.v to appear.  The generator itself opens a config dialog
+    (signal count/depth/windows/VIO/trigger level); the user clicks 确定.
+    """
+    import subprocess
+    import time
+
+    def usage():
+        print("Usage: hqbuddy -vla -gen [-name VLA] [-dir <outdir>] [-device <part>]")
+        print("       Opens the VLA IP config dialog; generated files land in <dir>:")
+        print("       xsIP_VLA.v / xsIP_VLA.hqip / xsIP_VLA.cfg")
+        sys.exit(1)
+
+    if not args or args[0] != "-gen":
+        print("Error: unknown -vla option (supported: -gen)")
+        usage()
+    name, out_dir, device = "VLA", os.getcwd(), DEFAULT_DEVICE
+    i = 1
+    while i < len(args):
+        if args[i] == "-name" and i + 1 < len(args):
+            name = args[i + 1]; i += 2
+        elif args[i] == "-dir" and i + 1 < len(args):
+            out_dir = args[i + 1]; i += 2
+        elif args[i] == "-device" and i + 1 < len(args):
+            device = args[i + 1]; i += 2
+        else:
+            print(f"Error: unknown -vla option: {args[i]}")
+            usage()
+    out_dir = os.path.abspath(out_dir)
+    os.makedirs(out_dir, exist_ok=True)
+
+    hqfpga_path = _resolve_hqfpga()
+    gen_exe = os.path.normpath(os.path.join(os.path.dirname(hqfpga_path),
+                                            "..", "..", "ipcreator", "sup_files",
+                                            "ipdepot", "vla", "_ipgen_",
+                                            "hq_vla_ins.exe"))
+    if not os.path.isfile(gen_exe):
+        print(f"Error: VLA IP generator not found: {gen_exe}")
+        sys.exit(1)
+
+    cmd = [gen_exe, "-device", device, "-lang", "chs",
+           "-output_module", name,
+           "-output_fname", f"xsIP_{name}.v",
+           "-output_dir", out_dir.replace(os.sep, "/"),
+           "-hq_exe", hqfpga_path]
+    print(f"[i] Launching VLA IP wizard: {name} @ {out_dir}")
+    print("[i] 在弹出的「虚拟逻辑分析仪」对话框里配置信号个数/深度/窗口/VIO 后点确定")
+    subprocess.Popen(cmd, cwd=out_dir)
+
+    target = os.path.join(out_dir, f"xsIP_{name}.v")
+    deadline = time.time() + 600
+    print("[i] Waiting for generation (up to 600s; close the dialog to abort)...")
+    while time.time() < deadline:
+        time.sleep(2)
+        if os.path.isfile(target) and os.path.getsize(target) > 0:
+            hqip = target[:-2] + ".hqip"
+            print(f"[OK] VLA IP generated: {target} "
+                  f"({os.path.getsize(target)} bytes)")
+            if os.path.isfile(hqip):
+                print(f"     config: {hqip}")
+            print("Next: 在 RTL 里例化该模块（probe 端口接待观测信号），"
+                  "用第三方综合时例化末尾加 /* synthesis syn_noprune=1 */，"
+                  "然后 netlist_build 或标准流程编译。")
+            return
+    print("Error: 600s 内未检测到生成的 .v（向导被取消或生成失败）。")
+    sys.exit(1)

@@ -540,3 +540,12 @@ skills/hqfpga/references/insight.md 与本日志。
 - **文档查漏**：vio.md 补 -interval 单位与缺省值+欠采样提醒交叉引用；
   hqbuddy.md 补 -edf2v/-netlist_build/-copy_prj 三条目
 - exe 重建安装
+
+## Round 36b — -vla -gen 实现（第二夜，半自动 VLA IP 生成上线）
+- **实现**：`hqbuddy -vla -gen [-name VLA] [-dir <dir>] [-device <part>]`——
+  按 R34b 捕获的契约调起官方 hq_vla_ins.exe 向导，轮询检测 xsIP_VLA.v 生成
+  （超时 600s），成功后打印 hqip 路径与例化/syn_noprune/netlist_build 指引
+- **验证**：端到端通过——调起契约与 R34b 逐字一致（CIM 核对）；向导点确定后
+  hqbuddy 自动检测产物（xsIP_VLA.v 102,062B + hqip + cfg + t.tcl）
+- **定位**：免 IP Creator 导航的半自动生成；全自动模板化（属性行参数化）仍在
+  TODO（probe 端口结构随信号个数变化，需按 hqip 的 probe_port_N 解析）

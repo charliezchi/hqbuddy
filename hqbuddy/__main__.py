@@ -17,7 +17,7 @@ from .hqprj_parser import extract_filelist
 from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstream
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
-from .netlist import run_edf2v, run_netlist_build
+from .netlist import run_edf2v, run_netlist_build, run_vla_gen
 from .device import run_device
 from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
@@ -62,6 +62,8 @@ Project:
   -mcu_build [-p <file.uvprojx>]       Build MCU_Prj firmware via Keil UV4 (headless)
   -merge_bin <fpga.bin> <mcu.bin>      Merge FPGA+MCU bins for download (cable.exe)
      [-o <file>] [-model SA30K] [-dl]    (-dl: download after merge)
+  -vla -gen [-name VLA] [-dir <dir>] [-device <part>]
+                                        Launch the VLA IP generator dialog (writes xsIP_VLA.v/hqip/cfg)
   -edf2v <a.edif> [-o <file>]          Convert a third-party EDIF netlist to Verilog
      [-device <part>]                   (family SEAL, for gate-level sim)
   -netlist_build <a.edif> --upc <u.upc> --sdc <s.sdc>
@@ -1419,6 +1421,10 @@ def main():
         return
 
     # Third-party EDIF netlist -> Verilog
+    if first == '-vla':
+        run_vla_gen(args[1:])
+        return
+
     if first == '-edf2v':
         cmd_edf2v(args[1:])
         return

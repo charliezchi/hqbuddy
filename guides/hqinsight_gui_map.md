@@ -158,7 +158,8 @@ hq_vla_ins.exe -device <part> -lang chs -output_module VLA -output_fname xsIP_VL
 - `xsIP_VLA.cfg`（has_vio / dbg_module_name）
 - `t.tcl`（IP 自身综合链：design.analyze→rtlsyn→tdomap -no_ioins→nl.write）
 
-**CLI 化路径已打通一半**：hqbuddy 可按此契约调起向导（半自动），或仿 vio.py
+**CLI 化路径已打通一半**（R36b：`hqbuddy -vla -gen` 已上线——按下方契约调起
+向导并自动检测产物；全自动模板化仍在 TODO）：hqbuddy 可按此契约调起向导（半自动），或仿 vio.py
 内嵌模板直接生成 .v（属性行参数化）——probe 端口定义在向导"信号"页收集，
 模板化时需解析 hqip 的 probe_port_N。
 

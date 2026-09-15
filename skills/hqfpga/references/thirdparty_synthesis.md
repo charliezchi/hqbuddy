@@ -131,7 +131,9 @@ impl.bitgen.xist.seal r30syn.bin -bin
 原理：在 RTL 里例化 **VLA IP**（HqFpga 生成，可勾选带 VIO），随第三方综合进 EDIF；HqFpga FT090925+ 能解析网表里的 VLA IP，编译下载后用【VLA 调试】做在线抓波/VIO。
 
 - **约束**：VLA IP 只允许例化一次（多次报 JTAG 资源溢出），待观测信号统一汇总到单例 VLA；Synplify 必须加 `syn_noprune=1`。
-- **VLA IP 生成（R34b 已捕获契约）**：IP Creator 生成 VLA IP 时实际调起
+- **VLA IP 生成（R34b 契约 + R36b 产品化）**：`hqbuddy -vla -gen [-name VLA] [-dir <dir>] [-device <part>]`
+  一键调起官方生成向导（参数契约与 IP Creator 相同），生成完成后自动检测并提示下一步。
+  底层：IP Creator 生成 VLA IP 时实际调起
   `hq_vla_ins.exe -device <part> -lang chs -output_module VLA -output_fname
   xsIP_VLA.v -output_dir <dir> -hq_exe <hqfpga.exe>`，其向导收集
   信号个数/深度/窗口/VIO 等参数后产出 xsIP_VLA.v + xsIP_VLA.hqip + .cfg。
