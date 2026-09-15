@@ -465,3 +465,18 @@ skills/hqfpga/references/insight.md 与本日志。
 - **顺带**：3.13.4 的 BOTH 折叠 Note 板上核验通过；`-del` 时 hqfpga 偶发段错误
   再现一次（第 2 次观察，R18 曾见；重试即恢复，进小项池）
 - **板上终态**：r21a 干净基线（cnt+lfsr both，EQ 200 AND NE 0），bit 已同步
+
+## Round 32 — 采样参数 CLI 化（-depth/-windows/-level 实现+板上验证）
+- **实现**：`-insight -depth N [-windows W] [-level L]`（写 .hqins 三段，键形
+  0_LA:N；合法深度 256..65536 校验、窗口 2 的幂校验、触发位置上界
+  `depth/windows-5` 校验、重复值幂等不打印 Tip）
+- **板上验证结论**：写入/回读可靠、-run 后段保留；**但发现 -run 根本不消费
+  .hqins 深度**（ddf 与插桩 RAM ADDR_WIDTH=10 恒 1024）——深度对 bit 是纯文本
+- **S1 修复**：capture 深度泄漏静默错位（.hqins 2048 vs ddf 1024 → 触发点错位
+  +81、通道块重复）→ **capture 前校验 ddf 深度与 windows，不一致拒绝抓取**
+  （板上实测：不匹配→干净拒绝；对齐→cnt=200 健康抓取）
+- **S2 记录**：-windows 仅写入（布防/轮询/多 VCD 未实现，capture 检测到不一致
+  同样拒绝）；-insight 状态栏显示 bit 实际深度不一致提示；-level 可独立使用；
+  -h 已收录
+- **遗留**：深度生效需打通"插桩 IP 生成读 .hqins 深度"链路（TODO，候选方向：
+  逆向 GUI 写深度后 elaborate 的消费点）

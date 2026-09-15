@@ -474,6 +474,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-insight -init`                    | 初始化 HqInsight 工程（无需 GUI）                                      |
 | `-insight -ls [关键字]`             | 列出设计信号                                                           |
 | `-insight -add/-del <信号>`         | 添加/移除采样/触发信号                                                 |
+| `-insight -depth N [-windows W] [-level L]` | 采样参数（写 .hqins 深度/窗口/级数段；depth/windows 需 -run 重build生效，未生效时 capture 拒绝抓取防错位） |
 | `-insight -selftest [-signal s] [-value N]` | 回归自测：布防 → 抓取 → 校验样本连续且逐拍 +1（升级后必跑）      |
 | `-report [<dir>] [-paths N]`        | 报告摘要（Fmax/WNS/利用率/bit）；`-paths N` 另提取最差 N 条违例路径    |
 | `-cfg`                              | 用系统编辑器打开 config.json（scan_path + selected_build）               |

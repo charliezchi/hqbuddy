@@ -170,6 +170,27 @@ R27 观察到的标记点值不满足条件的现象未在受控实验中复现�
 exit 0 无任何警告。hqbuddy 3.13.4 起 `-add` 检测到位宽不一致会主动警告；
 **探针集合保持同位宽**，混位宽 bit 上的任何判读（含边沿方向）均无效。
 
+## 采样参数（-depth/-windows/-level，R32 实现）
+
+GUI「采样参数设置」对话框的 CLI 等价（写 .hqins 的 [MEMORY DEPTH INFO]/
+[TRIGGER MULTI-WINDOW]/[TRIGGER LEVEL]，键形 `0_LA:N`）：
+
+```bat
+hqbuddy -insight -depth 2048                 # 采样深度：256..65536（2 的幂）
+hqbuddy -insight -depth 2048 -windows 2      # 触发窗口数（2 的幂）
+hqbuddy -insight -depth 2048 -level 2        # 触发级数
+```
+
+**FT091226 实测边界（重要）**：
+- `-run` **不消费 .hqins 深度**——ddf 与插桩 RAM 恒按 1024 生成（`ADDR_WIDTH=10`），
+  写入其它深度后 bit 仍是 1024。深度真正生效需要打通"插桩 IP 生成读深度"链路（TODO）。
+- 深度不一致时 `-capture` 会**拒绝抓取**（`Error: .hqins 深度 (N) 与插桩 bit 实际
+  深度 (M, 见 ddf) 不一致`），防止静默错位；对齐：`-depth 1024`。
+- `-windows >1` 仅写入段；布防/状态轮询/多 VCD 的 capture 尚未实现，
+  capture 检测到 windows 不一致同样拒绝。
+- 触发位置约束：`0 <= offset <= depth/windows - 5`（默认 offset=128 需要
+  depth/windows >= 133），违反时 `-depth` 拒绝并提示。
+
 ## 回归自测（-selftest）
 
 HqFPGA 升级或环境变化后，一条命令验证整条 insight 链路没坏：

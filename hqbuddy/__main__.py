@@ -110,6 +110,10 @@ Debug:
   -insight -selftest [-signal s] [-value N]
                                         Regression selftest: arm+capture, verify samples
                                         increment by 1 per cycle (deterministic counter design)
+  -insight -depth N [-windows W] [-level L]
+                                        Sampling params (GUI 采样参数 dialog): write .hqins
+                                        sections. N in 256..65536; depth/windows need -run
+                                        +re-download to take effect (capture refuses on mismatch)
 """)
 
 

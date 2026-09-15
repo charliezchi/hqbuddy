@@ -138,7 +138,15 @@ def show_status(proj: dict) -> None:
 
     print(f"Project : {proj['hqins']}")
     print(f"Top     : {proj['top']}   Die: {proj['die']}")
-    print(f"Depth   : {depth or '?'}   Trigger position: {trig_pos or '?'}")
+    ddf_depth = None
+    if os.path.isfile(proj["ddf"]):
+        _m = re.search(r"<depth>(\d+)</depth>",
+                       open(proj["ddf"], encoding="utf-8", errors="replace").read())
+        ddf_depth = int(_m.group(1)) if _m else None
+    depth_txt = depth or "?"
+    if ddf_depth is not None and str(ddf_depth) != str(depth):
+        depth_txt += f"  (注意: 插桩 bit 实际深度 {ddf_depth}，与 .hqins 不一致——先 -depth {ddf_depth} 对齐)"
+    print(f"Depth   : {depth_txt}   Trigger position: {trig_pos or '?'}")
     print()
 
     info = _load_signal_info(proj)
@@ -903,6 +911,27 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
 
     sections = read_hqins(proj["hqins"])
     depth = int(_section_value(sections.get("MEMORY DEPTH INFO", [])) or 1024)
+    # Storage-architecture guard (R32): the instrumented bit's real depth lives
+    # in the ddf (<depth>N</depth>); -run does NOT consume the .hqins depth yet,
+    # so a mismatch means capture would silently produce misplaced data.
+    if os.path.isfile(proj["ddf"]):
+        ddf_txt = open(proj["ddf"], encoding="utf-8", errors="replace").read()
+        m_ddf_depth = re.search(r"<depth>(\d+)</depth>", ddf_txt)
+        if m_ddf_depth:
+            ddf_depth = int(m_ddf_depth.group(1))
+            if ddf_depth != depth:
+                print(f"Error: .hqins 深度 ({depth}) 与插桩 bit 实际深度 ({ddf_depth}, "
+                      f"见 ddf) 不一致——-run 尚未消费 .hqins 深度，此时抓取会静默错位。"
+                      f"先 `-insight -depth {ddf_depth}` 对齐，或等待深度链路打通。")
+                sys.exit(1)
+    m_ddf_win = None
+    if os.path.isfile(proj["ddf"]):
+        m_ddf_win = re.search(r"<window_num>(\d+)</window_num>", ddf_txt)
+    hqins_win = int(_section_value(sections.get("TRIGGER MULTI-WINDOW", [])) or 1)
+    if m_ddf_win and hqins_win != int(m_ddf_win.group(1)):
+        print(f"Error: 多窗口 (.hqins windows={hqins_win}) 的布防/轮询/dump 尚未实现"
+              f"（ddf window_num={m_ddf_win.group(1)}）——继续抓取会按单窗口静默错读。")
+        sys.exit(1)
     status_bits = depth.bit_length() - 1 + 2
     offset = int(_section_value(sections.get("TRIGGER POSITION", [])) or 0)
     expr_op = _capture_expr_op(cond_path)
@@ -1547,6 +1576,112 @@ def _show_name(name: str, msb: int, lsb: int) -> str:
     return f"{name}[{msb}:{lsb}]" if msb != lsb else f"{name}[{lsb}]"
 
 
+_VALID_DEPTHS = {256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536}
+
+
+def set_sample_params(proj: dict, args: list) -> None:
+    """Handle '-insight -depth N [-windows W] [-level L]' (GUI 采样参数 dialog).
+
+    Writes [MEMORY DEPTH INFO]/[TRIGGER MULTI-WINDOW]/[TRIGGER LEVEL] (keys
+    '0_LA:*' per LA_0).  Depth/windows are storage-architecture properties:
+    after changing them the instrumented bitstream MUST be rebuilt (-run) and
+    re-downloaded, otherwise capture misreads.  Trigger position must satisfy
+    0 <= offset <= depth/windows - 5; with default offset 128 that requires
+    depth/windows >= 133."""
+    if not args:
+        print("Usage: -insight -depth N [-windows W] [-level L]")
+        print(f"       N: {'/'.join(str(d) for d in sorted(_VALID_DEPTHS))}")
+        print("       W: power of 2 >= 1 (multi-window storage split)")
+        print("       L: trigger level >= 1")
+        sys.exit(1)
+    depth, windows, level = None, None, None
+    i = 0
+    while i < len(args):
+        if args[i] == "-depth" and i + 1 < len(args):
+            try:
+                depth = int(args[i + 1])
+            except ValueError:
+                print(f"Error: -depth expects an integer, got: {args[i + 1]}")
+                sys.exit(1)
+            i += 2
+        elif args[i] == "-windows" and i + 1 < len(args):
+            try:
+                windows = int(args[i + 1])
+            except ValueError:
+                print(f"Error: -windows expects an integer, got: {args[i + 1]}")
+                sys.exit(1)
+            i += 2
+        elif args[i] == "-level" and i + 1 < len(args):
+            try:
+                level = int(args[i + 1])
+            except ValueError:
+                print(f"Error: -level expects an integer, got: {args[i + 1]}")
+                sys.exit(1)
+            i += 2
+        else:
+            print(f"Error: unknown -depth option: {args[i]}")
+            sys.exit(1)
+    if depth is None and windows is None and level is None:
+        print("Error: nothing to set (use -depth / -windows / -level)")
+        sys.exit(1)
+
+    sections = read_hqins(proj["hqins"])
+
+    def section_value(name: str, default: str) -> int:
+        for ln in sections.get(name, []):
+            if ":" in ln:
+                return int(ln.split(":", 1)[1])
+        return int(default)
+
+    if depth is not None and depth not in _VALID_DEPTHS:
+        print(f"Error: -depth must be one of {sorted(_VALID_DEPTHS)}, got: {depth}")
+        sys.exit(1)
+    cur_depth = section_value("MEMORY DEPTH INFO", "1024")
+    cur_windows = section_value("TRIGGER MULTI-WINDOW", "1")
+    new_depth = depth if depth is not None else cur_depth
+    new_windows = windows if windows is not None else cur_windows
+    if windows is not None and (windows < 1 or windows & (windows - 1) != 0):
+        print(f"Error: -windows must be a power of 2 (1, 2, 4, ...), got: {windows}")
+        sys.exit(1)
+    if level is not None and level < 1:
+        print(f"Error: -level must be >= 1, got: {level}")
+        sys.exit(1)
+    offset = section_value("TRIGGER POSITION", "128")
+    max_pos = new_depth // new_windows - 5
+    if offset > max_pos:
+        print(f"Error: 触发位置 {offset} 对 depth={new_depth}/windows={new_windows} "
+              f"非法（要求 0 <= pos <= {max_pos}）。先用 -trig 调整触发位置或减小窗口数。")
+        sys.exit(1)
+
+    changes = []
+    changed_storage = False
+    if depth is not None and depth != cur_depth:
+        sections["MEMORY DEPTH INFO"] = [f"0_LA:{depth}"]
+        changes.append(f"depth={depth}")
+        changed_storage = True
+    if windows is not None and windows != cur_windows:
+        sections["TRIGGER MULTI-WINDOW"] = [f"0_LA:{windows}"]
+        changes.append(f"windows={windows}")
+        changed_storage = True
+    if level is not None:
+        sections["TRIGGER LEVEL"] = [f"0_LA:{level}"]
+        changes.append(f"level={level}")
+    if not changes:
+        print("[OK] Sampling parameters already at requested values; nothing to do.")
+        return
+    parts = []
+    for name, lines in sections.items():
+        parts.append(f"[{name}]")
+        parts.extend(lines)
+        parts.append("")
+    with open(proj["hqins"], "w", encoding="utf-8") as f:
+        f.write("\n".join(parts))
+    print(f"[OK] Sampling parameters set: {', '.join(changes)}")
+    if changed_storage:
+        print("Tip: depth/windows 是存储架构属性——必须 -insight -run 重新生成插桩 "
+              "bitstream 并重新下载后生效；否则 capture 读数错位。")
+
+
 def _la_info_path(proj: dict) -> dict:
     """Return parsed [SIGNAL JSON INFO] and [LA SIGNAL INFO] (empty defaults)."""
     sections = read_hqins(proj["hqins"])
@@ -1944,6 +2079,10 @@ def run_insight(args: list) -> None:
     proj = resolve_insight_project(hqprj_arg)
     if not rest:
         show_status(proj)
+        return
+
+    if rest[0] in ("-depth", "-windows", "-level"):
+        set_sample_params(proj, rest)
         return
 
     if rest[0] == "-ls":
