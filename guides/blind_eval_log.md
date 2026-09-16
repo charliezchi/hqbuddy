@@ -679,3 +679,6 @@ skills/hqfpga/references/insight.md 与本日志。
 
 ## Round 47b — 静默回归（基线抓取）
 - 触发点 cnt=200 严格、lfsr 满足条件。无异常。
+
+## Round 47c — 静默回归（基线抓取 + -edf2v 冒烟）
+- 基线抓取 cnt=200 精确；-edf2v 产出 13×xsDFFSA。无异常。
