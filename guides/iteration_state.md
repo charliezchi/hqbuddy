@@ -23,7 +23,7 @@ EQ 200 AND NE 0，depth 1024/1/1）；仓库 5f0c716。
 
 | # | 主题 | 轨道 | 状态 |
 |---|---|---|---|
-| R43 | **深度生效链路逆向**（R32 S1 根因）：GUI 采样参数对话框写 depth=2048+保存 → GUI 跑 FPGA 实现 → 检查 ddf/insight_ip.v 是否变 2048，定位消费点；GUI 同样不生效则记录"官方未实现"并评估替代方案 | T1 | 待做（computer-use 主会话亲自） |
+| R43 | **深度生效链路逆向** | T1 | ✅ 定论：流程消费 ddf 不读 .hqins 深度；4096 触发厂商流程崩溃（S1 反馈素材）；-depth 已同步写 ddf；工程恢复干净 1024 基线 |
 | R44 | `-vla -gen` 全自动模板化：从 ipcore_dir/VLA/xsIP_VLA.v 提取模板+HQ_VLA0 属性行参数化（probe_port 解析 hqip）；多 probe 对照样本用 hq_vla_ins 向导生成第二份 | T4/T2 | 待做 |
 | R45 | VLA 运行侧逆向：insight.load 的 ddf 格式 + VLA 抓取 SVF 命令族（结合 vla.cfg 逆向） | T2 | 待做 |
 | R46 | netlist 流程报告产出：pnr TCL 加 nl.report/ta.report → `-report` 兼容第三方流程 | T3 | 待做 |
@@ -41,12 +41,15 @@ EQ 200 AND NE 0，depth 1024/1/1）；仓库 5f0c716。
 
 - 09-16 10:30 主会话完成第三夜准备：队列重建、定时任务改至今晚窗口
   （23:00 前 R43 由主会话提前开跑则锁协议照旧）。
+- 09-16 23:10-00:20 R43 收账：GUI/CLI 同流实证；**ddf=权威配置（.hqins 深度
+  流程不读）；4096 崩溃复现+状态污染，恢复流程验证**；-depth 同步写 ddf 已上线。
+  板上=r21a 干净 1024 基线。GUI 实验未保存工程。
 
 ## 下一轮建议（第一次触发执行）
 
-- **R43 深度生效链路逆向**（computer-use，主会话亲自；23:00 后的触发改由
-  定时轮接手其余队列）。判据：①GUI 写 depth=2048+保存后 .hqins 确认；
-  ②GUI 实现（或 -run）后 ddf/insight_ip.v 深度实测；③消费点定位结论
-  （elaborate 参数？单独段？官方未实现？）写入 GUI 地图 §8 与 TODO。
-- 之后按队列 R44 → R45 → R46 → R47 → R48 → R49 → R51。
+- **R44 -vla -gen 全自动模板化**（离线）：从 ipcore_dir/VLA/xsIP_VLA.v 提取
+  模板 + HQ_VLA0 属性行参数化（hqip probe_port_N 解析）。判据：生成的 .v 与
+  官方向导产物结构一致（1 probe 配置）；不一致即记录差异转待排。
+- 之后：R45 VLA 运行侧逆向 → R46 netlist 报告 → R47 段错误取证 → R48/R49。
+- 小项池：4096 崩溃厂商反馈（R43 素材齐）；-del 段错误（第2次）；SA5T 待硬件。
 - 9-17 08:00-08:30 收官窗口：写 night_report_20260917.md，勿开新工作。

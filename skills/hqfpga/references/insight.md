@@ -181,15 +181,17 @@ hqbuddy -insight -depth 2048 -windows 2      # 触发窗口数（2 的幂）
 hqbuddy -insight -depth 2048 -level 2        # 触发级数
 ```
 
-**FT091226 实测边界（重要）**：
-- `-run` **不消费 .hqins 深度**——ddf 与插桩 RAM 恒按 1024 生成（`ADDR_WIDTH=10`），
-  写入其它深度后 bit 仍是 1024。深度真正生效需要打通"插桩 IP 生成读深度"链路（TODO）。
-- 深度不一致时 `-capture` 会**拒绝抓取**（`Error: .hqins 深度 (N) 与插桩 bit 实际
-  深度 (M, 见 ddf) 不一致`），防止静默错位；对齐：`-depth 1024`。
-- `-windows >1` 仅写入段；布防/状态轮询/多 VCD 的 capture 尚未实现，
-  capture 检测到 windows 不一致同样拒绝。
-- 触发位置约束：`0 <= offset <= depth/windows - 5`（默认 offset=128 需要
-  depth/windows >= 133），违反时 `-depth` 拒绝并提示。
+**FT091226 实测边界（R43 深度逆向，重要）**：
+- **权威配置在 ddf 而非 .hqins**：流程（run_hqprj2hqins_flow）消费 ddf 的
+  `<depth>/<window_num>`；`.hqins` 的 [MEMORY DEPTH INFO] 只是 GUI 持久化，
+  流程不读。ddf 缺失时流程直接崩溃（0xFFFFFFFF）。
+- **改深度会触发厂商流程崩溃（S1，未解）**：2048 曾单次成功，但 4096 稳定崩溃
+  （0xFFFFFFFF），且崩溃后中间状态被污染、连 2048 也崩；删除 hqins_run/hq_temp
+  后 -init 重建即恢复。**在厂商修复前请保持默认 1024**。
+- `-depth` 命令会同时写 .hqins 段与 ddf 标签（R43 起同步），并有
+  触发位置上界校验（`0 <= offset <= depth/windows - 5`）。
+- 深度不一致时 `-capture` 拒绝抓取（防静默错位）；`-windows >1` 的布防/轮询/
+  多 VCD 尚未实现，windows 不一致同样拒绝。
 
 ## 回归自测（-selftest）
 

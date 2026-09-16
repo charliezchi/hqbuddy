@@ -158,6 +158,12 @@ hq_vla_ins.exe -device <part> -lang chs -output_module VLA -output_fname xsIP_VL
 - `xsIP_VLA.cfg`（has_vio / dbg_module_name）
 - `t.tcl`（IP 自身综合链：design.analyze→rtlsyn→tdomap -no_ioins→nl.write）
 
+**深度消费点（R43 逆向定论）**：流程消费的是 **ddf**（`<depth>/<window_num>`），
+`.hqins` 的深度段只是 GUI 持久化、流程不读；ddf 缺失时流程崩溃。GUI 对话框
+确定 = 同时写 .hqins 与（推测）内部状态，但**改深度后跑实现会触发厂商流程
+崩溃（4096 稳定复现，2048 单次成功后状态污染）**——深度功能在 FT091226 上
+未达可用，保持 1024。
+
 **CLI 化路径已打通一半**（R36b：`hqbuddy -vla -gen` 已上线——按下方契约调起
 向导并自动检测产物；全自动模板化仍在 TODO）：hqbuddy 可按此契约调起向导（半自动），或仿 vio.py
 内嵌模板直接生成 .v（属性行参数化）——probe 端口定义在向导"信号"页收集，

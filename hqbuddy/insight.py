@@ -1655,27 +1655,60 @@ def set_sample_params(proj: dict, args: list) -> None:
 
     changes = []
     changed_storage = False
-    if depth is not None and depth != cur_depth:
+
+    # DDF is what the flow actually consumes (R43); read its current values so
+    # the "already at requested values" check covers both files.
+    ddf_depth = ddf_windows = None
+    if os.path.isfile(proj["ddf"]):
+        ddf_txt = open(proj["ddf"], encoding="utf-8", errors="replace").read()
+        m = re.search(r"<depth>(\d+)</depth>", ddf_txt)
+        ddf_depth = int(m.group(1)) if m else None
+        m = re.search(r"<window_num>(\d+)</window_num>", ddf_txt)
+        ddf_windows = int(m.group(1)) if m else None
+
+    depth_pending = (depth is not None
+                     and (depth != cur_depth or depth != ddf_depth))
+    windows_pending = (windows is not None
+                       and (windows != cur_windows or windows != ddf_windows))
+    if depth is not None and depth_pending:
         sections["MEMORY DEPTH INFO"] = [f"0_LA:{depth}"]
         changes.append(f"depth={depth}")
         changed_storage = True
-    if windows is not None and windows != cur_windows:
+    if windows is not None and windows_pending:
         sections["TRIGGER MULTI-WINDOW"] = [f"0_LA:{windows}"]
         changes.append(f"windows={windows}")
         changed_storage = True
     if level is not None:
         sections["TRIGGER LEVEL"] = [f"0_LA:{level}"]
         changes.append(f"level={level}")
-    if not changes:
+    if not changes and ddf_depth == cur_depth and ddf_windows == cur_windows:
         print("[OK] Sampling parameters already at requested values; nothing to do.")
         return
-    parts = []
-    for name, lines in sections.items():
-        parts.append(f"[{name}]")
-        parts.extend(lines)
-        parts.append("")
-    with open(proj["hqins"], "w", encoding="utf-8") as f:
-        f.write("\n".join(parts))
+    if changes:
+        parts = []
+        for name, lines in sections.items():
+            parts.append(f"[{name}]")
+            parts.extend(lines)
+            parts.append("")
+        with open(proj["hqins"], "w", encoding="utf-8") as f:
+            f.write("\n".join(parts))
+
+    # The flow consumes the DDF, not the .hqins depth (R43: flow crashes without
+    # ddf; a .hqins-only depth edit never reaches ddf/netlist). Patch ddf tags too.
+    if os.path.isfile(proj["ddf"]):
+        ddf_txt = open(proj["ddf"], encoding="utf-8", errors="replace").read()
+        ddf_changed = False
+        if depth is not None and ddf_depth != depth:
+            ddf_txt = re.sub(r"<depth>\d+</depth>", f"<depth>{depth}</depth>", ddf_txt, count=1)
+            ddf_changed = True
+        if windows is not None and ddf_windows != windows:
+            ddf_txt = re.sub(r"<window_num>\d+</window_num>",
+                             f"<window_num>{windows}</window_num>", ddf_txt, count=1)
+            ddf_changed = True
+        if ddf_changed:
+            with open(proj["ddf"], "w", encoding="utf-8", newline="") as f:
+                f.write(ddf_txt)
+            changes.append("ddf synced")
     print(f"[OK] Sampling parameters set: {', '.join(changes)}")
     if changed_storage:
         print("Tip: depth/windows 是存储架构属性——必须 -insight -run 重新生成插桩 "
