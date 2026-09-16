@@ -131,6 +131,15 @@ impl.bitgen.xist.seal r30syn.bin -bin
 原理：在 RTL 里例化 **VLA IP**（HqFpga 生成，可勾选带 VIO），随第三方综合进 EDIF；HqFpga FT090925+ 能解析网表里的 VLA IP，编译下载后用【VLA 调试】做在线抓波/VIO。
 
 - **约束**：VLA IP 只允许例化一次（多次报 JTAG 资源溢出），待观测信号统一汇总到单例 VLA；Synplify 必须加 `syn_noprune=1`。
+- **预生成 1-probe VLA IP（R44）**：`templates/vla/xsIP_VLA_1probe.v`（随仓库/包分发，
+  标准配置 dep=1024/pos=128/win=1/level=1/无VIO）。例化契约：
+  `VLA u_x(.probe0(<待观测信号>), .ref_clk(<clk>));` 例化处加
+  `/* synthesis syn_noprune=1 */`；直接当普通 .v 加入第三方综合工程即可
+  （配置在文件内 HQ_VLA0 属性行，第三方综合透传给 HqFpga）。
+- **为什么不做全自动模板化（R44 结论）**：VLA .v 的内部结构（地址位宽
+  [9:0]、per-probe 触发单元复制）与 dep/probe_num 强耦合——文本替换属性行
+  会产出属性与结构不一致的坏 RTL。非默认配置（多 probe/更大深度/VIO）请用
+  `hqbuddy -vla -gen` 走官方向导。
 - **VLA IP 生成（R34b 契约 + R36b 产品化）**：`hqbuddy -vla -gen [-name VLA] [-dir <dir>] [-device <part>]`
   一键调起官方生成向导（参数契约与 IP Creator 相同），生成完成后自动检测并提示下一步。
   底层：IP Creator 生成 VLA IP 时实际调起

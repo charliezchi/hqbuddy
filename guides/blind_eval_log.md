@@ -600,3 +600,13 @@ skills/hqfpga/references/insight.md 与本日志。
 - **产品化修复**：`-depth` 现在同步写 .hqins + ddf（幂等检查含 ddf 状态）；
   capture 深度一致性拒绝保持。板上已恢复干净 1024 基线（cnt=200 验证）
 - **遗留**：向厂商反馈 4096 崩溃复现步骤；深度>1024 待厂商修复后重新验证
+
+## Round 44 — -vla -gen 全自动模板化：分析定论 + 参考件交付
+- **分析结论（结构取证）**：VLA .v 内部结构与参数强耦合——存储地址总线 [9:0]
+  对应 dep=1024（2048 需 [10:0]）、per-probe 触发单元随 probe_num 复制。
+  文本替换 HQ_VLA0 属性行会产出属性与结构不一致的坏 RTL
+  → **全自动模板化不可安全实现，关闭该方向**（非默认配置走 -vla -gen 向导）
+- **交付**：`templates/vla/xsIP_VLA_1probe.v`（官方向导产物的 1-probe 标准配置
+  参考件，随仓库/包分发）+ thirdparty_synthesis.md 例化契约
+  （VLA u_x(.probe0, .ref_clk) + syn_noprune）+ insight.md 交叉引用
+- **顺带**：exe 重建使 templates/vla 随包分发

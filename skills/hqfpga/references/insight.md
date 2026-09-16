@@ -234,4 +234,6 @@ hqbuddy -insight -selftest -signal cnt -value 200 # 指定采样信号与比较�
   1-bit 信号）时，存储字打包可能错位——2×8b 干净，追加 1b 后 8b 通道转移违例
   770/1023。**探针集合尽量同位宽**；hqbuddy 3.13.3 起 -run 记录信号集戳记，
   -capture 发现 .hqins 信号集与 bit 不一致（-add/-del 后未 -run）会强警告。
+- **第三方综合 + VLA**：预生成 1-probe VLA IP 在仓库 `templates/vla/xsIP_VLA_1probe.v`，
+  例化/综合/调试契约见 `references/thirdparty_synthesis.md`。
 - 相关 TCL 命令全表：`references/tcl_commands_help.md` 搜 `insight.`（51 条）。

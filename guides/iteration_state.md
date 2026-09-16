@@ -24,7 +24,7 @@ EQ 200 AND NE 0，depth 1024/1/1）；仓库 5f0c716。
 | # | 主题 | 轨道 | 状态 |
 |---|---|---|---|
 | R43 | **深度生效链路逆向** | T1 | ✅ 定论：流程消费 ddf 不读 .hqins 深度；4096 触发厂商流程崩溃（S1 反馈素材）；-depth 已同步写 ddf；工程恢复干净 1024 基线 |
-| R44 | `-vla -gen` 全自动模板化：从 ipcore_dir/VLA/xsIP_VLA.v 提取模板+HQ_VLA0 属性行参数化（probe_port 解析 hqip）；多 probe 对照样本用 hq_vla_ins 向导生成第二份 | T4/T2 | 待做 |
+| R44 | -vla -gen 全自动模板化：结构取证定论——dep/probe_num 与内部结构强耦合，文本模板化不安全 → **关闭**；交付 1-probe 参考件 templates/vla/ + 例化契约 | T4/T2 | ✅ 分析定论+参考件交付 |
 | R45 | VLA 运行侧逆向：insight.load 的 ddf 格式 + VLA 抓取 SVF 命令族（结合 vla.cfg 逆向） | T2 | 待做 |
 | R46 | netlist 流程报告产出：pnr TCL 加 nl.report/ta.report → `-report` 兼容第三方流程 | T3 | 待做 |
 | R47 | -del 段错误复现条件收集（del/add 循环脚本，厂商反馈素材） | T1 | 待做 |
@@ -39,6 +39,8 @@ EQ 200 AND NE 0，depth 1024/1/1）；仓库 5f0c716。
 
 ## 执行记录（时间序）
 
+- 09-17 00:30 R44 收账：模板化不可安全实现（结构耦合取证：dep↔地址位宽、
+  probe_num↔触发单元复制）；交付 1-probe 参考件+例化契约；exe 重建分发。
 - 09-16 10:30 主会话完成第三夜准备：队列重建、定时任务改至今晚窗口
   （23:00 前 R43 由主会话提前开跑则锁协议照旧）。
 - 09-16 23:10-00:20 R43 收账：GUI/CLI 同流实证；**ddf=权威配置（.hqins 深度
@@ -47,9 +49,9 @@ EQ 200 AND NE 0，depth 1024/1/1）；仓库 5f0c716。
 
 ## 下一轮建议（第一次触发执行）
 
-- **R44 -vla -gen 全自动模板化**（离线）：从 ipcore_dir/VLA/xsIP_VLA.v 提取
-  模板 + HQ_VLA0 属性行参数化（hqip probe_port_N 解析）。判据：生成的 .v 与
-  官方向导产物结构一致（1 probe 配置）；不一致即记录差异转待排。
+- **R44b netlist 流程报告产出**（离线）：pnr 链 TCL 加 nl.report -ratio/
+  ta.report → hqbuddy -report 兼容第三方流程工程。判据：r30syn 上产出
+  fmax/slack 报告且 -report 数字可读。
 - 之后：R45 VLA 运行侧逆向 → R46 netlist 报告 → R47 段错误取证 → R48/R49。
 - 小项池：4096 崩溃厂商反馈（R43 素材齐）；-del 段错误（第2次）；SA5T 待硬件。
 - 9-17 08:00-08:30 收官窗口：写 night_report_20260917.md，勿开新工作。
