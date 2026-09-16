@@ -610,3 +610,10 @@ skills/hqfpga/references/insight.md 与本日志。
   参考件，随仓库/包分发）+ thirdparty_synthesis.md 例化契约
   （VLA u_x(.probe0, .ref_clk) + syn_noprune）+ insight.md 交叉引用
 - **顺带**：exe 重建使 templates/vla 随包分发
+
+## Round 44b — netlist 流程报告产出（第三夜，离线）
+- **实现**：`-netlist_build` TCL 链内嵌 ta.set 块（与 run_hqprj.tcl 一致）与
+  nl.report -ratio -location / xpn.write / ta.fmax.report / ta.report -n 100
+- **验收**：r30syn/a.edif 重跑（bin 字节不变 1,787,906）；产出 fmax.rpt/
+  final_ta.rpt/res_place.rpt/res_pack.rpt/aft_place.xpn；`-report` 完整读取
+  （FMAX 846.2MHz、WNS +38818.3ps MET worst-of-23、利用率 SLICE 3/8480）

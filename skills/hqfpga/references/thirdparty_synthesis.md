@@ -102,6 +102,8 @@ hqbuddy -edf2v a.edif -o a.v
 
 产品化命令（3.13.4 起，封装下方整条 TCL 链 + 产物校验 + 目录自动创建）：
 
+内嵌报告产出（3.14.0）：ta.set 块 + nl.report -ratio -location + xpn.write aft_place.xpn + ta.fmax.report fmax.rpt + ta.report -n 100 final_ta.rpt——跑完即可 `hqbuddy -report` 直接读取。
+
 ```bat
 hqbuddy -netlist_build a.edif --upc cons/r21a.upc --sdc cons/r21a.sdc -o r30syn.bin
 ```
