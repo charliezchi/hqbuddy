@@ -629,3 +629,8 @@ skills/hqfpga/references/insight.md 与本日志。
 - **边界确认**：网表流程不产出 .ddf/.hqins（VLA 运行侧 CLI 化的卡点不变）；
   insight.check 结果经 TCL 返回值给出（无 FLAG: 打印行，S3 记录）
 - **下一步**：FT091626 升级回归（R46）；VLA 运行侧卡点=网表工程的 ddf 生成链
+
+## Round 46 — FT091626 升级回归（第三夜，insight 基线）
+- FT091626（09-16 新装）上 insight 基线抓取：触发点 cnt=200 严格、lfsr=0xb8
+  满足 NE 0、clock_cycle 11 位（1024 配置正确）；网表链已由 R45 在新版隐式
+  验证（has_vla/位流）。**升级回归通过**。
