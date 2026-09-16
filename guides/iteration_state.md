@@ -39,6 +39,16 @@ EQ 200 AND NE 0，depth 1024/1/1）；仓库 5f0c716。
 
 ## 执行记录（时间序）
 
+- 09-17 01:55 R45 收账：**VLA IP 第三方综合+网表解析可行**（has_vla=1 经阴性
+  对照；HQ_VLA0 穿透 EDIF；bin 产出）；发现 **FT091626 新版本**（09-16 10:31 装，
+  hqbuddy 自动选中——R45 已隐式在新版上验证网表链）。未下板。
+
+- 09-17 01:42 定时轮启动 R45（VLA IP 第三方综合 + has_vla 解析验证）。
+  **判据先于执行**：①VLA IP（templates/vla/xsIP_VLA_1probe.v）实例进第三方
+  综合（Vivado OOC+bufg0），产出含 VLA 的 a.edif；②netlist_build 全链成功；
+  ③`insight.check has_vla` 返回 1（HqFpga 从网表解析出 VLA）；④has_vio=0；
+  ⑤任意失败点如实记录（决定 009 的 CLI 化深浅）。不下板（下载验证明早视时间）。
+
 - 09-17 01:15 R44b 收账：netlist_build 内嵌报告产出（fmax/final_ta/res_place/res_pack/aft_place.xpn），-report 完整读取（bin 字节不变）；exe 重建安装。
 - 09-17 00:30 R44 收账：模板化不可安全实现（结构耦合取证：dep↔地址位宽、
   probe_num↔触发单元复制）；交付 1-probe 参考件+例化契约；exe 重建分发。

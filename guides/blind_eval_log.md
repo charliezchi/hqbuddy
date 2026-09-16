@@ -617,3 +617,15 @@ skills/hqfpga/references/insight.md 与本日志。
 - **验收**：r30syn/a.edif 重跑（bin 字节不变 1,787,906）；产出 fmax.rpt/
   final_ta.rpt/res_place.rpt/res_pack.rpt/aft_place.xpn；`-report` 完整读取
   （FMAX 846.2MHz、WNS +38818.3ps MET worst-of-23、利用率 SLICE 3/8480）
+
+## Round 45 — VLA IP 第三方综合 + HqFpga 网表解析验证（第三夜，阶段 1）
+- **任务**：VLA IP（1-probe 参考件）实例进第三方综合，验证 HqFpga 从网表解析 VLA
+- **结果**：✅ **可行**——Vivado OOC+bufg0 综合成功（HQ_VLA0 属性完整穿透进
+  EDIF、syn_noprune 保留实例）；netlist 全链（flatten/P&R/bitgen 1,787,906B）
+  exit 0 零 ERROR；**`insight.check has_vla`=1**（阴性对照：无 VLA 网表=0，
+  排除恒真）；has_vio=0 符合模板配置
+- **环境重大变化**：agent 实测发现 HqFPGA 根已变为 **FT091626**（09-16 10:31
+  新装），hqbuddy 自动选中——R45 即已在新版上隐式验证网表链
+- **边界确认**：网表流程不产出 .ddf/.hqins（VLA 运行侧 CLI 化的卡点不变）；
+  insight.check 结果经 TCL 返回值给出（无 FLAG: 打印行，S3 记录）
+- **下一步**：FT091626 升级回归（R46）；VLA 运行侧卡点=网表工程的 ddf 生成链
