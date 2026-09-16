@@ -210,6 +210,26 @@ def _parse_value(token: str) -> int:
         sys.exit(1)
 
 
+def _parse_value_maybe_wild(token: str) -> tuple:
+    """Parse a value that may contain x/X wildcard bits (binary only).
+
+    Returns (value, wild): value has x->0; wild has 1 where the bit is a
+    don't-care (hardware compare mask).  Hex (0x-prefix) and decimal are
+    returned with wild=0."""
+    core = token.replace("_", "")
+    if core[:2].lower() == "0x":
+        return _parse_value(token), 0
+    if any(c in "xX" for c in core):
+        if core == "" or any(c not in "01xX" for c in core):
+            print(f"Error: invalid wildcard value: {token} "
+                  f"(use only 0/1/x, e.g. xxxxx000)")
+            sys.exit(1)
+        val = int(core.replace("x", "0").replace("X", "0"), 2)
+        wild = int(core.replace("x", "1").replace("X", "1"), 2)
+        return val, wild
+    return _parse_value(token), 0
+
+
 def parse_trig_expr(tokens: list) -> dict:
     """Parse -trig tokens into a trigger description.
 
@@ -263,8 +283,9 @@ def parse_trig_expr(tokens: list) -> dict:
             if len(g) != 3:
                 print(f"Error: {op} requires a value: {signal} {op} <value>")
                 sys.exit(1)
+            val, wild = _parse_value_maybe_wild(g[2])
             conds.append({"signal": signal, "kind": "arith", "op": op,
-                          "value": _parse_value(g[2]), "negate": negate})
+                          "value": val, "wild": wild, "negate": negate})
         elif op in RANGE_OPS:
             if len(g) != 4:
                 print(f"Error: {op} requires two bounds: {signal} {op} <lo> <hi>")
@@ -626,7 +647,9 @@ def _write_ddf(proj: dict, parsed: dict, sigs: list) -> None:
             if op_el is not None:
                 op_el.text = cond["op"]
             if mask_el is not None:
-                mask_el.text = "0" * width
+                wild = cond.get("wild", 0)
+                mask_el.text = (format(wild, f"0{width}b") if wild
+                                else "0" * width)
             if operand_el is not None:
                 operand_el.text = _bits_lsb_first(cond["value"], width)
         elif cond["kind"] == "range":

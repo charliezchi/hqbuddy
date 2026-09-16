@@ -651,3 +651,14 @@ skills/hqfpga/references/insight.md 与本日志。
   触发信号或保留此信号"），板上实测生效（不再崩溃、信号保留）
 - **厂商反馈材料**：r47del/vendor_feedback/（post_del.ddf + 隔离 TCL + 日志
   + README）；insight.md 红线补 -del 变体
+
+## Round 49 — X 通配触发实现+板测（第三夜）→ **判定不可用（S1）**
+- **实现**：`-trig "cnt EQ xxxxx000"` 通配值语法（x 位→ddf mask），解析/写入
+  单测通过；板上 mask=11111000 正确写入硬件
+- **板测结果（矛盾）**：两次不同通配模式（xxxxx000 / xx110000）均"触发成功"
+  但触发点样本不满足掩码语义（cnt=0x36 vs (cnt&0xF0)==0x30 应匹配低 4 位模式
+  却不满足 / 0x00 满足低 3 位模式的那次 marker 值又与另一次矛盾）；
+  VCD 解析 trigger_event 全程为 0 与"已触发"矛盾
+- **判定**：S1——X 通配的触发判定数据通路在 FT091626 上不正确（mask 写入成功
+  但判定行为与语义矛盾），**勿用 X 通配条件**；基线已恢复并验证（cnt=200 精确）
+- **对照**：普通 EQ/NE/GT/RANGE/AND 同板同版本全部精确（R46/R31）
