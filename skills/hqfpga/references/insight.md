@@ -189,6 +189,12 @@ hqbuddy -insight -depth 2048 -windows 2      # 触发窗口数（2 的幂）
 hqbuddy -insight -depth 2048 -level 2        # 触发级数
 ```
 
+**FT091226/091626 深度实测边界（R43/R43b，重要）**：
+- **depth=2048 端到端补测（干净状态）**：bit 结构生效（VCD 2049 样本、
+  clock_cycle 13 位），**但触发语义不可靠**——条件 cnt EQ 200 下 te=1 窗口
+  出现在 cnt≈129-134（EQ 200 的 8 个匹配点全不在窗口）。**生产保持 1024**；
+  4096 使流程崩溃（0xFFFFFFFF）。
+
 **FT091226 实测边界（R43 深度逆向，重要）**：
 - **权威配置在 ddf 而非 .hqins**：流程（run_hqprj2hqins_flow）消费 ddf 的
   `<depth>/<window_num>`；`.hqins` 的 [MEMORY DEPTH INFO] 只是 GUI 持久化，
