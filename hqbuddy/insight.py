@@ -1907,6 +1907,14 @@ def del_signal(proj: dict, name: str) -> None:
     if not removed:
         print(f"Error: 信号不在 HqInsight 工程中: {name}")
         sys.exit(1)
+    # 空 probe 集会让 insight.debugip.create 段错误（R47：删除最后一个触发信号
+    # 后的 ddf 触发集为空；红线同源）。拒绝并给出指引。
+    remaining_trig = (len(la["t_list"]) + len(la["st_list"]))
+    if remaining_trig == 0:
+        print("Error: 删除该信号后触发信号集为空——insight.debugip.create 会在空"
+              "触发集上段错误（R47 实测）。请先 -add 另一个触发信号（-type both/"
+              "trigger），或保留此信号。")
+        sys.exit(1)
     _rewrite_hqins_sections(proj, sig_info, la_info)
     _regenerate_ddf(proj, sig_info, la_info)
     # 悬空触发表达式提示：被删信号若仍被 trigger 条件引用，布防会失效

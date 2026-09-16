@@ -639,3 +639,15 @@ skills/hqfpga/references/insight.md 与本日志。
 - R27 的"标记点值不满足条件"现象未复现：3/3 抓取 overflow=True（自由运行
   设计常态）而标记点 cnt=200 逐字精确（pointer 32/66/142 各异）。
   **overflow 专项关闭**——判定 R27 为当时陈旧 bit/状态场景；若再现按该方向排查。
+
+## Round 47 — -del 段错误取证与防护（第三夜，100% 复现→根因→防护）
+- **100% 复现**：fresh -init → `-add dbg_out`（成功）→ `-del dbg_out` →
+  hqfpga.exe 0xC0000005，5 秒内即崩（scratch 工程 r47del）
+- **根因隔离**：崩溃在 `insight.debugip.create`（`insight.load` 单独 exit 0）；
+  触发条件 = **删除最后一个触发信号后 ddf 触发集为空**（post_del.ddf 取证：
+  trigger 空、storage 仅剩采样时钟）——与 insight.md 已有"全 sample 红线"
+  同源（debugip.create 不支持空触发集）
+- **产品化防护**：`-del` 检测到将清空触发集时拒绝并给指引（"先 -add 另一个
+  触发信号或保留此信号"），板上实测生效（不再崩溃、信号保留）
+- **厂商反馈材料**：r47del/vendor_feedback/（post_del.ddf + 隔离 TCL + 日志
+  + README）；insight.md 红线补 -del 变体

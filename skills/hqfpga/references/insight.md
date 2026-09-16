@@ -207,6 +207,7 @@ hqbuddy -insight -selftest -signal cnt -value 200 # 指定采样信号与比较�
 （clock_cycle 零缺口）且触发后逐样本 +1。任何一环坏了都会 FAIL 并指明环节。
 
 ## 注意事项
+- `-del` 后的 `insight.debugip.create` 100% 段错误（R47 最小复现；磁盘状态无损，重试 -add 即恢复）
 
 - `-insight -run` 末尾流程会拉起 hqdnload 下载器 GUI 窗口，hqbuddy 会**自动关闭它**（3.13 起，日志 `[i] Auto-closed hqdnload window...`），批处理/自动化无需人工干预。下载本身用 cable 命令完成，不经过 hqdnload。
 - 所有 `-insight` 子命令都可加 `.hqprj` 路径指定工程，缺省用当前目录检测到的第一个。
