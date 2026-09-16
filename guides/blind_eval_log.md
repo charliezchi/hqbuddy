@@ -634,3 +634,8 @@ skills/hqfpga/references/insight.md 与本日志。
 - FT091626（09-16 新装）上 insight 基线抓取：触发点 cnt=200 严格、lfsr=0xb8
   满足 NE 0、clock_cycle 11 位（1024 配置正确）；网表链已由 R45 在新版隐式
   验证（has_vla/位流）。**升级回归通过**。
+
+## Round 48 — overflow 标记点异常复现尝试（第三夜，3 连抓）
+- R27 的"标记点值不满足条件"现象未复现：3/3 抓取 overflow=True（自由运行
+  设计常态）而标记点 cnt=200 逐字精确（pointer 32/66/142 各异）。
+  **overflow 专项关闭**——判定 R27 为当时陈旧 bit/状态场景；若再现按该方向排查。
