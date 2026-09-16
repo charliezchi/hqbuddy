@@ -29,7 +29,12 @@
       产物自动检测（端到端验证）；全自动模板化（probe_port 解析）与运行侧
       （VLA 抓取 ddf/SVF）继续逆向
 - [x] R34c：第三方网表 ModelSim 门级仿真链验证（2026-09-16）——simlib/vlog/25µs 仿真全通，LFSR 序列 2492 拍零失配；vsim -voptargs=+acc 与 VCD 解析坑入档
-- [ ] 待排：`-edf2v`/`-netlist_build` 已上线（R33）；`-vio -read -interval`；
+- [x] 第二夜收官（2026-09-16 08:20）——R30-R42 共 14 轮；第三方综合全链路
+      CLI 化（-edf2v/-netlist_build/-vla -gen/-copy_prj 四条新命令）+ depth 参数 +
+      capture 防护 + ModelSim 门级仿真验证；总账见 `guides/night_report_20260916.md`
+- [ ] 白天优先：深度生效链路逆向（R32 S1）；-vla -gen 全自动模板化；VLA 运行侧
+      逆向；边沿×混位宽交叉复测
+- [ ] 待排：`-vio -read -interval`；SA5T 板卡实测；X 通配触发；`-vio -read -interval`；
       SA5T 板卡实测；X 通配触发；
       多窗口/多级触发 CLI 化（并入 R22-C 实现项）；边沿方向专项（1-bit 专用设计）；
       陈旧布防代际自动检测；`-copy_prj`
