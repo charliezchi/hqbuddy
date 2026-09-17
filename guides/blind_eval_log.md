@@ -685,3 +685,12 @@ skills/hqfpga/references/insight.md 与本日志。
 
 ## Round 47d — 收官前终检（基线抓取+状态）
 - 触发点 cnt=200 严格、lfsr 满足条件、触发条件逐字一致。无异常，状态完美交接。
+
+## Round 52 — -doctor 工程体检器（第三夜加更，离线）
+- **实现**：新增 hqbuddy/doctor.py + dispatch + help/README——一条命令聚合
+  三夜盲评的全部失败类：FILE_SRC 缺失/重复登记、跨文件模块重复声明（R6）、
+  TOP_MODULE 缺失/找不到、时间戳条目不一致（R15）、器件合法性、testbench
+  混入源文件、.hqip 器件一致性、HqInsight 状态（ddf 存在性 + .hqins/ddf
+  深度一致性预警，R32/R43 防护的 doctor 版）
+- **验收**：r21a 0 FAIL 0 WARN 7 ok；r36cp 通过；故意删除 FILE_TIME 的坏副本
+  被精确抓出 FAIL 并指引 -refresh_time。exit 语义：有 FAIL → 1

@@ -18,6 +18,7 @@ from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstrea
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .netlist import run_edf2v, run_netlist_build, run_vla_gen
+from .doctor import run_doctor
 from .device import run_device
 from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
@@ -72,6 +73,7 @@ Project:
   -add <file1> [<file2> ...]           Add source/constraint files to project
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
   -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
+  -doctor [<.hqprj>]                   Project health check: files/modules/times/device/depth
                                         to match FILE_SRC/FILE_TC/FILE_PC
   -set_top <name>                      Set top module name
   -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
@@ -1448,6 +1450,11 @@ def main():
     # Copy project to a new directory (rewrite FILE paths)
     if first == '-copy_prj':
         cmd_copy_prj(args[1:])
+        return
+
+    # Project health check
+    if first == '-doctor':
+        run_doctor(args[1:])
         return
 
     # Set top module
