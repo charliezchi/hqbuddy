@@ -843,3 +843,15 @@ skills/hqfpga/references/insight.md 与本日志。
 - **S2**：错误传播不干净——insight -run 无产物/capture 超时时 exit code=0
 - **规格修正**：任务 -in 8 vs 实需 16 位 probe_in（duty+btn_count）——agent
   按功能要求改为 -in 16
+
+## Round BD8 — 深度回归（第三夜，r21a+bd1+bd5+bd7 四工程全链路）
+- **任务**：BD1-BD7 各工程产物重跑关键检查，确认零回归
+- **结果**：✅ **BD1-BD7 全部产物功能层面零回归**——
+  r21a 基线：cnt=200 精确命中、selftest PASS、连续零缺口
+  bd1 UART：rx_done 帧行为正确（每帧 1 帧事件，波特率推算一致）
+  bd5 FIFO：fifo_count=32 精确平台（full 稳定 0、1024 样本全 0x20）
+  bd7 VIO：写读闭环精确（0x55 非回文回读正确、btn_count 按键事件计数）
+  `-regression` 6/6 全 PASS
+- **回归异常①（工具/文件态）**：BD 时代旧 ddf 布防文件在 FT091626 上条件
+  失效（触发操作数字节无 200 编码）——重 -trig 后全部精确（有明确根因、
+  有恢复手段、不涉 bit/设计/板卡）

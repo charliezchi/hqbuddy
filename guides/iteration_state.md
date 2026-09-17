@@ -53,6 +53,13 @@
 
 ## 执行记录（时间序）
 
+- 09-18 04:33-05:2x BD8 收账：四工程零回归（r21a 精确触发+selftest PASS、
+  bd1 UART 帧行为、bd5 FIFO count=32 平台、bd7 VIO 写读闭环+事件计数）；
+  -regression 6/6；旧 ddf 布防文件兼容性回归已定位（重 -trig 即恢复）。
+  板上 = r21a 插桩 bit。
+
+- 09-18 04:33 定时轮启动 BD8（深度回归）。判据：BD1-BD7 全部产物重跑关键检查零回归——BD1 UART 基线抓取 cnt 精确、BD3 CDC 格雷码零失配、BD5 FIFO count 锯齿正确、BD7 VIO 读写精确、-doctor/-report/-regression 全通过。
+
 - 09-18 03:53-05:1x BD7 收账：PWM+VIO 设计正确（97.66kHz 载波精确、50% 占空比
   精确、消抖逐拍验证）；S1 VIO/LA JTAG 互斥实锤（双 bit 绕行）；S1 通道互换
   加剧（V12）+S2 exit code（V13）入档。板上 = bd7 插桩 bit。
