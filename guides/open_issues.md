@@ -10,6 +10,8 @@
 | V7 | **多总线探针（同位宽）也静默损坏**：不仅混位宽，同位宽多总线在 FT091626 上同样乱码（除锚定通道），bd1 工程实测（BD2）。缓解：打包为单宽总线。 | 高 | BD2 |
 | V10 | **LA VCD 通道映射静默互换**：三种探针配置下（混位宽/纯同位宽多通道/纯 1-bit），VCD 通道名与实际信号存在静默互换或错位，数据本身可由结构自洽校验恢复但工具无提示。判读必须附带结构自洽校验。 | 高 | BD4 |
 | V11 | **常量探针预警对象失真**：-run 预警的常量折叠探针非用户所选。 | 低 | R32 |
+| V12 | **3×8b 探针通道标签/触发比较器互换**：duty 与 dbg_btn 两通道数据/标签互换，触发比较器同步互换（BD7 实测，判别实验实锤）。 | 高 | BD7 |
+| V13 | **insight -run 无产物/capture 超时时 exit code=0**：批处理无法靠 exit code 判失败。 | 中 | BD7 |
 | V1 | **depth>1024 触发语义失真**：depth=2048 结构生效（2049 样本/cc 13 位）但触发比较或标记锚定错位（te 窗口 cnt≈129-134，条件 EQ 200 的 8 个匹配点全不在窗内）；4096 使 run_hqprj2hqins_flow 直接崩溃（0xFFFFFFFF，稳定复现）。生产只能用 1024。 | 高 | blind_eval_log R43/R43b；素材 r21a（VCD+ddf 快照已删，可按 R43b 步骤复现） |
 | V2 | **insight.debugip.create 空触发集段错误**：删除最后一个触发信号后 ddf 触发集为空，debugip.create 必崩 0xC0000005（与"全 sample 红线"同源）。hqbuddy 已加拒绝防护，但 GUI 用户仍会踩。 | 高 | r47del/vendor_feedback/（post_del.ddf+TCL+日志+README） |
 | V3 | **X 通配触发判定矛盾**：`cnt EQ xxxxx000` mask 正确写入 ddf（11111000），板上触发但触发点样本不满足掩码语义、VCD trigger_event 全 0 与"已触发"输出矛盾。 | 中 | blind_eval_log R49；复现步骤齐 |

@@ -827,3 +827,19 @@ skills/hqfpga/references/insight.md 与本日志。
   - 插桩流程不读 SDC（时序签核链被绕过）
   - XiST 子集不支持 `initial` 块——上电 FF 初值不确定（本次抓到 state 上电值=2）
 - **S3**：UPC 不支持行内 # 注释；-force 抓取窗口起点偶发 2-3 拍陈旧值残留
+
+## Round BD7 — PWM+按键消抖+VIO 调占空比（第三夜，板上）
+- **任务**：PWM 8 位占空比 + 按键消抖 + VIO 运行时调占空比
+- **结果**：✅ **PWM+VIO 设计正确**——载波 97.66kHz 精确（25M/256）、duty=128
+  占空比精确 50%、VIO 读写/回读/位序全部精确、20ms 消抖脉冲逐拍验证无误、
+  按键事件计数与注入严格一致、WNS 全 MET
+- **新发现 S1（硬件互斥实锤）**：VIO 与 HqInsight 同位流 JTAG 容量溢出
+  （PHY-PLA-665）——VIO 的 xsJTAG TAP 与 LA 的 TAP 各占 1 槽，SA5Z-50 容量
+  仅 1。绕行：双 bit 策略（VIO bit 验运行时读写，LA bit 验触发），消抖逻辑相同
+- **新发现 S1（通道互换加剧）**：3×8b 同模块探针下 duty 与 dbg_btn 两通道
+  数据/标签互换，触发比较器同步互换——首次在 FT091626 + 3×8b 组合上观察。
+  判别实验实锤：dbg_btn EQ 151 命中且触发点=0x97（实际 duty 值），数据通路
+  无误仅标签映射错位。已入 open_issues（V12）
+- **S2**：错误传播不干净——insight -run 无产物/capture 超时时 exit code=0
+- **规格修正**：任务 -in 8 vs 实需 16 位 probe_in（duty+btn_count）——agent
+  按功能要求改为 -in 16
