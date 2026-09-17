@@ -1,0 +1,31 @@
+# 自回归迭代状态·第四阶段（2026-09-17 起，持续无人值守）
+
+> 主题：**智多晶原语 / IP / XPN / ECO 能力探索与产品化**，跳出在线调试线，
+> 扩展 hqfpga 自身能力覆盖与 Agent 自主设计能力。
+> 框架：`autoregressive_cycle.md`；锁协议照旧（.round_lock，90 分钟接管）。
+> **硬性边界：只本地 commit，严禁 push。** exe 修复后 taskkill+build+覆盖安装。
+
+## 队列（按序消费；S0/S1 修复最优先；队列空则探索未开发命令族或静默回归）
+
+| # | 主题 | 状态 |
+|---|---|---|
+| R57 | 原语知识库：解析 seal_syn_prim.v/sealion_syn_prim.v 模块清单（名称/端口/类别）+ 实测网表 xs* 原语集合 → skill 新参考 primitives.md | 🔄 进行中 |
+| R58 | XPN 网表检查：xpn.write 产物结构探明 → `-xpn inspect`（原语统计/IO/BRAM 概览）可行性 | 待做 |
+| R59 | eco.* 命令族全量 help dump + 可行性结论（网表级 ECO） | 待做 |
+| R60 | ipdepot IP 全量枚举（名称/版本/器件支持矩阵）→ skill 参考 ip_catalog.md | 待做 |
+| R61 | `-pinplan` 输入端口（clk）自动匹配升级（时钟候选→自动选中 REF_*_CLK） | 待做 |
+| R62 | `-regression` 套件命令化（selftest+触发矩阵抽测+错误路径抽测一条命令） | 待做 |
+| R63 | -synopt 扩展：支持 lo.slo.set 全键与 -device 校验 | 待做 |
+
+挂起：SA5T 实测（待硬件）；VLA 运行侧 ddf 链（需 GUI 抓包）；4096 崩溃/-del
+空触发集段错误（厂商素材已齐，待反馈）。
+
+## 执行记录（时间序）
+
+- 09-17 22:45 第四阶段开启。R57 由主会话开跑（原语知识库，离线）。
+
+## 下一轮建议
+
+- R57 完成后：R58 XPN 检查 → R59 eco 探测 → R60 IP 枚举 → R61/R62 产品化。
+- 静默回归穿插：每 3-4 轮做一次基线抓取/-filelist/-report 轻检。
+- 板上当前 = r21a 干净基线 bit（1024/1/1，EQ 200 AND NE 0）。
