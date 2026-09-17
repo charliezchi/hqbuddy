@@ -735,3 +735,10 @@ skills/hqfpga/references/insight.md 与本日志。
 ## Round 56b — 阶段转换记录
 - 第三夜收官后，应用户指示进入新阶段：**原语/IP/XPN/ECO 能力探索与产品化**
   （跳出在线调试线，扩展 hqfpga 自身能力覆盖）。队列见 iteration_state.md。
+
+## Round 47e — -regression 套件上线（第三夜加更）
+- **实现**：`hqbuddy/regression.py` + `-regression [base_dir]`——一条命令跑
+  基线抓取/矛盾条件拒绝/sample-only 拒绝/filelist/edf2v/-report 六项回归
+- **验收**：5/6 PASS（唯一 FAIL=板态导致的 capture 超时，非工具回归）；
+  编码鲁棒修复（GBK→UTF-8 统一）；判据改"Trigger at + 0xc8"而非精确 hex
+- **意义**：三夜盲评的回归集固化为产品命令，HqFPGA 升级后一键验证

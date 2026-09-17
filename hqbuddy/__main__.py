@@ -22,6 +22,8 @@ from .netlist import run_edf2v, run_netlist_build, run_vla_gen
 from .doctor import run_doctor
 from .synopt import run_synopt
 from .pinplan import run_pinplan
+from .autosdc import run_autosdc
+from .regression import run_regression
 from .device import run_device
 from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
@@ -79,6 +81,8 @@ Project:
   -doctor [<.hqprj>]                   Project health check: files/modules/times/device/depth
   -synopt <src.hqprj> [-set k=on|off ... | -show | -clear]
   -pinplan <src.hqprj> -board <board>  Pin plan skeleton: match ports to board nets (boards/*.md)
+  -autosdc <src.hqprj> [-period ns]    Auto-generate clock constraints SDC (tc.autogen)
+  -regression [base_dir]               One-command regression suite (capture+error paths+smoke)
                                        Per-project synthesis option overrides (injected into -flow/-build)
   -seed_sweep <src.hqprj> [-n N]       Multi-seed P&R sweep: N placements, WNS table, keep each bin
                                         to match FILE_SRC/FILE_TC/FILE_PC
@@ -1472,6 +1476,16 @@ def main():
     # Pin planning helper
     if first == '-pinplan':
         run_pinplan(args[1:])
+        return
+
+    # Auto-generate SDC from elaborated design
+    if first == '-autosdc':
+        run_autosdc(args[1:])
+        return
+
+    # Regression suite
+    if first == '-regression':
+        run_regression(args[1:])
         return
 
     # Multi-seed P&R sweep

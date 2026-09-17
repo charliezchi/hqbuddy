@@ -12,10 +12,18 @@
 | A1 | ipdepot 全量枚举（83 IP：名称/描述/器件/类别）→ skill `ip_catalog.md` | ip_catalog.md | 🔄 进行中 |
 | A2 | eco.* 命令族 help dump + 可行性结论 → skill `eco.md` | eco.md | 待做 |
 | A3 | XPN 结构探明（r30syn/aft_place.xpn 解析）→ `-xpn inspect` 命令 | 新命令 | ✅ 探明：`comp "<名>" { logical { cellmodel-name <类>; } }` 格式；inspect 命令实现下轮 |
-| A4 | tc.autogen 产品化 → `-autosdc`（无 SDC 工程自动时钟约束） | 新命令 | 待做 |
+| A4 | tc.autogen 产品化 | 新命令 | ❌ **厂商 bug 关闭**——tc.autogen -print 产出畸形 TCL（missing "），无法提取约束行；素材已存 /tmp |
+| A5 | nl.clock.detect / res.report / design.save checkpoint 探测记录 | 文档 | 待做 |
 | A5 | nl.clock.detect / res.report / design.save checkpoint 探测记录 | 文档 | 待做 |
 
 ## 阶段 B：hqbuddy 命令补全
+
+**B1 -regression 实现方案**：新增 `hqbuddy/regression.py`——
+1. 基线抓取（r21a -capture 触发点 cnt=200 校验）
+2. 错误路径抽测（-trig 矛盾条件拒绝 / sample-only 拒绝 / -model 校验）
+3. -filelist/-report 冒烟
+4. -edf2v 冒烟（r30syn/a.edif → xs 原语验证）
+全部 PASS → 一句"回归通过"；任一 FAIL → 详情+exit 1。offline 可跑项不含板。
 
 | # | 任务 | 状态 |
 |---|---|---|
