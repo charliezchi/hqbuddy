@@ -720,3 +720,14 @@ skills/hqfpga/references/insight.md 与本日志。
   on 行之后）；-show/-clear/-device 校验/未知键拒绝全通过
 - **修一个自引入 bug**：_KEYMAP 单元组解包 ValueError（heredoc 时代产物），
   板上实测修复生效
+
+## Round 56 — -pinplan 引脚规划辅助（第三夜加更，离线+elaborate）
+- **实现**：新增 hqbuddy/pinplan.py——rtl.analyze+elaborate 后 `ioh.get_ports O`
+  取输出端口，解析 boards/<板>.md 的 net→pin 表，token 匹配（led→TEST_LED*）
+  生成 .upc 骨架（匹配行 + TODO 行 + 时钟候选提示）；不覆盖已有约束文件
+- **验收**：r21a 3 输出端口匹配 2/3（led[1]→R19、led[0]→T21，dbg_out 为探针
+  端口诚实标 TODO）； boards 解析、-board 缺失、未知板卡报错干净
+- **边界记录**：`ioh.get_ports I`（输入端口）在实现前不产出——clk 类输入
+  以"时钟候选"提示代替自动匹配；匹配为骨架级，仍需人工核对 boards 手册
+- **顺带验证**：`tc.autogen -print` 可产出自动时钟约束 TCL（ta.set
+  -uncst_clk_period + create_clock HQ_AUTOGEN_VCLK）——"无 SDC 工程"的候选能力

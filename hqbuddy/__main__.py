@@ -21,6 +21,7 @@ from .xpn2bin import run_xpn2bin
 from .netlist import run_edf2v, run_netlist_build, run_vla_gen
 from .doctor import run_doctor
 from .synopt import run_synopt
+from .pinplan import run_pinplan
 from .device import run_device
 from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
@@ -77,6 +78,7 @@ Project:
   -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
   -doctor [<.hqprj>]                   Project health check: files/modules/times/device/depth
   -synopt <src.hqprj> [-set k=on|off ... | -show | -clear]
+  -pinplan <src.hqprj> -board <board>  Pin plan skeleton: match ports to board nets (boards/*.md)
                                        Per-project synthesis option overrides (injected into -flow/-build)
   -seed_sweep <src.hqprj> [-n N]       Multi-seed P&R sweep: N placements, WNS table, keep each bin
                                         to match FILE_SRC/FILE_TC/FILE_PC
@@ -1465,6 +1467,11 @@ def main():
     # Synthesis option overrides
     if first == '-synopt':
         run_synopt(args[1:])
+        return
+
+    # Pin planning helper
+    if first == '-pinplan':
+        run_pinplan(args[1:])
         return
 
     # Multi-seed P&R sweep

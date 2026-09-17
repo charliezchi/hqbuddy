@@ -102,3 +102,4 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -copy_prj <src.hqprj> <dst_dir>` — 复制工程到新目录（改写 FILE 路径，见 -refresh_time 行）
 - `hqbuddy -seed_sweep <src.hqprj> [-n N]` — 多种子布局布线扫描（place -seed）：每 seed 一份 bin + WNS 对比表（3.14.0）
 - `hqbuddy -synopt <src.hqprj> [-set k=on|off ...] [-show] [-clear]` — 工程级综合选项覆盖：键含 infer_ram/infer_rom/infer_srl/fsm_opt/expr_opt/mux_opt/dsp_map/share_opt/macro_rebuild（rtl.set）与 sweep/clk_conv/data_opt/merge/cut_merge（lo.slo.set）；sidecar 存于 <proj>.synopt.json，-flow/-build 自动注入到 hqprj2tcl 默认值之后（后行覆盖）
+- `hqbuddy -pinplan <src.hqprj> -board <板卡名> [-o <upc>]` — 引脚规划骨架：elaborate 后 ioh.get_ports 取输出端口，按 boards/<板>.md 的 net→pin 表匹配生成 phycst.pin.set 骨架（未匹配端口标 TODO）
