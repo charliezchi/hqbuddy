@@ -242,6 +242,15 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
             print(f"")
             print(f"Cleaned up temp TCL: {temp_tcl}")
 
+    # per-project synthesis option overrides (-synopt sidecar)
+    from .synopt import load_overrides, inject_synopt
+    full_tcl = os.path.join(work_dir, "run_hqprj.tcl")
+    if os.path.isfile(full_tcl) and load_overrides(hqprj_path):
+        lines = open(full_tcl, encoding="utf-8", errors="replace").read().splitlines()
+        lines = inject_synopt(lines, hqprj_path)
+        with open(full_tcl, "w", encoding="utf-8", newline="") as f:
+            f.write(chr(10).join(lines) + chr(10))
+
 
 def run_flow_looptdo(hqprj_path: str, output_tcl: str | None = None) -> None:
     """

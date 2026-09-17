@@ -710,3 +710,13 @@ skills/hqfpga/references/insight.md 与本日志。
   **seed 真实改变布局**（3 bin md5 全唯一），best 标记正确；bin stash 修复
   （排除前轮 stash、mtime 基准移到 run 前）
 - **意义**：时序收敛的标准手法产品化；与 -report --json/--diff 配合可自动化选型
+
+## Round 55 — -synopt 工程级综合选项覆盖（第三夜加更，离线）
+- **实现**：新增 hqbuddy/synopt.py（sidecar <proj>.synopt.json + 键白名单
+  rtl.set/lo.slo.set 两族）+ `-flow` 注入（hqprj2tcl 默认值之后插入覆盖行，
+  后行覆盖生效）+ dispatch/help
+- **验收**：-set infer_ram=off fsm_opt=off → sidecar 保存 → -flow 注入提示 +
+  run_hqprj.tcl 第 44/45 行出现 rtl.set -infer_ram off / -fsm_opt off（默认
+  on 行之后）；-show/-clear/-device 校验/未知键拒绝全通过
+- **修一个自引入 bug**：_KEYMAP 单元组解包 ValueError（heredoc 时代产物），
+  板上实测修复生效

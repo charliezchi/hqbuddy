@@ -20,6 +20,7 @@ from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .netlist import run_edf2v, run_netlist_build, run_vla_gen
 from .doctor import run_doctor
+from .synopt import run_synopt
 from .device import run_device
 from .ipgen import run_ipgen
 from .ipmgr import list_ip_files
@@ -75,6 +76,8 @@ Project:
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
   -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
   -doctor [<.hqprj>]                   Project health check: files/modules/times/device/depth
+  -synopt <src.hqprj> [-set k=on|off ... | -show | -clear]
+                                       Per-project synthesis option overrides (injected into -flow/-build)
   -seed_sweep <src.hqprj> [-n N]       Multi-seed P&R sweep: N placements, WNS table, keep each bin
                                         to match FILE_SRC/FILE_TC/FILE_PC
   -set_top <name>                      Set top module name
@@ -1457,6 +1460,11 @@ def main():
     # Project health check
     if first == '-doctor':
         run_doctor(args[1:])
+        return
+
+    # Synthesis option overrides
+    if first == '-synopt':
+        run_synopt(args[1:])
         return
 
     # Multi-seed P&R sweep

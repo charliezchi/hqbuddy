@@ -458,6 +458,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11）        |
 | `-add <files...>`                   | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程         |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
+| `-synopt <src.hqprj> [-set k=on\|off] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等旋钮，-flow/-build 自动注入 run_hqprj.tcl） |
 | `-doctor [<.hqprj>]`                | 工程体检：源文件/模块重复/时间戳一致性/器件合法性/HqInsight 状态一次全查 |
 | `-seed_sweep <src.hqprj> [-n N]`    | 多种子布局布线扫描：N 次 -seed 实现，输出 WNS 对比表并保留各 seed 位流 |
 | `-copy_prj <src.hqprj> <dst_dir>`   | 复制工程（源码+约束+.hqprj）到新目录并改写 FILE 路径为 `$WORK_DIR$` 相对引用 |
