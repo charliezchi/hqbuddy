@@ -761,3 +761,16 @@ skills/hqfpga/references/insight.md 与本日志。
     -del 段错误时效性复核
 - **正向**：-doctor/-report/cable 校验/-trig 秒级改写/-run 自动关 hqdnload
   均获 agent 好评
+
+## Round BD2 — UART 注入 bug 调试盲评（第三夜，板上+仿真）
+- **任务**：盲评 agent 面对含植入 bug 的 UART 设计，用 insight/仿真/代码审读定位并修复
+- **结果**：✅ **3 个 bug 全部定位**（复位极性反写=功能级、采样点偏移=仅注释、
+  LED 注释=仅文档）——修复后 Icarus 仿真 345 帧 0 错误、板上 3 次抓波 rx_data
+  连续 +1 精确、LFSR 序列 2492 拍零失配（周期 255 实证）
+- **新发现 S1**：**多总线同位宽探针也会静默损坏**（不只是混位宽）——2×1b+2×8b
+  与 3×8b 配置下，除触发锚定通道外全部乱码；流程 exit 0 无错误。缓解：
+  打包为单宽总线可解（agent 自主发现并用 8b dbg_bus 方案绕通）
+- **工具链评价**：insight.load/ddf 打包机制需厂商修复或 hqbuddy 侧做探针
+  重排优化；`-doctor`/`-report`/cable 校验继续获好评
+- **调试方法论**：盲评 agent 用仿真复现+板上抓波+规范化 diff 三路交叉验证，
+  定位路径完整可审计
