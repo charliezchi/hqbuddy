@@ -100,3 +100,4 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -edf2v <a.edif> [-o <a.v>] [-device <part>]` — 第三方 EDIF 网表转 XIST 原语 Verilog（详见 thirdparty_synthesis.md）
 - `hqbuddy -netlist_build <a.edif> --upc <u.upc> --sdc <s.sdc> [-o <bin>] [-device <part>]` — 第三方网表一键 P&R+位流（含 flatten/产物校验/目录创建）
 - `hqbuddy -copy_prj <src.hqprj> <dst_dir>` — 复制工程到新目录（改写 FILE 路径，见 -refresh_time 行）
+- `hqbuddy -seed_sweep <src.hqprj> [-n N]` — 多种子布局布线扫描（place -seed）：每 seed 一份 bin + WNS 对比表（3.14.0）

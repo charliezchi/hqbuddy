@@ -700,3 +700,13 @@ skills/hqfpga/references/insight.md 与本日志。
   dispatch（--json/--diff 旗标）；文本路径零改动
 - **验收**：--diff r21a r36cp 正确显示报告缺失侧（r36cp 未跑流程）；
   --json 输出完整摘要；WNS 单侧缺失显示 present/absent
+
+## Round 54 — -seed_sweep 多种子时序扫描（第三夜）
+- **实现**：`hqbuddy -seed_sweep <src.hqprj> [-n N]`——生成 run_hqprj.tcl 后
+  在 place 行追加原生 `-seed N` 选项（探明：'npl.set_seed 无参 U-command、
+  ARGF017 不可用；design.place/impl.place 原生支持 -seed），逐 seed 跑实现、
+  解析 WNS、留存各 seed bin、输出排序表+best 标记
+- **验收**：r29viol（4ns 过约束）3 seed：-195.3 / -252.5 / -252.5 ps——
+  **seed 真实改变布局**（3 bin md5 全唯一），best 标记正确；bin stash 修复
+  （排除前轮 stash、mtime 基准移到 run 前）
+- **意义**：时序收敛的标准手法产品化；与 -report --json/--diff 配合可自动化选型

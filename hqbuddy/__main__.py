@@ -15,6 +15,7 @@ from . import __version__
 from . import config, launcher, build_selector, soc
 from .hqprj_parser import extract_filelist
 from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstream
+from .flow import run_seed_sweep
 from .xpn import run_xpn
 from .xpn2bin import run_xpn2bin
 from .netlist import run_edf2v, run_netlist_build, run_vla_gen
@@ -74,6 +75,7 @@ Project:
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
   -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
   -doctor [<.hqprj>]                   Project health check: files/modules/times/device/depth
+  -seed_sweep <src.hqprj> [-n N]       Multi-seed P&R sweep: N placements, WNS table, keep each bin
                                         to match FILE_SRC/FILE_TC/FILE_PC
   -set_top <name>                      Set top module name
   -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
@@ -1455,6 +1457,22 @@ def main():
     # Project health check
     if first == '-doctor':
         run_doctor(args[1:])
+        return
+
+    # Multi-seed P&R sweep
+    if first == '-seed_sweep':
+        src = args[1] if len(args) > 1 else None
+        n = 3
+        i = 2
+        while i < len(args):
+            if args[i] == '-n' and i + 1 < len(args):
+                n = int(args[i + 1]); i += 2
+            else:
+                i += 1
+        if not src:
+            print("Usage: hqbuddy -seed_sweep <src.hqprj> [-n N]")
+            sys.exit(1)
+        run_seed_sweep(src, n)
         return
 
     # Set top module

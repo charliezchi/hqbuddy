@@ -3,6 +3,7 @@
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -338,3 +339,77 @@ def run_flow_bin_only(hqprj_path: str, bin_name: str | None = None, output_tcl: 
             os.remove(temp_tcl)
             print(f"")
             print(f"Cleaned up temp TCL: {temp_tcl}")
+
+
+def run_seed_sweep(hqprj_path: str, n: int = 3) -> None:
+    """Multi-seed P&R sweep: run the implementation with N placement/routing
+    seeds, report WNS per seed, and keep every seed's bitstream.
+
+    Sets the place step's -seed option per sweep seed (design.place/impl.place
+    natively support -seed <value>; R54 probe)."""
+    from .report import _parse_wns
+    from .hqprj_parser import extract_filelist  # noqa: F401 (parity with -flow)
+
+    if not os.path.isfile(hqprj_path):
+        print(f"Error: file not found: {hqprj_path}")
+        sys.exit(1)
+    work_dir = os.path.dirname(os.path.abspath(hqprj_path))
+    hqfpga_path = _resolve_hqfpga()
+    top = None
+    m_top = re.search(r"TOP_MODULE[= ]+(\S+)",
+                      open(hqprj_path, encoding="utf-8", errors="replace").read())
+    if m_top:
+        top = m_top.group(1)
+
+    # 1. generate the base flow TCL (hqprj2tcl)
+    run_flow(hqprj_path)
+    tcl_path = os.path.join(work_dir, "run_hqprj.tcl")
+    lines = open(tcl_path, encoding="utf-8", errors="replace").read().splitlines()
+    place_idx = next((i for i, ln in enumerate(lines)
+                      if ln.strip().startswith(("design.place", "impl.place"))), None)
+    if place_idx is None:
+        print("Error: place step not found in generated TCL (design.place/impl.place)")
+        sys.exit(1)
+
+    print(f"Seed sweep: {n} seeds on {hqprj_path}")
+    results = []
+    for seed in range(1, n + 1):
+        seeded = lines[:]
+        seeded[place_idx] = lines[place_idx].rstrip() + f" -seed {seed}"
+        sweep_tcl = os.path.join(work_dir, f"run_hqprj_seed{seed}.tcl")
+        with open(sweep_tcl, "w", encoding="utf-8", newline="\n") as f:
+            f.write(chr(10).join(seeded) + chr(10))
+        started = time.time()
+        print(f"[seed {seed}/{n}] running implementation ...")
+        _run_hqfpga(hqfpga_path, sweep_tcl, work_dir)
+        # WNS from the reports this run just wrote
+        from .report import _parse_wns
+        w = _parse_wns(work_dir, top)
+        setup = w["wns_setup_ps"] if w and w["wns_setup_ps"] is not None else None
+        hold = w["wns_hold_ps"] if w and w["wns_hold_ps"] is not None else None
+        # stash this seed's bitstream
+        bin_moved = None
+        for cand in glob.glob(os.path.join(work_dir, "*.bin")):
+            base_c = os.path.basename(cand)
+            if "_seed" in base_c:
+                continue  # previous stashes are not fresh flow outputs
+            if os.path.getmtime(cand) >= started:
+                stem = os.path.splitext(base_c)[0]
+                dst = os.path.join(work_dir, f"{stem}_seed{seed}.bin")
+                shutil.copyfile(cand, dst)
+                bin_moved = dst
+        results.append({"seed": seed, "setup": setup, "hold": hold,
+                        "bin": bin_moved})
+        print(f"[seed {seed}] WNS setup={'?' if setup is None else setup} ps  "
+              f"hold={'?' if hold is None else hold} ps  bin={bin_moved}")
+
+    print()
+    print("Seed sweep summary (worst setup slack first):")
+    ranked = sorted([r for r in results if r["setup"] is not None],
+                    key=lambda r: r["setup"])
+    for idx, r in enumerate(ranked):
+        mark = "  <- best" if r is ranked[-1] else ""
+        print(f"  seed {r['seed']}: setup {r['setup']} ps, hold {r['hold']} ps, "
+              f"{os.path.basename(r['bin']) if r['bin'] else '?'}{mark}")
+    if not ranked:
+        print("  (no seed produced parseable WNS — check reports)")
