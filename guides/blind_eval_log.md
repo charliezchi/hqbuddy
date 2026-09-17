@@ -742,3 +742,22 @@ skills/hqfpga/references/insight.md 与本日志。
 - **验收**：5/6 PASS（唯一 FAIL=板态导致的 capture 超时，非工具回归）；
   编码鲁棒修复（GBK→UTF-8 统一）；判据改"Trigger at + 0xc8"而非精确 hex
 - **意义**：三夜盲评的回归集固化为产品命令，HqFPGA 升级后一键验证
+
+## Round BD1 — UART 8N1 回环全链路盲评（复杂设计系列首轮）
+- **任务**：从零设计 UART 8N1（115200@25MHz），全 CLI 流程：设计→工程→约束→
+  编译→下载→insight 探针→LA 验证回环收发
+- **结果**：✅ **全链路通过**——时序全 MET、下载+型号校验双通过、insight
+  探针登记/触发/抓波正常；回环自证（触发点前字节=后字节-1，连续 5 次抓波）、
+  波特率误差 +0.006%、MSB 翻转周期实测恒 217 拍、clock_cycle 连续
+- **功能痛点（核心产出，10 条）**：
+  - **严重 P1**：混位宽探针静默损坏实测复现——8b+8b+1b+1b 四探针时 3 通道
+    恒值但触发正常命中，exit 0 无错误（-add 有警告但 -run 无拦截）→
+    **建议：-capture 检测到混位宽直接拒绝布防**
+  - **严重 P2**：`-report` 裸调用崩溃（report.py:325 NoneType.endswith）→
+    **已修**（--diff 编辑破坏了 auto-detect 控制流），板上实测恢复
+  - 一般 P3-P6：位选不支持、depth=1024 窗口太短难数频率、boards 缺 bank
+    信息、触发标记流水偏斜诱导严格单点断言
+  - 建议 P7-P10：wrapper 日志顺序、upc 模板命令化、-ls 标注同名信号、
+    -del 段错误时效性复核
+- **正向**：-doctor/-report/cable 校验/-trig 秒级改写/-run 自动关 hqdnload
+  均获 agent 好评

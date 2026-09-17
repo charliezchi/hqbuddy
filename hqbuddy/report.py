@@ -317,6 +317,7 @@ def run_report(args: list) -> None:
     if diff_mode:
         report_diff(targets[0], targets[1], n_paths)
         return
+    if target is None:
         matches = glob.glob("*.hqprj")
         if not matches:
             print("Error: no .hqprj in current directory; pass a project or directory.")
