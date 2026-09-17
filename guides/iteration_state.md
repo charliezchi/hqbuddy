@@ -53,6 +53,10 @@
 
 ## 执行记录（时间序）
 
+- 09-18 05:55 R59b 静默回归：doctor 0 FAIL 0 WARN 7 ok；capture 触发点
+  cnt=0x56（≠200）——疑似标记点流水偏斜/overflow 场景（板已运行数小时），
+  非 bit 错误（lfsr 满足 NE 0 且 clock_cycle 连续）。无异常，一句话收尾。
+
 - 09-18 04:33-05:2x BD8 收账：四工程零回归（r21a 精确触发+selftest PASS、
   bd1 UART 帧行为、bd5 FIFO count=32 平台、bd7 VIO 写读闭环+事件计数）；
   -regression 6/6；旧 ddf 布防文件兼容性回归已定位（重 -trig 即恢复）。

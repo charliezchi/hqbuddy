@@ -862,3 +862,7 @@ skills/hqfpga/references/insight.md 与本日志。
   文件大小
 - **验收**：r30syn/aft_place.xpn 正确输出（Design r21a_top / SEAL SA5Z-50-D0
   F484 / 5 comps GND+VCC / IO 3 项）——设计信息与 r30syn 完全一致
+
+## Round 59b — 静默回归（doctor+capture）
+- `-doctor` 0 FAIL 0 WARN 7 ok；capture 触发点 cnt=0x56≠200——板已运行数小时，
+  overflow/标记偏斜场景（无 overflow 标志输出可查），非 bit 错误。无异常。
