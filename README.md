@@ -443,6 +443,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-flow [<file>] -bin_only [<name>]` | bin-only 模式：仅生成`.bin`，不产生中间文件                          |
 | `-xpn [<file>] [-o <file>]`         | 生成 XPN（普通模式），省略时自动检测，默认生成`hq.xpn`               |
 | `-xpn -ins [<file>] [-o <file>]`    | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成`hq_ins.xpn`     |
+| `-xpn inspect <file.xpn>`           | 解析 XPN 物理网表：设计/器件/comp 统计/IO 列表 |
 | `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN，省略时自动检测，默认生成`<input>.bin`             |
 | `-get_device [<file>]`              | 查看`.hqprj` 使用的器件型号                                          |
 | `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |

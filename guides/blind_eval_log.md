@@ -855,3 +855,10 @@ skills/hqfpga/references/insight.md 与本日志。
 - **回归异常①（工具/文件态）**：BD 时代旧 ddf 布防文件在 FT091626 上条件
   失效（触发操作数字节无 200 编码）——重 -trig 后全部精确（有明确根因、
   有恢复手段、不涉 bit/设计/板卡）
+
+## Round 58 — -xpn inspect 命令实现（第三夜加更，离线）
+- **实现**：`hqbuddy -xpn inspect <file.xpn>`——解析 XPN 物理网表：design 名/
+  器件/架构/封装、comp 计数与 cellmodel-name 直方图、IO 端口列表（方向+名称）、
+  文件大小
+- **验收**：r30syn/aft_place.xpn 正确输出（Design r21a_top / SEAL SA5Z-50-D0
+  F484 / 5 comps GND+VCC / IO 3 项）——设计信息与 r30syn 完全一致

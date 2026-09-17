@@ -16,7 +16,7 @@ from . import config, launcher, build_selector, soc
 from .hqprj_parser import extract_filelist
 from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstream
 from .flow import run_seed_sweep
-from .xpn import run_xpn
+from .xpn import run_xpn, run_xpn_inspect
 from .xpn2bin import run_xpn2bin
 from .netlist import run_edf2v, run_netlist_build, run_vla_gen
 from .doctor import run_doctor
@@ -1526,6 +1526,9 @@ def main():
 
     # XPN (normal and hqinsight modes)
     if first == '-xpn':
+        if args[1:] and args[1] == 'inspect':
+            run_xpn_inspect(args[2] if len(args) > 2 else None)
+            return
         cmd_xpn(args[1:])
         return
 

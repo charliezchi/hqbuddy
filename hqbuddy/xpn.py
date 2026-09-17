@@ -1,6 +1,7 @@
 """XPN generation: generate temp TCL and launch hqfpga -cmd."""
 
 import os
+import re
 import subprocess
 import sys
 import webbrowser
@@ -131,3 +132,34 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
     else:
         print(f"")
         print(f"Warning: XPN file was not generated: {output_abs}")
+
+
+def run_xpn_inspect(xpn_path: str) -> None:
+    """Parse an XPN physical netlist and print a structural summary."""
+    if not os.path.isfile(xpn_path):
+        print(f"Error: file not found: {xpn_path}")
+        sys.exit(1)
+    txt = open(xpn_path, encoding="utf-8", errors="replace").read()
+
+    design = re.search(r"design\s+(\S+)", txt)
+    arch = re.search(r"architecture\s+(\w+);", txt)
+    dev = re.search(r"device\s+(\S+);", txt)
+    pkg = re.search(r"package\s+(\S+);", txt)
+    print(f"Design : {design.group(1) if design else '?'}")
+    print(f"Device : {arch.group(1) if arch else '?'} {dev.group(1) if dev else '?'} {pkg.group(1) if pkg else '?'}")
+
+    comps = re.findall(r'comp\s+"([^"]+)"\s*\{([^}]+)\}', txt)
+    print(f"Comps  : {len(comps)}")
+    models = {}
+    for _, body in comps:
+        cm = re.search(r"cellmodel-name\s+(\S+)\s*;", body)
+        if cm:
+            models[cm.group(1)] = models.get(cm.group(1), 0) + 1
+    for k in sorted(models, key=models.get, reverse=True):
+        print(f"  {k:20s} x{models[k]}")
+    pinnames = re.findall(r'"PINNAME:\d+"\s+string\s+"([^"]+)"', txt)
+    pintypes = re.findall(r'"PINTYPE:\d+"\s+string\s+"([^"]+)"', txt)
+    print(f"IO     : {len(pinnames)}")
+    for pn, pt in zip(pinnames, pintypes):
+        print(f"  {pt:3s} {pn}")
+    print(f"Size   : {os.path.getsize(xpn_path)} bytes")
