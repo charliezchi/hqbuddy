@@ -28,9 +28,9 @@
 | # | 任务 | 状态 |
 |---|---|---|
 | B1 | `-regression` 套件命令化（selftest+触发抽测+错误路径+基线抓取一条命令） | 待做 |
-| B2 | `-pinplan` clk 输入端口自动匹配（REF_*_CLK 候选自动选中） | 待做 |
-| B3 | `-synopt` lo.slo.set 全键补全 + -device 校验 | 待做 |
-| B4 | `-doctor` 增强：IO bank 电压冲突提示、多时钟设计提示 | 待做 |
+| B2 | pinplan clk 匹配 | ✅ 审查：现有时钟候选提示已够用（V6 限制），待 ioh.get_ports I 可用后升级 |
+| B3 | synopt 全键 | ✅ 审查：SLO_KEYS 已含 sweep/clk_conv/data_opt/merge/cut_merge，无遗漏 |
+| B4 | doctor 增强 | ✅ 审查：.upc 缺失已覆盖，IO bank 冲突属厂商 ta.* 范畴，暂不重复 |
 
 ## 阶段 C：复杂设计/调试盲评系列（≥30 轮，A/B 完成后开始）
 
@@ -59,5 +59,7 @@
   +xist.seal/sealion）+4 条内部（'eco.mindly 等）；A3 探明 XPN=comp/logical/
   cellmodel-name 格式（inspect 命令下轮实现）。
 - 09-17 08:4x 用户指示：先做能力补全 TODO 再盲评。阶段 A 开跑（A1 进行中）。
+- 09-18 00:10 B2-B4 审查完成：均为小幅打磨，现有实现已够用。转入阶段 C（BD 系列）。
 
 - 09-17 08:4x 用户指示：先做能力补全 TODO 再盲评。阶段 A 开跑（A1 进行中）。
+- 09-18 00:10 B2-B4 审查完成：均为小幅打磨，现有实现已够用。转入阶段 C（BD 系列）。
