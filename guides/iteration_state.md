@@ -1,62 +1,48 @@
-# 自回归迭代状态·第四阶段（2026-09-17 起，持续无人值守）
+# 自回归迭代状态·能力补全阶段（2026-09-17 起）
 
-> 主题：**智多晶原语 / IP / XPN / ECO 能力探索与产品化**，跳出在线调试线，
-> 扩展 hqfpga 自身能力覆盖与 Agent 自主设计能力。
-> 框架：`autoregressive_cycle.md`；锁协议照旧（.round_lock，90 分钟接管）。
-> **硬性边界：只本地 commit，严禁 push。** exe 修复后 taskkill+build+覆盖安装。
+> 用户指示：**先完成 hqfpga 探索/能力补全 TODO，再进入复杂设计盲评系列（BD）**。
+> 框架：`autoregressive_cycle.md`；锁协议照旧；只本地 commit 严禁 push；
+> exe 修复后 taskkill+build+覆盖安装。板卡 = SA50K（在线，当前为 r21a 基线 bit）。
+> BD 系列任务池已备好（见 §BD），能力 TODO 完成后立即转入。
 
-## 队列（按序消费；S0/S1 修复最优先；队列空则探索未开发命令族或静默回归）
+## 阶段 A：hqfpga 探索/枚举（离线，快速）
 
-| # | 主题 | 状态 |
-|---|---|---|
-| R57 | 原语知识库 | ✅ 按用户指导改为**框架性质** primitives.md（库发现路径/命名规则解法/现场提取法），不固化清单（原语库随时更新） |
-| R58 | XPN 网表检查：xpn.write 产物结构探明 → `-xpn inspect`（原语统计/IO/BRAM 概览）可行性 | 待做 |
-| R59 | eco.* 命令族全量 help dump + 可行性结论（网表级 ECO） | 待做 |
-| R60 | ipdepot IP 全量枚举（名称/版本/器件支持矩阵）→ skill 参考 ip_catalog.md | 待做 |
-| R61 | `-pinplan` 输入端口（clk）自动匹配升级（时钟候选→自动选中 REF_*_CLK） | 待做 |
-| R62 | `-regression` 套件命令化（selftest+触发矩阵抽测+错误路径抽测一条命令） | 待做 |
-| R63 | -synopt 扩展：支持 lo.slo.set 全键与 -device 校验 | 待做 |
+| # | 任务 | 产出 | 状态 |
+|---|---|---|---|
+| A1 | ipdepot 全量枚举（83 IP：名称/描述/器件/类别）→ skill `ip_catalog.md` | ip_catalog.md | 🔄 进行中 |
+| A2 | eco.* 命令族 help dump + 可行性结论 → skill `eco.md` | eco.md | 待做 |
+| A3 | XPN 结构探明（r30syn/aft_place.xpn 解析）→ `-xpn inspect` 命令 | 新命令 | 待做 |
+| A4 | tc.autogen 产品化 → `-autosdc`（无 SDC 工程自动时钟约束） | 新命令 | 待做 |
+| A5 | nl.clock.detect / res.report / design.save checkpoint 探测记录 | 文档 | 待做 |
 
-挂起：SA5T 实测（待硬件）；VLA 运行侧 ddf 链（需 GUI 抓包）；4096 崩溃/-del
-空触发集段错误（厂商素材已齐，待反馈）。
-
-## BD 盲评系列（≥30 轮；新 directive 09-17）
-
-复杂设计与调试任务盲评：奇数轮=新设计全链路，偶数轮=调试（主 agent 注入 bug，
-盲评 agent 用 insight/VIO/报告定位修复）。每轮子 agent 返回评价+痛点；
-痛点分级修复（hqbuddy 崩溃>skill 缺文档>厂商问题进 open_issues.md）。
+## 阶段 B：hqbuddy 命令补全
 
 | # | 任务 | 状态 |
 |---|---|---|
-| BD1 | UART 8N1 回环（115200@25MHz）：TX 循环发 0x55，RX 接收；探针 rx_data/rx_done；LA 触发验证收发一致 | 🔄 进行中 |
-| BD2 | 注入 bug 调试：在 BD1 设计植入 3 bug（波特率分频错/CDC 去同步/复位极性反），盲找并修复 | 待做 |
-| BD3 | 双时钟 CDC：25M + 分频时钟，两级同步器 + 格雷码握手 | 待做 |
-| BD4 | SPI master 模式 0：VIO 驱动字节，LA 抓 SCK/MOSI 核对 | 待做 |
-| BD5 | 同步 FIFO（BRAM 推断）：满/空标志 + 读写序 LA 验证 | 待做 |
-| BD6 | 8 位 FSM 数据通路：指令 ROM+译码+ALU，时序收敛+功能验证 | 待做 |
-| BD7 | PWM+按键消抖：LED 渐变、消抖计数、VIO 调占空比 | 待做 |
-| BD8 | 深度回归：BD1-BD7 产物重跑零回归 | 待做 |
-| BD9+ | 池：I2C master、CRC 单元、看门狗、曼彻斯特编码、格雷码转换、脉冲整形……自主扩展 | 池 |
+| B1 | `-regression` 套件命令化（selftest+触发抽测+错误路径+基线抓取一条命令） | 待做 |
+| B2 | `-pinplan` clk 输入端口自动匹配（REF_*_CLK 候选自动选中） | 待做 |
+| B3 | `-synopt` lo.slo.set 全键补全 + -device 校验 | 待做 |
+| B4 | `-doctor` 增强：IO bank 电压冲突提示、多时钟设计提示 | 待做 |
+
+## 阶段 C：复杂设计/调试盲评系列（≥30 轮，A/B 完成后开始）
+
+| # | 任务 | 状态 |
+|---|---|---|
+| BD1 | UART 8N1 回环全链路（115200@25MHz，探针 rx_data/rx_done，LA 验证） | 任务书已备 |
+| BD2 | 注入 bug 调试：BD1 植入 3 bug（分频错/去同步/复位极性），盲找修复 | 待做 |
+| BD3 | 双时钟 CDC：两级同步器 + 格雷码握手 | 待做 |
+| BD4 | SPI master 模式 0：VIO 驱动 + LA 抓波形核对 | 待做 |
+| BD5 | 同步 FIFO（BRAM 推断）：满/空标志 + 读写序 | 待做 |
+| BD6 | 8 位 FSM 数据通路（指令 ROM+译码+ALU）时序收敛 | 待做 |
+| BD7 | PWM+按键消抖+VIO 调占空比 | 待做 |
+| BD8 | 深度回归：BD1-BD7 全部重跑零回归 | 待做 |
+| BD9+ | 池：I2C、CRC、看门狗、曼彻斯特、格雷码转换、脉冲整形……自主扩展 | 池 |
+
+## 遗留/挂起（详见 open_issues.md）
+
+- V1-V6 厂商问题（深度失真/4096 崩溃/空触发集段错误/X 通配/seed 机制/ioh I）
+- SA5T 实测（待硬件）；VLA 运行侧 ddf 链（需 GUI 抓包）；-vla 全自动模板化（已定论不可行）
 
 ## 执行记录（时间序）
 
-- 09-17 10:30 主会话派出 BD1 盲评 agent（UART 回环全链路；板将切换至 bd1 bit，
-  原基线 bit 由 -depth 1024 → -run 可随时重建）。自动化已重建（BD 系列）。
-
-- 09-17 10:3x 使命切换（用户指示）：新增 BD 复杂设计/调试盲评系列（≥30 轮）；
-  R58-R63 能力项并行消化。同轮完成 open_issues.md 首版（V1-V6 厂商问题 +
-  U1-U3 待用户决策）。
-
-- 09-16 22:45 第四阶段开启。R57 由主会话开跑（原语知识库，离线）。
-- 09-17 23:30 R57 重定向收账：应用户指导，primitives.md 重写为框架性质
-  （发现路径/命名规则/现场提取法），不固化清单；提取脚本已验证可跑通
-  （278+232 模块、130 家族）——需要清单时现场生成即可。
-
-## 下一轮建议
-
-- **BD1 UART 回环盲评**（板上）：agent 任务书在派出时已定；验收=收发一致
-  + 触发点 rx_data 匹配 + 时序 MET + 痛点清单。板上当前 = r21a 干净基线 bit
-  （1024/1/1，EQ 200 AND NE 0），BD1 会覆盖。
-- 之后：BD2 注入 bug 调试 → BD3 CDC → BD4 SPI → BD5 FIFO → …
-- 穿插：R58-R63 能力项、静默回归（每 3-4 轮一次基线抓取）。
-- 每轮收尾：痛点分级修复（hqbuddy 崩溃 > skill 文档 > 厂商问题进 open_issues.md）。
+- 09-17 08:4x 用户指示：先做能力补全 TODO 再盲评。阶段 A 开跑（A1 进行中）。
