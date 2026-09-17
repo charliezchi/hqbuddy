@@ -875,3 +875,8 @@ skills/hqfpga/references/insight.md 与本日志。
 - **首次零新发现轮次**：FT091626 + 3.15.0 上混位宽损坏未复现（属数据干净
   而非豁免）；工具链顺畅无卡点
 - **S2**：-report 对插桩目录报 "No reports found" 易误导——建议补提示
+
+## Round 60 — -synopt 端到端验证（第三夜加更，离线）
+- -set infer_ram=off → sidecar 保存 → -flow 生成 run_hqprj.tcl → 覆盖行
+  `rtl.set -infer_ram off` 出现在默认行（行 30 on）之后（行 44 off）——
+  TCL 后行覆盖语义生效，综合选项覆盖机制**端到端验证通过**

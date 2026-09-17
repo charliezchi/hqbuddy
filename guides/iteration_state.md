@@ -55,6 +55,12 @@
 
 ## 执行记录（时间序）
 
+- 09-18 07:08 R60 收账：-synopt 端到端验证通过——sidecar 写入 → -flow 注入
+  → run_hqprj.tcl 行 30 默认 on / 行 44 覆盖 off（后行覆盖生效）。sidecar
+  已清除恢复默认。
+
+- 09-18 07:01 定时轮启动 R60（-synopt 端到端验证）。判据：-set infer_ram=off → -flow 注入到 run_hqprj.tcl → 默认 rtl.set -infer_ram on 之后出现 rtl.set -infer_ram off 覆盖行。
+
 - 09-18 06:4x BD9 收账：**首次零新发现轮次**——CRC-8 设计正确（656 项比对
   零失配，黄金模型自检 0xF4 ✓）；工具链顺畅。板上 = bd9 CRC bit。
 - 09-18 06:33 定时轮启动 BD9（CRC-8 单元设计+板上验证）。判据：CRC-8（poly
