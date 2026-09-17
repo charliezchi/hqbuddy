@@ -731,3 +731,7 @@ skills/hqfpga/references/insight.md 与本日志。
   以"时钟候选"提示代替自动匹配；匹配为骨架级，仍需人工核对 boards 手册
 - **顺带验证**：`tc.autogen -print` 可产出自动时钟约束 TCL（ta.set
   -uncst_clk_period + create_clock HQ_AUTOGEN_VCLK）——"无 SDC 工程"的候选能力
+
+## Round 56b — 阶段转换记录
+- 第三夜收官后，应用户指示进入新阶段：**原语/IP/XPN/ECO 能力探索与产品化**
+  （跳出在线调试线，扩展 hqfpga 自身能力覆盖）。队列见 iteration_state.md。
