@@ -11,7 +11,7 @@
 |---|---|---|---|
 | A1 | ipdepot 全量枚举（83 IP：名称/描述/器件/类别）→ skill `ip_catalog.md` | ip_catalog.md | 🔄 进行中 |
 | A2 | eco.* 命令族 help dump + 可行性结论 → skill `eco.md` | eco.md | 待做 |
-| A3 | XPN 结构探明（r30syn/aft_place.xpn 解析）→ `-xpn inspect` 命令 | 新命令 | 待做 |
+| A3 | XPN 结构探明（r30syn/aft_place.xpn 解析）→ `-xpn inspect` 命令 | 新命令 | ✅ 探明：`comp "<名>" { logical { cellmodel-name <类>; } }` 格式；inspect 命令实现下轮 |
 | A4 | tc.autogen 产品化 → `-autosdc`（无 SDC 工程自动时钟约束） | 新命令 | 待做 |
 | A5 | nl.clock.detect / res.report / design.save checkpoint 探测记录 | 文档 | 待做 |
 
@@ -44,5 +44,12 @@
 - SA5T 实测（待硬件）；VLA 运行侧 ddf 链（需 GUI 抓包）；-vla 全自动模板化（已定论不可行）
 
 ## 执行记录（时间序）
+
+- 09-17 08:5x A1 收账：ip_catalog.md 83 条（含 {%XX%} 占位符清理）；A2 收账：
+  eco.md 14 条公开命令（clear_clock/end/forbid_route_node/icdelay.annotate/
+  init/place/read/report_pin_delay/route/set_clock/set_route_points/signal_probe
+  +xist.seal/sealion）+4 条内部（'eco.mindly 等）；A3 探明 XPN=comp/logical/
+  cellmodel-name 格式（inspect 命令下轮实现）。
+- 09-17 08:4x 用户指示：先做能力补全 TODO 再盲评。阶段 A 开跑（A1 进行中）。
 
 - 09-17 08:4x 用户指示：先做能力补全 TODO 再盲评。阶段 A 开跑（A1 进行中）。
