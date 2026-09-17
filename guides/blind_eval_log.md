@@ -866,3 +866,12 @@ skills/hqfpga/references/insight.md 与本日志。
 ## Round 59b — 静默回归（doctor+capture）
 - `-doctor` 0 FAIL 0 WARN 7 ok；capture 触发点 cnt=0x56≠200——板已运行数小时，
   overflow/标记偏斜场景（无 overflow 标志输出可查），非 bit 错误。无异常。
+
+## Round BD9 — CRC-8 单元设计+板上验证（第三夜）
+- **任务**：CRC-8（poly 0x07）串行单元，LFSR 数据源，LA 探针验证余数正确性
+- **结果**：✅ **CRC-8 设计正确**——黄金模型 656 项比对零失配；"123456789"
+  标准校验值 0xF4 自检通过；por 周期性重初始化使上电态无关、每窗口 31 个
+  完整字节组可绝对验证
+- **首次零新发现轮次**：FT091626 + 3.15.0 上混位宽损坏未复现（属数据干净
+  而非豁免）；工具链顺畅无卡点
+- **S2**：-report 对插桩目录报 "No reports found" 易误导——建议补提示
