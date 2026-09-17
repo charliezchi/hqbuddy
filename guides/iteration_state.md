@@ -53,6 +53,16 @@
 
 ## 执行记录（时间序）
 
+- 09-18 01:42 BD3 收账：CDC 设计正确——双域时序全 MET、同步器最坏相位差 0、
+  格雷码 1024 样本零失配、分频 2048 拍与快域相位锁定；S1 规格矛盾（判据 d
+  512 拍 vs 实际 2048 拍分频）非设计缺陷；S3 ≥3 探针组合错位（V7 同源）、
+  SRL16 推断使同步链失效（HQ_SRL_INFER="OFF" 解决）→ 记入 open_issues；
+  11 VCD 归档 bd3\sim\。板上 = bd3 CDC 设计 bit。
+- 09-18 01:18 定时轮启动 BD3（双时钟 CDC 设计盲评）。判据：快/慢双时钟域
+  设计，两级同步器+格雷码握手，探针抓波验证。
+
+- 09-18 01:18 定时轮启动 BD3（双时钟 CDC 设计盲评）。判据：快/慢双时钟域设计，两级同步器+格雷码握手，探针抓波验证。
+
 - 09-17 08:5x A1 收账：ip_catalog.md 83 条（含 {%XX%} 占位符清理）；A2 收账：
   eco.md 14 条公开命令（clear_clock/end/forbid_route_node/icdelay.annotate/
   init/place/read/report_pin_delay/route/set_clock/set_route_points/signal_probe
