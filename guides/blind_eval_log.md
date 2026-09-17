@@ -694,3 +694,9 @@ skills/hqfpga/references/insight.md 与本日志。
   深度一致性预警，R32/R43 防护的 doctor 版）
 - **验收**：r21a 0 FAIL 0 WARN 7 ok；r36cp 通过；故意删除 FILE_TIME 的坏副本
   被精确抓出 FAIL 并指引 -refresh_time。exit 语义：有 FAIL → 1
+
+## Round 53 — -report --json / --diff（第三夜加更，离线）
+- **实现**：report_digest（机器可读摘要）+ report_diff（两工程对比）+
+  dispatch（--json/--diff 旗标）；文本路径零改动
+- **验收**：--diff r21a r36cp 正确显示报告缺失侧（r36cp 未跑流程）；
+  --json 输出完整摘要；WNS 单侧缺失显示 present/absent

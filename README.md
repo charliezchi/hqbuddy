@@ -481,6 +481,8 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-insight -add/-del <信号>`         | 添加/移除采样/触发信号                                                 |
 | `-insight -depth N [-windows W] [-level L]` | 采样参数（写 .hqins 深度/窗口/级数段；depth/windows 需 -run 重build生效，未生效时 capture 拒绝抓取防错位） |
 | `-insight -selftest [-signal s] [-value N]` | 回归自测：布防 → 抓取 → 校验样本连续且逐拍 +1（升级后必跑）      |
+| `-report <dirA> --diff <dirB>`      | 两个工程目录的实现报告对比（FMAX/WNS/利用率/位流数） |
+| `-report [<dir>] --json`            | 以 JSON 输出报告摘要（机器可读，供自动化消费） |
 | `-report [<dir>] [-paths N]`        | 报告摘要（Fmax/WNS/利用率/bit）；`-paths N` 另提取最差 N 条违例路径    |
 | `-cfg`                              | 用系统编辑器打开 config.json（scan_path + selected_build）               |
 

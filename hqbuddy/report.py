@@ -200,13 +200,93 @@ def _extract_paths(work: str, top: Optional[str], n: int) -> list:
     return results[:n]
 
 
+def report_digest(work: str, top: Optional[str]) -> dict:
+    """Machine-readable digest of a project's implementation reports."""
+    slack_names = ([f"{top}_slack.rpt"] if top else []) + ["final_ta.rpt"]
+    files = {
+        "flow_tcl": _find_report(work, ["run_hqprj.tcl"]),
+        "fmax": _find_report(work, ["fmax.rpt", "pl_ta.rpt"]),
+        "slack": _find_report(work, slack_names),
+        "util": _find_report(work, ["res_place.rpt", "ratio.rpt", "res_pack.rpt", "res_rtl.rpt"]),
+        "netlist_view": _find_report(work, ["aft_place.xpn"]),
+    }
+    fmax = [{"clock": f["clock"], "fmax_mhz": f["fmax"], "min_period_ps": f["period"]}
+            for f in _parse_fmax(work)]
+    wns = None
+    w = _parse_wns(work, top)
+    if w:
+        wns = {"setup_ps": w["wns_setup_ps"], "hold_ps": w["wns_hold_ps"],
+               "setup_met": w["setup_met"], "hold_met": w["hold_met"],
+               "paths": w["paths"], "src": w["src"]}
+    util = None
+    u = _parse_util(work)
+    if u:
+        util = {"src": u["src"],
+                "rows": {k: {"used": v[0], "avail": v[1], "ratio": v[2]}
+                         for k, v in u["rows"].items()}}
+    import time
+    bins = [{"file": os.path.basename(b),
+             "mtime": time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(b)))}
+            for b in _bit_files(work)]
+    return {"project": work, "top": top, "files": files, "fmax": fmax,
+            "wns": wns, "util": util, "bits": bins}
+
+
+def report_diff(dir_a: str, dir_b: str, n_paths: int) -> None:
+    """Side-by-side compare of two projects' implementation reports."""
+    da = report_digest(os.path.abspath(dir_a), _top_name(os.path.abspath(dir_a)))
+    db = report_digest(os.path.abspath(dir_b), _top_name(os.path.abspath(dir_b)))
+
+    def line(label, va, vb):
+        mark = "  " if va == vb else "->"
+        print(f"  {label:24s} {str(va):>16s}  {str(vb):>16s}  {mark}")
+
+    print(f"{'':24s} {'A: ' + os.path.basename(da['project'].rstrip(os.sep) or da['project']):>18s}"
+          f" {'B: ' + os.path.basename(db['project'].rstrip(os.sep) or db['project']):>18s}  delta")
+    line("top", da["top"], db["top"])
+    fa = {f["clock"]: f["min_period_ps"] for f in da["fmax"]}
+    fb = {f["clock"]: f["min_period_ps"] for f in db["fmax"]}
+    for clk in sorted(set(fa) | set(fb)):
+        if clk in fa and clk in fb and fa[clk] != fb[clk]:
+            line(f"min period ({clk}) ps", fa[clk], fb[clk])
+        elif clk in fa and clk in fb:
+            line(f"min period ({clk}) ps", fa[clk], fb[clk])
+    wa, wb = da["wns"], db["wns"]
+    if wa and wb:
+        line("WNS setup ps", wa["setup_ps"], wb["setup_ps"])
+        line("WNS hold ps", wa["hold_ps"], wb["hold_ps"])
+        line("WNS setup", "MET" if wa["setup_met"] else "VIOLATED",
+             "MET" if wb["setup_met"] else "VIOLATED")
+    elif wa or wb:
+        line("WNS", "present" if wa else "absent", "present" if wb else "absent")
+    ua, ub = da["util"] or {"rows": {}}, db["util"] or {"rows": {}}
+    for key in sorted(set(ua["rows"]) | set(ub["rows"])):
+        ra, rb = ua["rows"].get(key), ub["rows"].get(key)
+        if ra and rb and (ra["used"] != rb["used"] or ra["avail"] != rb["avail"]):
+            line(f"util {key}", f"{ra['used']}/{ra['avail']}",
+                 f"{rb['used']}/{rb['avail']}")
+    line("bitstreams", len(da["bits"]), len(db["bits"]))
+    print()
+    print("(报告缺失的一侧显示为 None；util 仅列有差异的行)")
+
+
 def run_report(args: list) -> None:
     """Entry point for 'hqbuddy -report [<dir-or-hqprj>] [-paths N]'."""
     n_paths = 0
-    target = None
+    as_json = False
+    diff_mode = False
+    targets: list = []
     i = 0
     while i < len(args):
         a = args[i]
+        if a == "--json":
+            as_json = True
+            i += 1
+            continue
+        if a == "--diff":
+            diff_mode = True
+            i += 1
+            continue
         if a == "-paths":
             if i + 1 >= len(args):
                 print("Error: -paths requires a number: -report [<dir>|<.hqprj>] -paths N")
@@ -223,13 +303,20 @@ def run_report(args: list) -> None:
         elif a.startswith("-"):
             print(f"Error: unknown -report option: {a} (supported: -paths N)")
             sys.exit(1)
-        elif target is None:
-            target = a
+        elif len(targets) == 0 or (diff_mode and len(targets) == 1):
+            targets.append(a)
             i += 1
         else:
-            print(f"Error: unexpected extra argument: {a}")
+            print(f"Error: unexpected extra argument: {a}"
+                  + (" (--diff takes two dirs)" if diff_mode else ""))
             sys.exit(1)
-    if target is None:
+    target = targets[0] if targets else None
+    if diff_mode and len(targets) != 2:
+        print("Error: --diff requires two project dirs: -report --diff <dirA> <dirB>")
+        sys.exit(1)
+    if diff_mode:
+        report_diff(targets[0], targets[1], n_paths)
+        return
         matches = glob.glob("*.hqprj")
         if not matches:
             print("Error: no .hqprj in current directory; pass a project or directory.")
@@ -247,6 +334,11 @@ def run_report(args: list) -> None:
 
     def locate(names: list) -> Optional[str]:
         return _find_report(work, names)
+
+    if as_json:
+        import json as _json
+        print(_json.dumps(report_digest(work, top), ensure_ascii=False, indent=2))
+        return
 
     slack_names = ([f"{top}_slack.rpt"] if top else []) + ["final_ta.rpt"]
     fmax_path = _find_report(work, ["fmax.rpt", "pl_ta.rpt"])
