@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-3.15.0
+3.16.0
 
 ## 功能特点
 
@@ -27,7 +27,7 @@
 - **命令行执行**：通过 hqfpga CLI 执行 TCL 脚本（`-cmd`）
 - **VIO 运行时探针**：生成 VIO IP 模块、登记命名探针、运行时读取/驱动设计信号，无需重编译（`-vio`）
 - **报告摘要**：一键解析实现流程报告——FMAX、setup/hold WNS（分列判定 MET/VIOLATED）、资源利用率、bit 文件清单（`-report`）
-- **下载器**：启动 hqdnload 下载器，自动检测最新 `.bin`（`-dl`）
+- **下载器**：GUI 递归列出当前目录及子目录所有 `.bin`，点击即用 cable.exe 下载，支持备注（`-dl`）；带参数时透传 hqdnload
 - **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
 - **配置管理**：用系统编辑器打开 config.json 管理扫描路径和版本选择（`-cfg`）
 - **自动检测**：`-filelist`、`-flow`、`-xpn`、`-get_device` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
@@ -392,11 +392,11 @@ hqbuddy -cmd -e "dv.query" -q           :: 安静模式，只保留结果
 
 ### 启动下载器
 
-启动 hqdnload 下载器。若不指定文件，自动检测当前目录下最新的 `.bin` 文件。
+无参数运行时打开自带 GUI 下载器：递归扫描**当前目录及子目录**下所有 `.bin` 文件，双击某行即通过 cable.exe 直接下载该 bin（自动探测板上型号，固定带 `--Burst`）。双击「备注」列可为 bin 添加备注，备注保存在当前目录的 `.hqbuddy_dl_notes.json` 中，重开不丢失。带参数时保持旧行为，透传启动 hqdnload 下载器。
 
 ```bat
-hqbuddy -dl                               # 自动检测最新 .bin
-hqbuddy -dl -f my_bitstream.bin           # 指定下载文件
+hqbuddy -dl                               # 打开 GUI 下载器（递归列出所有 .bin，点击下载）
+hqbuddy -dl -f my_bitstream.bin           # 透传 hqdnload，指定下载文件
 ```
 
 ### 线缆工具
@@ -472,7 +472,8 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本；缺省时进入 hqfpga 交互式 CLI            |
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |
-| `-dl [-f <file>]`                   | 启动 hqdnload 下载器，省略时自动检测最新`.bin`                       |
+| `-dl`                               | 打开 GUI 下载器：递归扫描当前目录所有`.bin`，点击下载（cable.exe，自动探测型号），支持备注 |
+| `-dl [-f <file>] [args...]`         | 透传启动 hqdnload 下载器                                               |
 | `-cable [args]`                     | 启动 cable.exe，透传所有参数                                           |
 | `-wave [<file>]`                    | 用 GTKWave 打开 VCD 波形（缺省自动检测最新 insight 波形）              |
 | `-insight [<file>]`                 | 查看 HqInsight 在线逻辑分析仪工程状态                                  |
@@ -527,6 +528,7 @@ hqbuddy/
 │   ├── encrypt.py        # HDL 源代码加密
 │   ├── ipmgr.py          # IP 配置文件管理（内部使用）
 │   ├── simlib.py         # XiST 仿真库编译
+│   ├── downloader.py     # GUI 下载器（-dl，递归扫描 bin + cable 下载）
 │   ├── insight.py        # HqInsight 在线逻辑分析仪（触发/抓取/VCD）
 │   └── utils.py          # 版本解析与比较工具函数
 ├── templates/

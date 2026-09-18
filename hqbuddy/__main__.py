@@ -98,7 +98,8 @@ Tools:
   -cmd [<file>]                         Launch hqfpga CLI (with TCL script, or interactive if omitted)
   -cmd -e "<tcl>" [-q]                  Execute a single TCL command string
                                         (-q: hide banner and Info: lines)
-  -dl [-f <file>]                       Launch hqdnload downloader
+  -dl                                   Open GUI downloader (recursive .bin scan, click to download)
+  -dl [-f <file>] [args...]             Launch hqdnload downloader (passthrough)
   -cable [args...]                      Launch cable.exe
   -wave [<file.vcd>]                    Open a captured waveform in GTKWave
                                         (auto-detects the latest insight VCD)
@@ -1141,27 +1142,26 @@ def cmd_launch_cmd(args):
 
 
 def cmd_dl(args):
-    """Launch hqdnload downloader."""
+    """Download .bin files: GUI picker (no args) or hqdnload passthrough."""
     version = launcher.resolve_hqfpga_version()
     if not version:
         print("Error: no HqFPGA versions found.")
         print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
         sys.exit(1)
 
-    # Build hqdnload args
-    extra_args = []
     if args:
-        extra_args = list(args)
-    else:
-        # Auto-detect latest .bin in current directory
-        bin_files = [f for f in os.listdir('.') if f.lower().endswith('.bin')]
-        if bin_files:
-            bin_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
-            latest_bin = bin_files[0]
-            print(f"Auto-selected download file: {latest_bin}")
-            extra_args = ['-f', latest_bin]
+        # Passthrough to hqdnload (e.g. -dl -f <file>)
+        launcher.launch_tool(version, 'hqdnload', list(args))
+        return
 
-    launcher.launch_tool(version, 'hqdnload', extra_args)
+    # No args: GUI that recursively lists .bin files under cwd and
+    # downloads the clicked one directly via cable.exe
+    cable = version.get('cable_path')
+    if not version.get('has_cable') or not os.path.isfile(cable):
+        print("Error: cable.exe not found in this HqFpga installation.")
+        sys.exit(1)
+    from . import downloader
+    downloader.run_gui(cable)
 
 
 def cmd_cable(args):

@@ -36,3 +36,6 @@ _build_entry.py
 example/
 docs/
 
+# Downloader GUI notes
+.hqbuddy_dl_notes.json
+
