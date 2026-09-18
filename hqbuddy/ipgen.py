@@ -59,8 +59,9 @@ def _parse_ipgen_desc(xml_dir: str) -> tuple[str, bool]:
     Parse _ipgen_.desc in the XML directory.
 
     Returns:
-        Tuple of (raw EXE line, hqfpga_required). hqfpga_required is True
-        when the desc contains HQFPGA=YES.
+        Tuple of (raw EXE line, hqfpga_required). The exe line comes from
+        EXE=, or from INDEPENDENT_EXE= when the desc has no EXE= (e.g. CM33).
+        hqfpga_required is True when the desc contains HQFPGA=YES.
     """
     desc_path = os.path.join(xml_dir, "_ipgen_.desc")
     if not os.path.isfile(desc_path):
@@ -75,6 +76,9 @@ def _parse_ipgen_desc(xml_dir: str) -> tuple[str, bool]:
             stripped = line.strip()
             if stripped.startswith("EXE="):
                 exe_line = stripped[len("EXE="):]
+            elif stripped.startswith("INDEPENDENT_EXE="):
+                if exe_line is None:
+                    exe_line = stripped[len("INDEPENDENT_EXE="):]
             elif stripped == "HQFPGA=YES":
                 hqfpga_required = True
 

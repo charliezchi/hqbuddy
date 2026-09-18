@@ -81,8 +81,28 @@ my_app/
 - **改用户逻辑**：编辑 `rtl/top/demo_top.v` 后在 hq_prj 目录 `hqbuddy -add rtl/xxx.v` 登记新源文件（或 `-refresh_time` 校准时间戳），再 `-build`
 - **改 MCU 代码**：编辑 `MCU_Prj/User/main.c`，在工程根目录 `hqbuddy -mcu_build`
 - **改管脚**：编辑 `constrain/*.upc`（格式：`phycst.pin.set {NET} PIN -attr "IO_TYPE=LVCMOS33 PULLMODE=NONE"`，备选管脚在注释里）；改完需 `-refresh_time`
-- **改内核外设使能**：编辑 `ipcore_dir/cortexM3/xsIP_cortexM3.hqip`（INI 风格）后 `-update_ip` 再生成网表，再 `-build`
+- **改内核外设使能**：编辑 `ipcore_dir/cortexM3/xsIP_cortexM3.hqip`（INI 风格）后 `-update_ip` 再生成网表，再 `-build`。
+  **注意：`-update_ip` 只对 wrapper 在 FILE_SRC 中且同名的 IP 有效；SoC 预设的 CM33/STAR 内核（`ipcore_dir/STAR_Processor/`）走不通，必须按下节用 CM33_Creator 再生成**
 - **换器件**：`hqbuddy -set_device`（30K↔50K 属不同 core 预设，建议直接换 preset 重新 -new_soc）
+
+## CM33/STAR 内核 IP 再生成（开 AHB Master 等，实测 SA5Z-50）
+
+`hqbuddy -ipgen` 和 `CM33_Creator.exe --gen/--ini_file` 静默模式均无法正确再生成 STAR_Processor
+（`--ini_file` 不预载配置；`--gen` 无输出无文件）。唯一可靠路径是 GUI + 自动化：
+
+1. 改 `ipcore_dir/STAR_Processor/xsIP_STAR_Processor.hqip`（INI 风格，如 `AHB_Master0_Enable:TRUE`、`AHB_M0_L:TRUE`）
+2. 启动 GUI（**必须 `--modify` 指向 hqip 才能预载配置**）：
+   ```
+   CM33_Creator.exe --meta_xml <HQ>/build/ipcreator/sup_files/ipdepot/CM33/CM33/CM33.xml \
+       --modify <工程>/ipcore_dir/STAR_Processor/xsIP_STAR_Processor.hqip \
+       --hq_exe <HQ>/build/win_x64/bin/hqfpga.exe --lang chs \
+       --output_dir <工程>/ipcore_dir/STAR_Processor
+   ```
+3. 在 GUI 点「确定」生成。注意弹窗「IP文件生成成功」是**假成功**：log 实际报
+   `copy vlog file failed`，成品在 staging 目录 `%TEMP%\<随机名>\STAR_Processor.v`，
+   需手工拷回覆盖 `ipcore_dir/STAR_Processor/xsIP_STAR_Processor.v`（核对新端口如 `CH0_M00_` 已出现）
+4. GUI 自动化用 pywinauto（窗口 class_name=`mainWindow`，`--lang chs` 下按钮为「确定」）
+5. 再 `hqbuddy -build`。若提示 hqip 器件与 DIE 不一致属非阻塞警告
 
 ## 器件与授权
 

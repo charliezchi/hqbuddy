@@ -358,6 +358,8 @@ hqbuddy -ipgen my_ip.hqip -lang chs
 hqbuddy -update_ip
 ```
 
+注意：`-update_ip` / `-ipgen` 支持 desc 使用 `INDEPENDENT_EXE=` 的 IP（如 CM33）的工具定位，但 CM33/STAR 内核 IP 的静默再生成不被 `CM33_Creator.exe` 支持——改其 `.hqip` 参数（如开启 AHB Master）需用 `CM33_Creator.exe --modify <hqip>` 打开 GUI 点「确定」生成，且成品输出在 `%TEMP%\<随机名>\` staging 目录，需手工拷回 `ipcore_dir/STAR_Processor/`（弹窗提示"生成成功"不代表拷回成功）。详见 hqfpga skill 的 `references/soc_workflow.md`。
+
 ### 加密 HDL 源代码
 
 调用当前所选版本自带的 `hq_ipencrypt.exe` 加密 `.v` / `.vh` 源文件（密钥文件自动定位，无需指定）：
