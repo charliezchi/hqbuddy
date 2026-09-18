@@ -288,8 +288,129 @@ def _find_uv4() -> str | None:
     return None
 
 
+def _find_arm_gcc(cfg: dict) -> str | None:
+    """Locate the arm-none-eabi-gcc bin dir: config key 'arm_gcc', then PATH,
+    then common install locations."""
+    p = cfg.get("arm_gcc")
+    if p and os.path.isfile(os.path.join(p, "arm-none-eabi-gcc.exe")):
+        return p
+    on_path = shutil.which("arm-none-eabi-gcc")
+    if on_path:
+        return os.path.dirname(on_path)
+    home = os.path.expanduser("~")
+    cands = glob.glob(os.path.join(home, "tools", "arm-gnu-toolchain-*", "bin"))
+    cands += glob.glob(r"C:\Program Files*\Arm GNU Toolchain*\*\bin")
+    for c in sorted(cands, reverse=True):
+        if os.path.isfile(os.path.join(c, "arm-none-eabi-gcc.exe")):
+            return c
+    return None
+
+
+def _find_make() -> str | None:
+    """Locate make: PATH, then the MSYS2 default location."""
+    m = shutil.which("make")
+    if m:
+        return m
+    for c in (r"C:\msys64\usr\bin\make.exe", r"C:\msys64\mingw64\bin\mingw32-make.exe"):
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def _infer_merge_model(mcu_dir: str) -> str | None:
+    """Infer cable -model (SA30K/SA50K) from the sibling FPGA project's DEVICE."""
+    here = os.path.dirname(os.path.abspath(mcu_dir))  # project root (parent of MCU_Prj)
+    for hqprj in glob.glob(os.path.join(here, "FPGA_Prj*", "hq_prj", "*.hqprj")):
+        try:
+            with open(hqprj, encoding="utf-8", errors="replace") as f:
+                head = f.read(4096)
+        except OSError:
+            continue
+        m = re.search(r'^DIE=(\S+)', head, re.M)
+        if m:
+            dev = m.group(1)
+            if "SA5Z-50" in dev:
+                return "SA50K"
+            if "SA5Z-30" in dev:
+                return "SA30K"
+    return None
+
+
+def _mcu_build_gcc(args):
+    """Build MCU_Prj firmware with arm-none-eabi-gcc via MCU_Prj/Makefile.
+
+    Expects a Makefile in MCU_Prj (or args[i]) that produces build/*.bin.
+    On success, merges with the newest sibling FPGA bin (cable merge, no
+    download) like the Keil AfterBuild step does."""
+    dirs = list(args) if args else sorted(
+        d for d in glob.glob("MCU_Prj*")
+        if os.path.isfile(os.path.join(d, "Makefile")))
+    if not dirs:
+        print("Error: no MCU_Prj dir given and none with a Makefile found.")
+        print("Usage: hqbuddy -mcu_build [MCU_Prj_dir...]   (gcc mode)")
+        sys.exit(1)
+
+    cfg = config.load_config()
+    gcc_bin = _find_arm_gcc(cfg)
+    if not gcc_bin:
+        print("Error: arm-none-eabi-gcc not found.")
+        print('Fix: add "arm_gcc": "<toolchain>\\\\bin" to the hqbuddy config')
+        print("     (hqbuddy -cfg), or install Arm GNU Toolchain.")
+        sys.exit(1)
+    make = _find_make()
+    if not make:
+        print("Error: make not found (checked PATH and C:\\msys64).")
+        sys.exit(1)
+
+    env = dict(os.environ)
+    env["PATH"] = gcc_bin + os.pathsep + env.get("PATH", "")
+
+    failed = 0
+    for d in dirs:
+        if not os.path.isfile(os.path.join(d, "Makefile")):
+            print(f"Error: no Makefile in {d}")
+            failed += 1
+            continue
+        print(f"Building: {d} (gcc: {gcc_bin}, make: {make})")
+        proc = subprocess.run([make, "-C", d], env=env)
+        if proc.returncode != 0:
+            print(f"[FAIL] {d} (make exit {proc.returncode})")
+            failed += 1
+            continue
+        bins = sorted(glob.glob(os.path.join(d, "build", "*.bin")),
+                      key=os.path.getmtime, reverse=True)
+        if not bins:
+            print(f"[FAIL] {d}: make succeeded but no build/*.bin produced")
+            failed += 1
+            continue
+        mcu_bin = bins[0]
+        print(f"[BIN] {mcu_bin}")
+
+        # Auto-merge with the newest sibling FPGA bin (like Keil AfterBuild).
+        root = os.path.dirname(os.path.abspath(d))
+        fpga_bins = [b for b in glob.glob(os.path.join(root, "FPGA_Prj*",
+                                                       "hq_prj", "*.bin"))
+                     if not b.lower().endswith("_merged.bin")]
+        if not fpga_bins:
+            print("[i] no FPGA bin found next to MCU_Prj, skip merge")
+            continue
+        fpga_bin = max(fpga_bins, key=os.path.getmtime)
+        model = _infer_merge_model(d)
+        if not model:
+            print("[i] cannot infer merge model from .hqprj DEVICE, skip merge")
+            continue
+        stem = os.path.splitext(os.path.basename(fpga_bin))[0]
+        merged = os.path.join(os.path.dirname(fpga_bin), f"{stem}_merged.bin")
+        cmd_merge_bin([fpga_bin, mcu_bin, "-o", merged, "-model", model])
+    if failed:
+        sys.exit(1)
+
+
 def cmd_mcu_build(args):
     """Build MCU_Prj firmware with Keil uVision in command-line mode."""
+    if config.load_config().get("mcu_toolchain", "keil") == "gcc":
+        _mcu_build_gcc(args)
+        return
     projxs = []
     i = 0
     while i < len(args):

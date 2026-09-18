@@ -283,7 +283,7 @@ hqbuddy -dl -f my_app\FPGA_Prj\hq_prj\my_app_merged.bin   # 下载合并镜像
 
 - `-new_soc` 生成的工程已改好 `PROJ_NAME`、校准时间戳、还原去重的 CMSIS 库，并把 Demo 里硬编码工具路径的合并脚本替换为基于 `-merge_bin` 的版本（合并不下板；`mergeBinFileAndProgram.bat -dl` 才下载）
 - `-build` 生成的 FPGA bin 位于 `.hqprj` 同目录（CLI 流程不使用 GUI 的 `hq_run` 输出目录）
-- `-mcu_build` 自动定位 Keil UV4（`config.json` 可加 `"keil_uv4": "C:\\Keil_v5\\UV4\\UV4.exe"` 指定）
+- `-mcu_build` 自动定位 Keil UV4（`config.json` 可加 `"keil_uv4": "C:\\Keil_v5\\UV4\\UV4.exe"` 指定）；也支持 GCC：config 加 `"mcu_toolchain": "gcc"`（可选 `"arm_gcc": "<toolchain>\\bin"` 指定工具链，缺省自动探测），此时在 `MCU_Prj/` 跑 `make`（PATH 或 MSYS2 的 make），产物约定为 `MCU_Prj/build/*.bin`，成功后自动与最新 FPGA bin 合并（型号从 .hqprj DEVICE 推断）
 - `-merge_bin <fpga.bin> <mcu.bin>` 支持 `-o`、`-model SA30K|SA50K`、`-remap`、`-dl`（合并后下载）
 - merge bat 依赖 PATH 上的 hqbuddy，更新代码后需 `python build.py` 重新构建安装
 - 巨型例程（lwip/mqtt/FreeRTOS/bootloader/DDR/CAN）未内置为预设，需要时从 Demo 目录手动拷贝；用法详见 skills/hqfpga/references/soc_workflow.md
@@ -452,7 +452,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-new_soc <name> [-core cm3\|star] [-preset <ex>]` | 从 Demo 预设生成 SoC 工程（FPGA+MCU 全套）             |
 | `-list_soc`                         | 列出可用 SoC 预设                                                    |
 | `-build [<file>]`                   | 生成 run_hqprj.tcl 并执行完整 FPGA 实现流程                          |
-| `-mcu_build [-p <uvprojx>]`         | Keil UV4 无人值守编译 MCU 固件                                       |
+| `-mcu_build [-p <uvprojx>]`         | 无人值守编译 MCU 固件（Keil UV4；config `mcu_toolchain=gcc` 时走 arm-none-eabi-gcc + Makefile） |
 | `-merge_bin <fpga> <mcu>`           | 合并 FPGA+MCU bin（`-o`/`-model`/`-dl`）                             |
 | `-vla -gen [-name VLA] [-dir <dir>] [-device <part>]` | 调起 VLA IP 生成向导（产出 xsIP_VLA.v/hqip/cfg，自动检测生成完成） |
 | `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族） |

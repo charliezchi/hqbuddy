@@ -66,6 +66,8 @@ Project:
                                         Generate run_hqprj.tcl AND run the full
                                         FPGA implementation flow
   -mcu_build [-p <file.uvprojx>]       Build MCU_Prj firmware via Keil UV4 (headless)
+  -mcu_build [MCU_Prj_dir...]          With "mcu_toolchain":"gcc" in config: build via
+                                        arm-none-eabi-gcc + MCU_Prj/Makefile, then auto-merge
   -merge_bin <fpga.bin> <mcu.bin>      Merge FPGA+MCU bins for download (cable.exe)
      [-o <file>] [-model SA30K] [-dl]    (-dl: download after merge)
   -vla -gen [-name VLA] [-dir <dir>] [-device <part>]

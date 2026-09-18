@@ -23,6 +23,24 @@ hqbuddy -dl -f my_app\FPGA_Prj\hq_prj\my_app_merged.bin          # 下载到板
 -merge_bin 实际支持 `[-remap <3位>]`（README 有载）；mcu_build 自动合并时底层合并工具会回显一个错误的 output 文件名，以 hqbuddy 打印的 `Merged image:` 为准（R28 实测）。
 预设名以 `-list_soc` 实时输出为准（R28 已统一两族命名：ex9_watchdog、ex15_ext_int）。
 
+## MCU 固件用 GCC 编译（免 Keil）
+
+config.json 加 `"mcu_toolchain": "gcc"` 后，`-mcu_build [MCU_Prj_dir...]` 改走 GCC：
+在 `MCU_Prj/` 跑 `make`（make 自动探测 PATH 或 `C:\msys64\usr\bin\make.exe`），产物约定为
+`MCU_Prj/build/*.bin`，成功后自动与同级最新 FPGA bin 合并（cable merge，**只合并不下板**；
+型号从 .hqprj 的 `DIE=` 推断 SA30K/SA50K）。工具链自动探测顺序：config 的 `"arm_gcc"` bin
+目录 → PATH → `~/tools/arm-gnu-toolchain-*/bin`。
+
+GCC 工程要件（sa5z50_eth_soc 的 MCU_Prj 是参考实现）：
+- `Makefile`：`-mcpu=cortex-m33 -mthumb -mfloat-abi=soft`，定义必须含 Keil uvprojx
+  `<Device>` 同名宏（如 `-DARMCM33_DSP_FP_TZ`，Keil 会自动定义它，GCC 要手动补）
+- 链接脚本：内存布局抄 uvprojx Cpu 标签（IRAM/IROM）；nosys 的 `_sbrk` 需要脚本里定义
+  `end`/`_end` 符号（堆起点）；`.ARM.exidx` 要显式收进 ROM，否则与 .data 的 LMA 重叠
+- GCC 启动文件：注意 CMSIS 包 `Source/GCC/startup_ARMCM33.s` 可能**名不副实仍是 armasm
+  语法**（STAR 包就是这样），要用 GNU as 语法自写（向量表顺序严格对齐 STAR.h 的 IRQn）
+- printf retarget：Keil 用 `fputc(FILE*)`，GCC/newlib 加 `_write()` 桩即可
+- 模板 CMSIS Core 只带 `cmsis_armclang.h`；GCC 需要 `cmsis_gcc.h`（CMSIS_5 上游下载，5.4.2 可用）
+
 ## 生成工程的结构（-new_soc）
 
 ```
