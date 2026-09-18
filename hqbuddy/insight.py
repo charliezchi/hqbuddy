@@ -4,7 +4,16 @@ import glob
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
+import threading
+import time
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
+
+from . import launcher
+from .hqprj_parser import extract_filelist
 
 # sample_type encoding in .hqins [SIGNAL JSON INFO]
 SAMPLE_TYPES = {2: "sample", 3: "trigger", 4: "sample+trigger"}
@@ -589,7 +598,6 @@ def _write_trigger_cond(proj: dict, parsed: dict, sigs: list) -> None:
 
 def _write_ddf(proj: dict, parsed: dict, sigs: list) -> None:
     """Update the .ddf comparator blocks (ignore flag, op, mask, operand)."""
-    import xml.etree.ElementTree as ET
 
     if not os.path.isfile(proj["ddf"]):
         print(f"Warning: .ddf not found, skipped: {proj['ddf']}")
@@ -785,8 +793,6 @@ def _tcl_path(path: str) -> str:
 
 def _run_hqfpga_cmds(hqfpga_exe: str, cmds: list, cwd: str) -> None:
     """Run hqfpga.exe -cmd with a temporary tcl; abort on abnormal exit."""
-    import subprocess
-    import tempfile
 
     tcl = "\n".join(cmds) + "\nexit\n"
     with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
@@ -807,7 +813,6 @@ def _play_svf(cable_exe: str, svf_path: str) -> list:
 
     cable.exe rewrites svf.log (next to itself) on every run.
     """
-    import subprocess
 
     log_path = os.path.join(os.path.dirname(cable_exe), "svf.log")
     proc = subprocess.run([cable_exe, "--svf", _tcl_path(svf_path),
@@ -866,7 +871,6 @@ def _parse_status(raw_hex: str, status_bits: int) -> tuple:
 
 def _write_force_ddf(proj: dict) -> str:
     """Write <prefix>_force.ddf: all trigger blocks ignored (= trigger always fires)."""
-    import xml.etree.ElementTree as ET
 
     force_ddf = proj["ddf"].replace(".ddf", "_force.ddf")
     tree = ET.parse(proj["ddf"])
@@ -878,14 +882,9 @@ def _write_force_ddf(proj: dict) -> str:
 
 def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = None) -> None:
     """Handle 'hqbuddy -insight -capture': arm trigger, wait, read waveform, dump VCD."""
-    import time
 
-    from . import launcher
 
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA installation found (use -cfg to set up).")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     hqfpga_exe = version["hqfpga_path"]
     cable_exe = version["cable_path"]
     if not version.get("has_cable") or not os.path.isfile(cable_exe):
@@ -917,9 +916,8 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
     # .hqins, so raw mtime comparison against .hqins false-positives.  -run
     # records the newest impl-bin mtime in .bit_stamp; -capture compares it
     # with the newest bin now on disk (stale bin => warn) .
-    import glob as _glob
     stamp_path = os.path.join(import_dir, ".bit_stamp")
-    bit_paths = _glob.glob(os.path.join(import_dir, "hqins_impl", "*.bin"))
+    bit_paths = glob.glob(os.path.join(import_dir, "hqins_impl", "*.bin"))
     if bit_paths and os.path.isfile(stamp_path):
         try:
             stamp_bit_mtime = float(open(stamp_path).read().strip() or 0)
@@ -1153,19 +1151,10 @@ def summarize_vcd(vcd_path: str) -> None:
 
 def run_flow(proj: dict) -> None:
     """Handle 'hqbuddy -insight -run': run the instrumented implementation flow."""
-    from . import launcher
 
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA installation found (use -cfg to set up).")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     hqfpga_exe = version["hqfpga_path"]
 
-    import subprocess
-    import tempfile
-    import threading
-    import time
-    from datetime import datetime, timedelta
 
     # insight 流程必须产出 .bin（下载验收用）。GUI 新建工程 BGEN_1/2 常为
     # false（只出 .bit），这里自动打开并写回 .hqprj。
@@ -1225,9 +1214,8 @@ def run_flow(proj: dict) -> None:
     # The flow can exit 0 even when implementation fails (e.g. JTAG capacity
     # overflow); only a fresh instrumented bitstream counts as success.
     # The bin is named after the .hqprj (not the top module).
-    import glob as _glob
     prj_stem = os.path.splitext(os.path.basename(proj["hqprj"]))[0]
-    bin_candidates = _glob.glob(os.path.join(proj["hqins_dir"], "hq_import",
+    bin_candidates = glob.glob(os.path.join(proj["hqins_dir"], "hq_import",
                                              "hqins_impl", "*.bin"))
     fresh = [b for b in bin_candidates if os.path.getmtime(b) >= flow_start]
     if not fresh:
@@ -1284,7 +1272,6 @@ STYPE_TOKENS = {"sample": 2, "trigger": 3, "both": 4}
 
 def _initial_hqins(proj: dict, vfiles: list) -> str:
     """Build the initial .hqins skeleton (as the GUI writes it on entering HqInsight)."""
-    import time
 
     wdir = "$WORK_DIR"
     files = "\n".join(f.replace(proj["work_dir"].replace(os.sep, "/"), wdir) for f in vfiles)
@@ -1482,15 +1469,10 @@ def _preflight_check(proj: dict) -> None:
 
 def run_init(proj: dict) -> None:
     """Handle 'hqbuddy -insight -init': create hqins_run skeleton and elaborate."""
-    from . import launcher
-    from .hqprj_parser import extract_filelist
 
     _preflight_check(proj)
 
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA installation found (use -cfg to set up).")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     hqfpga_exe = version["hqfpga_path"]
 
     vfiles = extract_filelist(proj["hqprj"])
@@ -1504,7 +1486,6 @@ def run_init(proj: dict) -> None:
     with open(proj["hqins"], "w", encoding="utf-8") as f:
         f.write(_initial_hqins(proj, vfiles))
 
-    import subprocess
     tcl_path = os.path.join(proj["hqins_dir"], "hq_impor_t.tcl")
     proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path], cwd=proj["work_dir"])
     if proc.returncode != 0:
@@ -1965,7 +1946,6 @@ def _regenerate_ddf(proj: dict, sig_info: dict, la_info: dict) -> None:
     """Regenerate the .ddf from .hqins [LA SIGNAL INFO], then refresh insight_ip.v
     and the instrumented netlist. rtl.elaborate -new_rtl rewrites the .hqins JSON
     sections (and loses show_hier_name), so the sections are restored afterwards."""
-    from . import launcher
 
     la = la_info["la_list"][0]
     sections = read_hqins(proj["hqins"])
@@ -2014,10 +1994,7 @@ def _regenerate_ddf(proj: dict, sig_info: dict, la_info: dict) -> None:
     with open(proj["ddf"], "w", encoding="utf-8") as f:
         f.write("\n".join(out) + "\n")
 
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA installation found (use -cfg to set up).")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
 
     import_dir = os.path.join(proj["hqins_dir"], "hq_import")
     insight_ip = os.path.join(import_dir, "insight_ip.v")

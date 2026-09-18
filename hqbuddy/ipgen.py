@@ -160,9 +160,7 @@ def run_ipgen(hqip_path: str | None = None, lang: str = "chs") -> None:
     # Resolve local HqFPGA root
     hqfpga_root = launcher.resolve_hqfpga_root()
     if not hqfpga_root:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+        launcher.die_no_versions()
 
     # Resolve local XML
     xml_path = _resolve_local_xml(hqfpga_root, xml_rel)

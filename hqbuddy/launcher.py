@@ -27,6 +27,21 @@ def resolve_hqfpga_root() -> str | None:
     return v['path'] if v else None
 
 
+def die_no_versions() -> None:
+    """Print the standard 'no versions' error and exit."""
+    print("Error: no HqFPGA versions found.")
+    print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
+    sys.exit(1)
+
+
+def require_hqfpga_version() -> dict:
+    """resolve_hqfpga_version() or exit with the standard error."""
+    version = resolve_hqfpga_version()
+    if not version:
+        die_no_versions()
+    return version
+
+
 def launch_tool(version: dict, tool: str, extra_args: list) -> None:
     """
     Launch hqfpga, hqui, hqdnload, or cable for a given version.

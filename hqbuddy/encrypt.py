@@ -16,11 +16,7 @@ _SRC_EXTS = ('.v', '.vh')
 
 def _resolve_tool() -> tuple[str, str]:
     """Resolve (hq_ipencrypt.exe, keys.txt) from the selected HqFpGA version."""
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     root = version['path']
     exe = os.path.join(root, _TOOL_RELPATH)
     keys = os.path.join(root, _KEYS_RELPATH)

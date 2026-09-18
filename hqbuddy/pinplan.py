@@ -127,7 +127,7 @@ def run_pinplan(args: list) -> None:
         print("Error: TOP_MODULE 为空——先 hqbuddy -set_top")
         sys.exit(1)
 
-    version = launcher.resolve_hqfpga_version()
+    version = launcher.require_hqfpga_version()
     ports = _elab_ports(version["hqfpga_path"], work, hqprj, top)
     print(f"输出端口 ({len(ports)}): {', '.join(ports)}")
 

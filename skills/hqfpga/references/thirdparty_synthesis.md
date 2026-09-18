@@ -151,7 +151,7 @@ impl.bitgen.xist.seal r30syn.bin -bin
   生成的 .v 头部带 `HQ_VLA0` 综合属性携带全部配置，第三方综合靠 syn_noprune
   保留实例、靠属性把配置带进 EDIF。hqbuddy `-vla -gen`（调起向导或模板化）
   已列入 TODO；运行侧（insight.load 的 ddf + VLA 抓取）仍需逆向。
-- **现状（诚实边界）**：GUI 路径（网表工程编译 → VLA 调试按钮）官方支持；**CLI 路径 hqbuddy 暂未打通**——insight 插桩流程基于 `rtl.elaborate`（对展平网表不适用），`insight.load` 需要 .ddf（由 GUI/插桩流程生成）。CLI 化需逆向 VLA 工程的 ddf/SVF 生成链（见 `guides/hqinsight_gui_map.md` §8 的 vla.cfg 逆向），已列入 TODO。
+- **现状（诚实边界）**：GUI 路径（网表工程编译 → VLA 调试按钮）官方支持；**CLI 路径 hqbuddy 暂未打通**——insight 插桩流程基于 `rtl.elaborate`（对展平网表不适用），`insight.load` 需要 .ddf（由 GUI/插桩流程生成）。CLI 化需逆向 VLA 工程的 ddf/SVF 生成链（见同目录 `hqinsight_gui_map.md` §8 的 vla.cfg 逆向），已列入 TODO。
 
 ## 附：.hqprj 通用坑（与第三方综合无直接关系）
 

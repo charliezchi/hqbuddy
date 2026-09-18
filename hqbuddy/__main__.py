@@ -817,10 +817,7 @@ def cmd_build_fpga(args):
         print(f"Error: flow TCL not generated: {flow_tcl}")
         sys.exit(1)
 
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     print("")
     print(f"Running implementation flow: {os.path.basename(flow_tcl)}")
     print("")
@@ -1060,11 +1057,7 @@ def cmd_build():
 
 def cmd_gui(args):
     """Launch hqfpga GUI (hqui)."""
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     launcher.launch_tool(version, 'hqui', args)
 
 
@@ -1111,11 +1104,7 @@ def cmd_launch_cmd(args):
 
     '-q' (quiet) is only supported with '-e': it filters the banner and
     all 'Info:' lines from the output."""
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
 
     if args and args[0] == '-e':
         # Inline command: write to a temp TCL file and run it.
@@ -1143,11 +1132,7 @@ def cmd_launch_cmd(args):
 
 def cmd_dl(args):
     """Download .bin files: GUI picker (no args) or hqdnload passthrough."""
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
 
     if args:
         # Passthrough to hqdnload (e.g. -dl -f <file>)
@@ -1171,11 +1156,7 @@ def cmd_cable(args):
     --sealion/--model, verify --model matches the detected board first —
     a model/board mismatch silently programs the wrong design and every
     subsequent trigger/capture reads garbage."""
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     if '--sealion' in args:
         model = None
         for i, a in enumerate(args):
@@ -1203,11 +1184,7 @@ def cmd_cable(args):
 
 def cmd_wave(args):
     """Open a captured VCD waveform in the bundled GTKWave."""
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     gtkwave = version.get('gtkwave_path')
     if not gtkwave or not os.path.isfile(gtkwave):
         print("Error: GTKWave not found in this HqFpga installation "

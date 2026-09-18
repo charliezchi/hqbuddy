@@ -225,10 +225,7 @@ def cmd_merge_bin(args):
             print(f"Error: file not found: {p}")
             sys.exit(1)
 
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     cable = version.get('cable_path')
     if not cable or not os.path.isfile(cable):
         print("Error: cable.exe not found in this HqFpga installation.")
@@ -262,8 +259,13 @@ def cmd_merge_bin(args):
     if download:
         print(f"Downloading with model {model} ...")
         dcmd = [cable, '--sealion', merged, '--model', model, '--Burst']
-        proc = subprocess.run(dcmd)
-        if proc.returncode != 0:
+        proc = subprocess.run(dcmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, errors='replace')
+        print(proc.stdout)
+        # cable.exe prints errors like "Error : The file ID is unmatched"
+        # but may still exit 0 — scan the output, don't trust the exit code
+        has_error = re.search(r'^\s*(error|fail)', proc.stdout or '', re.M | re.I)
+        if proc.returncode != 0 or has_error:
             print(f"Error: download failed (exit {proc.returncode})")
             sys.exit(1)
 

@@ -74,11 +74,7 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
         sys.exit(1)
 
     # Resolve hqfpga (selected or latest version)
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     hqfpga_path = version['hqfpga_path']
 
     # Generate temporary TCL

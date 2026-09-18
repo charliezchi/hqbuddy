@@ -6,7 +6,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-from . import config
+from . import config, launcher
 from .ipmgr import list_ip_files
 from .scanner import scan_all, get_selected_version
 
@@ -35,9 +35,7 @@ def _get_device_list_xml() -> ET.Element:
     cfg = config.load_config()
     versions = scan_all(cfg)
     if not versions:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+        launcher.die_no_versions()
 
     version = get_selected_version(versions, cfg.get("selected_build"))
     dv_list_path = os.path.join(
@@ -425,10 +423,7 @@ def get_pin_bank(device_part: str, pin: str) -> None:
         print(f"Error: cannot determine family for device: {device_part}")
         sys.exit(1)
 
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA installation found (use -cfg to set up).")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     hqfpga_exe = version["hqfpga_path"]
 
     tcl = (f"dv.setup {family} {device_part}\n"

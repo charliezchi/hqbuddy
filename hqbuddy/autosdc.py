@@ -49,7 +49,7 @@ def run_autosdc(args: list) -> None:
         elif ln.startswith("FILE_SRC=") and ln != "FILE_SRC=NONE":
             srcs.append(ln.split("=", 1)[1].replace("$WORK_DIR$", work.replace(os.sep, "/") + "/"))
 
-    version = launcher.resolve_hqfpga_version()
+    version = launcher.require_hqfpga_version()
     hqfpga_path = version["hqfpga_path"]
 
     vlines = "\n".join(f"lappend vfiles {s}" for s in srcs)

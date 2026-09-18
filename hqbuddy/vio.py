@@ -95,10 +95,7 @@ def _read_die(work: str) -> str:
 def _resolve_tools(work: str):
     from . import launcher
 
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA installation found (use -cfg to set up).")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     if not version.get("has_cable"):
         print(f"Error: cable.exe not found in {version['path']}")
         sys.exit(1)
@@ -109,10 +106,7 @@ def cmd_gen(work: str, module: str, in_width: int, out_width: int) -> None:
     """Generate the VIO IP RTL module with custom probe widths."""
     from . import launcher
 
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA installation found (use -cfg to set up).")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
 
     # hqfpga's vio.ip.create emits the module to a file named after the -O value
     scratch = os.path.join(work, "_vio_ip_tmp").replace(os.sep, "/")

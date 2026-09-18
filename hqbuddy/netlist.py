@@ -27,11 +27,7 @@ DEFAULT_DEVICE = "SA5Z-50-D0-7F484C"
 
 def _resolve_hqfpga() -> str:
     """Resolve hqfpga path or exit with error."""
-    version = launcher.resolve_hqfpga_version()
-    if not version:
-        print("Error: no HqFPGA versions found.")
-        print("Tip: Use 'hqbuddy -cfg' to edit the scan roots in config.json.")
-        sys.exit(1)
+    version = launcher.require_hqfpga_version()
     return version['hqfpga_path']
 
 

@@ -39,3 +39,8 @@ docs/
 # Downloader GUI notes
 .hqbuddy_dl_notes.json
 
+# Agent iteration artifacts (kept locally, not versioned)
+guides/
+TODO.md
+gtkwave_0.tcl
+
