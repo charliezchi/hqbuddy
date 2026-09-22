@@ -1,6 +1,8 @@
 # HqBuddy
 
-智多晶海麒（HqFPGA）开发工具的辅助工具集。
+智多晶海麒（HqFPGA）的全流程命令行工具箱：从建工程到下载比特流，覆盖工程管理、全 CLI 实现流程、SoC 软硬件协同（FPGA + MCU）、在线调试（HqInsight 逻辑分析仪 / VIO 运行时探针）、IP 与网表处理、报告分析，并内置 AI Agent Skill，让 AI 助手自主操作整个开发流程。
+
+An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA development loop from project creation to bitstream download: project management, full CLI implementation flow, SoC co-development (FPGA + MCU), on-chip debugging (HqInsight logic analyzer / VIO runtime probes), IP & netlist tooling, and report analysis — with a built-in AI-agent skill that lets AI assistants operate the whole flow autonomously.
 
 ## 当前版本
 
