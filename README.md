@@ -29,7 +29,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **命令行执行**：通过 hqfpga CLI 执行 TCL 脚本（`-cmd`）
 - **VIO 运行时探针**：生成 VIO IP 模块、登记命名探针、运行时读取/驱动设计信号，无需重编译（`-vio`）
 - **报告摘要**：一键解析实现流程报告——FMAX、setup/hold WNS（分列判定 MET/VIOLATED）、资源利用率、bit 文件清单（`-report`）
-- **下载器**：GUI 递归列出当前目录及子目录所有 `.bin`，点击即用 cable.exe 下载，支持备注（`-dl`，detached 启动不阻塞终端）；带参数时透传 hqdnload
+- **下载器**：GUI 递归列出当前目录及子目录所有 `.bin`，按目录分组显示（文件夹节点可折叠），点击即用 cable.exe 下载，支持备注（`-dl`，detached 启动不阻塞终端）；带参数时透传 hqdnload
 - **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
 - **配置管理**：用系统编辑器打开 config.json 管理扫描路径和版本选择（`-cfg`）
 - **自动检测**：`-filelist`、`-flow`、`-xpn`、`-get_device` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
@@ -399,7 +399,7 @@ hqbuddy -cmd -e "dv.query" -q           :: 安静模式，只保留结果
 
 ### 启动下载器
 
-无参数运行时打开自带 GUI 下载器（detached 子进程方式启动，不阻塞终端）：递归扫描**当前目录及子目录**下所有 `.bin` 文件，双击某行即通过 cable.exe 直接下载该 bin（自动探测板上型号，固定带 `--Burst`）。双击「备注」列可为 bin 添加备注，备注保存在当前目录的 `.hqbuddy_dl_notes.json` 中，重开不丢失。带参数时保持旧行为，透传启动 hqdnload 下载器。
+无参数运行时打开自带 GUI 下载器（detached 子进程方式启动，不阻塞终端）：递归扫描**当前目录及子目录**下所有 `.bin` 文件，**按目录分组显示**——每个含 bin 的目录是一个可折叠的文件夹节点（标签带 bin 数量），bin 挂在对应节点下；双击 bin 行即通过 cable.exe 直接下载（自动探测板上型号，固定带 `--Burst`），双击文件夹节点折叠/展开。双击「备注」列可为 bin 添加备注，备注保存在当前目录的 `.hqbuddy_dl_notes.json` 中，重开不丢失。带参数时保持旧行为，透传启动 hqdnload 下载器。
 
 ```bat
 hqbuddy -dl                               # 打开 GUI 下载器（递归列出所有 .bin，点击下载）
@@ -480,7 +480,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本；缺省时进入 hqfpga 交互式 CLI            |
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |
-| `-dl`                               | 打开 GUI 下载器（detached，不阻塞终端）：递归扫描当前目录所有`.bin`，点击下载（cable.exe，自动探测型号），支持备注 |
+| `-dl`                               | 打开 GUI 下载器（detached，不阻塞终端）：递归扫描当前目录所有`.bin`，按目录分组（可折叠），点击下载（cable.exe，自动探测型号），支持备注 |
 | `-dl [-f <file>] [args...]`         | 透传启动 hqdnload 下载器                                               |
 | `-cable [args]`                     | 启动 cable.exe，透传所有参数                                           |
 | `-wave [<file>]`                    | 用 GTKWave 打开 VCD 波形（缺省自动检测最新 insight 波形）              |

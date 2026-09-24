@@ -77,7 +77,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 
 ## 下载与调试
 
-- `hqbuddy -dl` — 打开 GUI 下载器（detached 子进程，不阻塞终端）：递归扫描当前目录及子目录所有 `.bin`，点击即用 cable.exe 下载；带参数时透传 hqdnload
+- `hqbuddy -dl` — 打开 GUI 下载器（detached 子进程，不阻塞终端）：递归扫描当前目录及子目录所有 `.bin`，按目录分组显示（文件夹节点可折叠），点击 bin 行即用 cable.exe 下载；带参数时透传 hqdnload
 - `hqbuddy -cable [args...]` — 启动 cable.exe，参数透传
 
 ## 其他

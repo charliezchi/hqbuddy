@@ -67,13 +67,15 @@ class DownloaderGUI(tk.Tk):
         ttk.Label(top, text="双击行下载该 bin；双击备注列编辑备注").pack(side=tk.LEFT, padx=12)
 
         cols = ("path", "size", "mtime", "status", "note")
-        self.tree = ttk.Treeview(self, columns=cols, show="headings")
-        self.tree.heading("path", text="文件（相对路径）")
+        self.tree = ttk.Treeview(self, columns=cols, show="tree headings")
+        self.tree.heading("#0", text="目录 / 文件")
+        self.tree.heading("path", text="相对路径")
         self.tree.heading("size", text="大小")
         self.tree.heading("mtime", text="修改时间")
         self.tree.heading("status", text="状态")
         self.tree.heading("note", text="备注")
-        self.tree.column("path", width=380, anchor=tk.W)
+        self.tree.column("#0", width=240, anchor=tk.W)
+        self.tree.column("path", width=320, anchor=tk.W)
         self.tree.column("size", width=80, anchor=tk.E)
         self.tree.column("mtime", width=140, anchor=tk.CENTER)
         self.tree.column("status", width=70, anchor=tk.CENTER)
@@ -109,22 +111,30 @@ class DownloaderGUI(tk.Tk):
 
     def rescan(self):
         self.tree.delete(*self.tree.get_children())
-        bins = []
+        groups = {}  # rel dir -> [full paths]
         for base, _dirs, files in os.walk(self.root_dir):
             for f in files:
                 if f.lower().endswith('.bin'):
-                    full = os.path.join(base, f)
-                    bins.append(full)
-        bins.sort(key=lambda p: os.path.relpath(p, self.root_dir).replace(os.sep, '/').lower())
-        for full in bins:
-            rel = os.path.relpath(full, self.root_dir).replace(os.sep, '/')
-            st = os.stat(full)
-            self.tree.insert(
-                "", tk.END, iid=rel,
-                values=(rel, _fmt_size(st.st_size),
-                        time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
-                        "", self.notes.get(rel, "")))
-        self._log(f"[i] 扫描到 {len(bins)} 个 bin 文件（根目录: {self.root_dir}）")
+                    rel_dir = os.path.relpath(base, self.root_dir).replace(os.sep, '/')
+                    groups.setdefault(rel_dir, []).append(os.path.join(base, f))
+        n_bins = 0
+        for rel_dir in sorted(groups, key=str.lower):
+            files = sorted(groups[rel_dir], key=lambda p: os.path.basename(p).lower())
+            n_bins += len(files)
+            dir_iid = f"dir:{rel_dir}"
+            self.tree.insert("", tk.END, iid=dir_iid, open=True,
+                             text=f"{rel_dir} ({len(files)})",
+                             values=("", "", "", "", ""))
+            for full in files:
+                rel = os.path.relpath(full, self.root_dir).replace(os.sep, '/')
+                st = os.stat(full)
+                self.tree.insert(
+                    dir_iid, tk.END, iid=rel, text=os.path.basename(full),
+                    values=(rel, _fmt_size(st.st_size),
+                            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
+                            "", self.notes.get(rel, "")))
+        self._log(f"[i] 扫描到 {n_bins} 个 bin 文件，分布在 {len(groups)} 个目录"
+                  f"（根目录: {self.root_dir}）")
 
     # ---------- interaction ----------
 
@@ -132,6 +142,11 @@ class DownloaderGUI(tk.Tk):
         iid = self.tree.identify_row(event.y)
         if not iid:
             return
+        if iid.startswith('dir:'):
+            # Folder node: toggle expand/collapse only, never download.
+            # "break" suppresses the class binding so it toggles exactly once
+            self.tree.item(iid, open=not self.tree.item(iid, "open"))
+            return "break"
         col = self.tree.identify_column(event.x)
         if col == '#5':  # note column
             old = self.notes.get(iid, "")
@@ -151,6 +166,10 @@ class DownloaderGUI(tk.Tk):
         sel = self.tree.selection()
         if not sel:
             messagebox.showinfo("提示", "请先在列表中选中一个 bin", parent=self)
+            return
+        if sel[0].startswith('dir:'):
+            messagebox.showinfo("提示", "选中的是文件夹节点，请选择一个 bin 文件",
+                                parent=self)
             return
         self.start_download(sel[0])
 
@@ -222,9 +241,14 @@ class DownloaderGUI(tk.Tk):
         self.log.configure(state=tk.DISABLED)
 
     def reset_status(self):
-        for iid in self.tree.get_children():
-            self.tree.set(iid, "status", "")
-            self.tree.item(iid, tags=())
+        def walk(parent):
+            for iid in self.tree.get_children(parent):
+                if iid.startswith('dir:'):
+                    walk(iid)
+                else:
+                    self.tree.set(iid, "status", "")
+                    self.tree.item(iid, tags=())
+        walk("")
 
     def _log(self, msg):
         self.log_queue.put(msg)
