@@ -15,6 +15,11 @@ from tkinter.scrolledtext import ScrolledText
 NOTES_FILE = '.hqbuddy_dl_notes.json'
 
 
+def _no_window_flags():
+    """CREATE_NO_WINDOW on Windows: keep cable.exe from popping a console."""
+    return subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+
+
 def spawn_gui_detached():
     """
     Launch the downloader GUI in a detached child process so the calling
@@ -167,7 +172,7 @@ class DownloaderGUI(tk.Tk):
             self._log("[i] 探测板上型号 ...")
             r = subprocess.run([self.cable_path, '--detect_model'],
                                capture_output=True, text=True, errors='replace',
-                               timeout=60)
+                               timeout=60, creationflags=_no_window_flags())
             m = re.search(r'Device Model\s*:\s*(\S+)', r.stdout or '')
             if not m:
                 self._log("[FAIL] 未能探测到板上型号，下载中止。cable 输出：")
@@ -182,7 +187,8 @@ class DownloaderGUI(tk.Tk):
             self._log(f"[*] 下载 {rel} ...")
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True,
-                                    errors='replace')
+                                    errors='replace',
+                                    creationflags=_no_window_flags())
             output = []
             for line in proc.stdout:
                 output.append(line)
