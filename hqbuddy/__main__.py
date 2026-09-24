@@ -54,6 +54,9 @@ Project:
   -xpn [<.hqprj>] [-o <file>]          Generate XPN (normal mode)
     -ins                                Generate XPN (hqinsight mode)
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN, then auto-download to board
+                                        (multiple .xpn in cwd: convert all + report,
+                                         then open the GUI downloader)
+    -no_dl                              Only generate BIN, skip download
   -get_device [<.hqprj>]                Show device part
   -set_device [<part>] [<.hqprj>]       Set device part (interactive if no part)
   -get_pin_bank <pin> [-device <part>]  Show the IO bank of a pin
@@ -100,7 +103,7 @@ Tools:
   -cmd [<file>]                         Launch hqfpga CLI (with TCL script, or interactive if omitted)
   -cmd -e "<tcl>" [-q]                  Execute a single TCL command string
                                         (-q: hide banner and Info: lines)
-  -dl                                   Open GUI downloader (recursive .bin scan, click to download)
+  -dl                                   Open GUI downloader (recursive .bin scan, click to download; detached, non-blocking)
   -dl [-f <file>] [args...]             Launch hqdnload downloader (passthrough)
   -cable [args...]                      Launch cable.exe
   -wave [<file.vcd>]                    Open a captured waveform in GTKWave
@@ -150,12 +153,6 @@ def show_version():
 def _find_hqprj() -> str | None:
     """Auto-detect the first .hqprj file in the current directory."""
     matches = glob.glob("*.hqprj")
-    return matches[0] if matches else None
-
-
-def _find_xpn() -> str | None:
-    """Auto-detect the first .xpn file in the current directory."""
-    matches = glob.glob("*.xpn")
     return matches[0] if matches else None
 
 
@@ -888,41 +885,42 @@ def cmd_xpn(args):
 
 
 def cmd_xpn2bin(args):
-    """Convert XPN file to BIN file."""
+    """Convert XPN file(s) to BIN file(s)."""
     xpn_path = None
     bin_path = None
+    download = True
 
-    if not args:
-        detected = _find_xpn()
-        if not detected:
-            print("Error: no .xpn file specified and none found in current directory.")
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == '-no_dl':
+            download = False
+            i += 1
+        elif a == '-o':
+            if i + 1 >= len(args):
+                print("Error: -o requires an output name")
+                sys.exit(1)
+            bin_path = args[i + 1]
+            i += 2
+        elif a.startswith('-o'):
+            bin_path = a[2:]
+            i += 1
+        elif a.startswith('-'):
+            print(f"Error: unknown option: {a}")
             sys.exit(1)
-        xpn_path = detected
-    elif args[0] == '-o':
-        if len(args) < 2:
-            print("Error: -o requires an output name")
+        elif xpn_path is None:
+            xpn_path = a
+            i += 1
+        else:
+            print(f"Error: unexpected argument: {a}")
             sys.exit(1)
-        bin_path = args[1]
-        detected = _find_xpn()
-        if not detected:
-            print("Error: no .xpn file specified and none found in current directory.")
-            sys.exit(1)
-        xpn_path = detected
-    elif args[0].startswith('-o'):
-        bin_path = args[0][2:]
-        detected = _find_xpn()
-        if not detected:
-            print("Error: no .xpn file specified and none found in current directory.")
-            sys.exit(1)
-        xpn_path = detected
-    else:
-        xpn_path = args[0]
-        if len(args) >= 3 and args[1] == '-o':
-            bin_path = args[2]
-        elif len(args) >= 2 and args[1].startswith('-o'):
-            bin_path = args[1][2:]
 
-    run_xpn2bin(xpn_path, bin_path)
+    if bin_path and not xpn_path:
+        print("Error: -o requires an explicit .xpn file "
+              "(batch mode converts all .xpn with default names)")
+        sys.exit(1)
+
+    run_xpn2bin(xpn_path, bin_path, download)
 
 
 def cmd_edf2v(args):
@@ -1141,8 +1139,19 @@ def cmd_dl(args):
         launcher.launch_tool(version, 'hqdnload', list(args))
         return
 
-    # No args: GUI that recursively lists .bin files under cwd and
-    # downloads the clicked one directly via cable.exe
+    # No args: spawn the GUI downloader detached so the terminal is not blocked
+    cable = version.get('cable_path')
+    if not version.get('has_cable') or not os.path.isfile(cable):
+        print("Error: cable.exe not found in this HqFpga installation.")
+        sys.exit(1)
+    from . import downloader
+    downloader.spawn_gui_detached()
+    print("Downloader GUI launched (detached).")
+
+
+def cmd_dl_gui():
+    """Internal entry: run the downloader GUI in-process (spawned by -dl)."""
+    version = launcher.require_hqfpga_version()
     cable = version.get('cable_path')
     if not version.get('has_cable') or not os.path.isfile(cable):
         print("Error: cable.exe not found in this HqFpga installation.")
@@ -1574,6 +1583,11 @@ def main():
     # Downloader
     if first == '-dl':
         cmd_dl(args[1:])
+        return
+
+    # Downloader GUI, in-process (internal: spawned detached by -dl)
+    if first == '-dl_gui':
+        cmd_dl_gui()
         return
 
     # Cable

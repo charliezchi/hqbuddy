@@ -5,6 +5,7 @@ import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -12,6 +13,22 @@ from tkinter import messagebox, simpledialog, ttk
 from tkinter.scrolledtext import ScrolledText
 
 NOTES_FILE = '.hqbuddy_dl_notes.json'
+
+
+def spawn_gui_detached():
+    """
+    Launch the downloader GUI in a detached child process so the calling
+    terminal is not blocked. The child re-enters hqbuddy via the internal
+    -dl_gui command, which runs the GUI in-process.
+    """
+    if getattr(sys, 'frozen', False):
+        cmd = [sys.executable, '-dl_gui']
+    else:
+        cmd = [sys.executable, '-m', 'hqbuddy', '-dl_gui']
+    flags = 0
+    if os.name == 'nt':
+        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    subprocess.Popen(cmd, creationflags=flags, close_fds=True)
 
 
 def _fmt_size(n):

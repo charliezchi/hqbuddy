@@ -15,7 +15,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
 - **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式
 - **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；`-capture` 支持自定义超时与输出前缀
-- **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`）
+- **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`，`-no_dl` 只生成不下载）；不指定 xpn 时批量转换当前目录所有 `.xpn` 并输出结果报告，多个 xpn 时不逐个下载，而是转换完后唤起 `-dl` GUI 下载器
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
 - **新建工程**：从模板创建 `.hqprj` 工程（`-new_prj`）
 - **添加源文件**：向工程添加 `.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件并维护对应时间戳（`-add`）
@@ -29,7 +29,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **命令行执行**：通过 hqfpga CLI 执行 TCL 脚本（`-cmd`）
 - **VIO 运行时探针**：生成 VIO IP 模块、登记命名探针、运行时读取/驱动设计信号，无需重编译（`-vio`）
 - **报告摘要**：一键解析实现流程报告——FMAX、setup/hold WNS（分列判定 MET/VIOLATED）、资源利用率、bit 文件清单（`-report`）
-- **下载器**：GUI 递归列出当前目录及子目录所有 `.bin`，点击即用 cable.exe 下载，支持备注（`-dl`）；带参数时透传 hqdnload
+- **下载器**：GUI 递归列出当前目录及子目录所有 `.bin`，点击即用 cable.exe 下载，支持备注（`-dl`，detached 启动不阻塞终端）；带参数时透传 hqdnload
 - **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
 - **配置管理**：用系统编辑器打开 config.json 管理扫描路径和版本选择（`-cfg`）
 - **自动检测**：`-filelist`、`-flow`、`-xpn`、`-get_device` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
@@ -146,13 +146,16 @@ hqbuddy -xpn -ins example/ddrc_native_demo.hqprj -o my_ins_design.xpn
 
 ### XPN 转 BIN
 
-将 `.xpn` 文件转换为 `.bin` 比特流文件。转换成功后会自动通过 cable.exe 探测板上型号并下载到开发板（`--Burst`），因此使用时需保持开发板连接；探测不到板子或下载失败会报错并以非零码退出。
+将 `.xpn` 文件转换为 `.bin` 比特流文件。单个 xpn 转换成功后会自动通过 cable.exe 探测板上型号并下载到开发板（`--Burst`），因此使用时需保持开发板连接；`-no_dl` 只生成 bin 不下载。
+
+指定 `.xpn` 时只转换该文件；不指定时批量转换**当前目录下所有** `.xpn`，最后输出每个文件的生成结果报告（任一失败则以非零码退出）。有多个 xpn 时不逐个下载，转换完后会自动唤起 `-dl` GUI 下载器，由你选择要下载的 bin。
 
 ```bat
-hqbuddy -xpn2bin                           # 自动检测当前目录的 .xpn
-hqbuddy -xpn2bin debug.xpn                 # 默认生成 debug.bin
-hqbuddy -xpn2bin -o my_bitstream.bin       # 自动检测 + 自定义输出
-hqbuddy -xpn2bin debug.xpn -o my_bitstream.bin
+hqbuddy -xpn2bin                           # 批量转换当前目录所有 .xpn + 报告，完成后唤起 GUI 下载器
+hqbuddy -xpn2bin -no_dl                    # 批量转换，只生成不下载（也不唤起 GUI）
+hqbuddy -xpn2bin debug.xpn                 # 只转换 debug.xpn，默认生成 debug.bin 并自动下载
+hqbuddy -xpn2bin -o my_bitstream.bin debug.xpn   # 自定义输出名（-o 需指定 xpn）
+hqbuddy -xpn2bin debug.xpn -no_dl          # 只生成不下载
 ```
 
 ### HqInsight 在线逻辑分析仪
@@ -396,7 +399,7 @@ hqbuddy -cmd -e "dv.query" -q           :: 安静模式，只保留结果
 
 ### 启动下载器
 
-无参数运行时打开自带 GUI 下载器：递归扫描**当前目录及子目录**下所有 `.bin` 文件，双击某行即通过 cable.exe 直接下载该 bin（自动探测板上型号，固定带 `--Burst`）。双击「备注」列可为 bin 添加备注，备注保存在当前目录的 `.hqbuddy_dl_notes.json` 中，重开不丢失。带参数时保持旧行为，透传启动 hqdnload 下载器。
+无参数运行时打开自带 GUI 下载器（detached 子进程方式启动，不阻塞终端）：递归扫描**当前目录及子目录**下所有 `.bin` 文件，双击某行即通过 cable.exe 直接下载该 bin（自动探测板上型号，固定带 `--Burst`）。双击「备注」列可为 bin 添加备注，备注保存在当前目录的 `.hqbuddy_dl_notes.json` 中，重开不丢失。带参数时保持旧行为，透传启动 hqdnload 下载器。
 
 ```bat
 hqbuddy -dl                               # 打开 GUI 下载器（递归列出所有 .bin，点击下载）
@@ -448,7 +451,8 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-xpn [<file>] [-o <file>]`         | 生成 XPN（普通模式），省略时自动检测，默认生成`hq.xpn`               |
 | `-xpn -ins [<file>] [-o <file>]`    | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成`hq_ins.xpn`     |
 | `-xpn inspect <file.xpn>`           | 解析 XPN 物理网表：设计/器件/comp 统计/IO 列表 |
-| `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN 并自动下载到开发板，省略时自动检测，默认生成`<input>.bin` |
+| `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN 并自动下载到开发板；不指定 file 时批量转换当前目录所有 `.xpn` 并输出报告（多个 xpn 时转换完唤起 `-dl` GUI 下载器，不逐个下载） |
+| `-xpn2bin [<file>] -no_dl`          | 只生成 BIN 不下载                                                  |
 | `-get_device [<file>]`              | 查看`.hqprj` 使用的器件型号                                          |
 | `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
 | `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
@@ -476,7 +480,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本；缺省时进入 hqfpga 交互式 CLI            |
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |
-| `-dl`                               | 打开 GUI 下载器：递归扫描当前目录所有`.bin`，点击下载（cable.exe，自动探测型号），支持备注 |
+| `-dl`                               | 打开 GUI 下载器（detached，不阻塞终端）：递归扫描当前目录所有`.bin`，点击下载（cable.exe，自动探测型号），支持备注 |
 | `-dl [-f <file>] [args...]`         | 透传启动 hqdnload 下载器                                               |
 | `-cable [args]`                     | 启动 cable.exe，透传所有参数                                           |
 | `-wave [<file>]`                    | 用 GTKWave 打开 VCD 波形（缺省自动检测最新 insight 波形）              |
