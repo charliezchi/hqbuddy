@@ -53,7 +53,7 @@ Project:
     -bin_only [<name>]                  Bin-only mode (synthesis -> bitgen, no intermediate files)
   -xpn [<.hqprj>] [-o <file>]          Generate XPN (normal mode)
     -ins                                Generate XPN (hqinsight mode)
-  -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN
+  -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN, then auto-download to board
   -get_device [<.hqprj>]                Show device part
   -set_device [<part>] [<.hqprj>]       Set device part (interactive if no part)
   -get_pin_bank <pin> [-device <part>]  Show the IO bank of a pin

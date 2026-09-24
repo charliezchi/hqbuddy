@@ -50,7 +50,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -flow <file> -looptdo` — looptdo 模式：生成后保留综合部分，删除 pack/place/route/bitgen，替换为 `design.looptdo -sdc $SDC_FILE -upc $UPC_FILE -slack 0 -j 4 -timeout 1800`（自动搜索实现优化参数）
 - `hqbuddy -flow <file> -bin_only [<name>]` — bin-only 模式：生成的 TCL 被精简为只产出 `.bin`（自动删除 .xpn/.rpt/.log 等中间文件的生成指令），名称缺省用流程默认
 - `hqbuddy -xpn [<file>] [-o <out>]` / `-xpn -ins ...` — 生成 XPN 物理网表（普通 / hqinsight 模式）
-- `hqbuddy -xpn2bin [<file>] [-o <out>]` — XPN 转 BIN
+- `hqbuddy -xpn2bin [<file>] [-o <out>]` — XPN 转 BIN，成功后自动探测板上型号并下载（cable.exe `--Burst`）；需保持开发板连接，探测不到板子或下载失败会以非零码退出
 - **insight 流程约束路径坑**：`.hqprj` 的 FILE_TC/FILE_PC 若被 insight 流程
   （run_hqprj2hqins_flow）使用，必须是 `$WORK_DIR$` 前缀（其 cwd 是 hqins_impl/）；
   相对路径会导致流程"成功"却无 bin

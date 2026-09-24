@@ -1,6 +1,7 @@
 """XPN to BIN conversion: generate temp TCL and launch hqfpga -cmd."""
 
 import os
+import re
 import subprocess
 import sys
 
@@ -29,6 +30,48 @@ design.bitgen -bin {bin_name} -compress
         f.write(tcl_content)
 
     return temp_tcl
+
+
+def _download_bin(version: dict, bin_abs: str) -> int:
+    """
+    Download a .bin file to the connected board via cable.exe.
+
+    Detects the board model first, then downloads with --Burst.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
+    cable = version.get('cable_path')
+    if not cable or not os.path.isfile(cable):
+        print("Error: cable.exe not found in this HqFpga installation.")
+        return 1
+
+    print("")
+    print("Detecting board model ...")
+    r = subprocess.run([cable, '--detect_model'],
+                       capture_output=True, text=True, errors='replace',
+                       timeout=60)
+    m = re.search(r'Device Model\s*:\s*(\S+)', r.stdout or '')
+    if not m:
+        print("Error: failed to detect board model, download aborted. cable output:")
+        print((r.stdout or '').strip() or '(no output)')
+        return 1
+    model = m.group(1)
+    print(f"Board model: {model}")
+
+    cmd = [cable, '--sealion', bin_abs, '--model', model, '--Burst']
+    print(f"Downloading: {bin_abs}")
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True, errors='replace')
+    print(proc.stdout)
+    # cable.exe prints errors like "Error : The file ID is unmatched"
+    # but may still exit 0 — scan the output, don't trust the exit code
+    has_error = re.search(r'^\s*(error|fail)', proc.stdout or '', re.M | re.I)
+    if proc.returncode != 0 or has_error:
+        print(f"Error: download failed (exit {proc.returncode})")
+        return 1
+    print("Download OK.")
+    return 0
 
 
 def run_xpn2bin(xpn_path: str, bin_path: str | None = None) -> None:
@@ -89,6 +132,16 @@ def run_xpn2bin(xpn_path: str, bin_path: str | None = None) -> None:
         if proc.returncode != 0:
             print(f"")
             print(f"Warning: hqfpga exited with code {proc.returncode}")
+
+        if proc.returncode == 0:
+            # bitgen runs with cwd=work_dir and a bare -bin name, so the
+            # output always lands next to the .xpn regardless of -o's cwd
+            actual_bin = os.path.join(work_dir, bin_name)
+            if not os.path.isfile(actual_bin):
+                print(f"Error: expected output not found: {actual_bin}")
+                sys.exit(1)
+            if _download_bin(version, actual_bin) != 0:
+                sys.exit(1)
 
     finally:
         # Clean up temporary TCL file

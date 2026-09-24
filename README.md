@@ -15,7 +15,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
 - **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式
 - **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；`-capture` 支持自定义超时与输出前缀
-- **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件
+- **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`）
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
 - **新建工程**：从模板创建 `.hqprj` 工程（`-new_prj`）
 - **添加源文件**：向工程添加 `.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件并维护对应时间戳（`-add`）
@@ -146,7 +146,7 @@ hqbuddy -xpn -ins example/ddrc_native_demo.hqprj -o my_ins_design.xpn
 
 ### XPN 转 BIN
 
-将 `.xpn` 文件转换为 `.bin` 比特流文件。
+将 `.xpn` 文件转换为 `.bin` 比特流文件。转换成功后会自动通过 cable.exe 探测板上型号并下载到开发板（`--Burst`），因此使用时需保持开发板连接；探测不到板子或下载失败会报错并以非零码退出。
 
 ```bat
 hqbuddy -xpn2bin                           # 自动检测当前目录的 .xpn
@@ -448,7 +448,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-xpn [<file>] [-o <file>]`         | 生成 XPN（普通模式），省略时自动检测，默认生成`hq.xpn`               |
 | `-xpn -ins [<file>] [-o <file>]`    | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成`hq_ins.xpn`     |
 | `-xpn inspect <file.xpn>`           | 解析 XPN 物理网表：设计/器件/comp 统计/IO 列表 |
-| `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN，省略时自动检测，默认生成`<input>.bin`             |
+| `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN 并自动下载到开发板，省略时自动检测，默认生成`<input>.bin` |
 | `-get_device [<file>]`              | 查看`.hqprj` 使用的器件型号                                          |
 | `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
 | `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
