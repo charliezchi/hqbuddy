@@ -93,11 +93,14 @@ Project:
   -seed_sweep [-ins] [<src.hqprj>] [-n N] [-j J]
                                        Multi-seed P&R sweep: synthesize once into a shared UDB,
                                        then N P&R runs (fixed effort, -seed varies) as up to J
-                                       parallel hqfpga processes (default 4); per-seed reports/bin
-                                       in seed_sweep/seed<N>/, summary in seed_sweep_summary.csv.
+                                       parallel hqfpga processes (default 4); per-seed reports,
+                                       routed XPN and bin in seed_sweep/seed<N>/, summary in
+                                       seed_sweep_summary.csv.
                                        -ins: sweep the HqInsight-instrumented design (VLA probes;
                                        refreshes hqins_impl via the official insight flow first),
                                        output in seed_sweep_ins/
+                                       When done, the -dl downloader GUI opens in the sweep
+                                       dir (previous notes cleared).
   -set_top <name>                      Set top module name
   -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
 

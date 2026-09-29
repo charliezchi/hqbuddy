@@ -56,11 +56,12 @@ def _no_window_flags():
     return subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 
 
-def spawn_gui_detached():
+def spawn_gui_detached(cwd=None):
     """
     Launch the downloader GUI in a detached child process so the calling
     terminal is not blocked. The child re-enters hqbuddy via the internal
-    -dl_gui command, which runs the GUI in-process.
+    -dl_gui command, which runs the GUI in-process. The GUI scans the child's
+    working directory, so pass cwd to root it somewhere else than the caller.
     """
     if getattr(sys, 'frozen', False):
         cmd = [sys.executable, '-dl_gui']
@@ -69,7 +70,7 @@ def spawn_gui_detached():
     flags = 0
     if os.name == 'nt':
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen(cmd, creationflags=flags, close_fds=True)
+    subprocess.Popen(cmd, cwd=cwd, creationflags=flags, close_fds=True)
 
 
 def _fmt_size(n):

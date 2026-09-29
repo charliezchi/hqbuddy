@@ -384,6 +384,9 @@ def _extract_sweep_parts(lines: list) -> dict:
     bitgen_cmd = _last_cmd("design.bitgen", "impl.bitgen")
     fmax_cmd = _last_cmd("ta.fmax.report")
     ta_cmd = _last_cmd("ta.report")  # the post-route one
+    # routed physical netlist: the flow's LAST xpn.write (after design.route;
+    # earlier ones dump the packed/placed netlist and stay dropped)
+    xpn_cmd = _last_cmd("xpn.write")
     # place utilization report: the nl.report line carrying -location
     place_rpt_cmd = next((ln.strip() for ln in lines
                           if ln.strip().startswith("nl.report") and "-location" in ln),
@@ -401,13 +404,15 @@ def _extract_sweep_parts(lines: list) -> dict:
         "synth_lines": lines[:flatten_idx + 1],
         "constraint_block": lines[flatten_idx + 1:pack_idx],
         "constraint_sets": [ln for ln in lines[:flatten_idx + 1]
-                            if ln.strip().startswith(("set SDC_FILE", "set UPC_FILE"))],
+                            if ln.strip().startswith(("set SDC_FILE", "set UPC_FILE",
+                                                      "set TOP_MODULE"))],
         "pack_cmd": pack_cmd,
         "place_cmd": place_cmd,
         "route_cmd": route_cmd,
         "bitgen_cmd": bitgen_cmd,
         "fmax_cmd": fmax_cmd,
         "ta_cmd": ta_cmd,
+        "xpn_cmd": xpn_cmd,
         "place_rpt_cmd": place_rpt_cmd,
     }
 
@@ -438,6 +443,8 @@ def _build_seed_tcl(parts: dict, seed: int, udb_abs: str) -> str:
     if parts["place_rpt_cmd"]:
         lines.append(f"{parts['place_rpt_cmd']}\n")
     lines.append(f"{parts['route_cmd']}\n")
+    if parts["xpn_cmd"]:
+        lines.append(f"{parts['xpn_cmd']}\n")
     if parts["fmax_cmd"]:
         lines.append(f"{parts['fmax_cmd']}\n")
     lines.append(f"{parts['ta_cmd']}\n")
@@ -668,3 +675,14 @@ def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False) -
               "with seed K's bit, copy it over the canonical one first:")
         print(f"      copy seed_sweep_ins\\seed<K>\\<prj>.bin "
               f"-> hqins_run\\hq_import\\hqins_impl\\  (then -insight -capture)")
+
+    # hand off to the downloader GUI rooted at the sweep dir so picking a
+    # seed's bin and flashing it is the next click; notes from the previous
+    # sweep refer to regenerated seed dirs, so clear them for a clean start
+    from .downloader import NOTES_FILE, spawn_gui_detached
+    notes_path = os.path.join(sweep_dir, NOTES_FILE)
+    if os.path.isfile(notes_path):
+        os.remove(notes_path)
+        print(f"Removed stale downloader notes: {notes_path}")
+    spawn_gui_detached(cwd=sweep_dir)
+    print("Downloader GUI launched (detached) in the sweep dir.")
