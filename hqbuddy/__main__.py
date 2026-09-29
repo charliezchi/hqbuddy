@@ -85,12 +85,19 @@ Project:
   -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
   -doctor [<.hqprj>]                   Project health check: files/modules/times/device/depth
   -synopt <src.hqprj> [-set k=on|off ... | -show | -clear]
+                                       Per-project synthesis option overrides (injected
+                                       into -flow/-build to match FILE_SRC/FILE_TC/FILE_PC)
   -pinplan <src.hqprj> -board <board>  Pin plan skeleton: match ports to board nets (boards/*.md)
   -autosdc <src.hqprj> [-period ns]    Auto-generate clock constraints SDC (tc.autogen)
   -regression [base_dir]               One-command regression suite (capture+error paths+smoke)
-                                       Per-project synthesis option overrides (injected into -flow/-build)
-  -seed_sweep <src.hqprj> [-n N]       Multi-seed P&R sweep: N placements, WNS table, keep each bin
-                                        to match FILE_SRC/FILE_TC/FILE_PC
+  -seed_sweep [-ins] [<src.hqprj>] [-n N] [-j J]
+                                       Multi-seed P&R sweep: synthesize once into a shared UDB,
+                                       then N P&R runs (fixed effort, -seed varies) as up to J
+                                       parallel hqfpga processes (default 4); per-seed reports/bin
+                                       in seed_sweep/seed<N>/, summary in seed_sweep_summary.csv.
+                                       -ins: sweep the HqInsight-instrumented design (VLA probes;
+                                       refreshes hqins_impl via the official insight flow first),
+                                       output in seed_sweep_ins/
   -set_top <name>                      Set top module name
   -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
 
@@ -1478,18 +1485,32 @@ def main():
 
     # Multi-seed P&R sweep
     if first == '-seed_sweep':
-        src = args[1] if len(args) > 1 else None
+        src = None
         n = 3
-        i = 2
+        j = 4
+        ins = False
+        i = 1
         while i < len(args):
             if args[i] == '-n' and i + 1 < len(args):
                 n = int(args[i + 1]); i += 2
+            elif args[i] == '-j' and i + 1 < len(args):
+                j = int(args[i + 1]); i += 2
+            elif args[i] == '-ins':
+                ins = True; i += 1
+            elif src is None:
+                src = args[i]; i += 1
             else:
                 i += 1
-        if not src:
-            print("Usage: hqbuddy -seed_sweep <src.hqprj> [-n N]")
+        if n < 1 or j < 1:
+            print("Error: -n and -j must be >= 1")
             sys.exit(1)
-        run_seed_sweep(src, n)
+        if src and os.path.isdir(src):
+            matches = sorted(glob.glob(os.path.join(src, "*.hqprj")))
+            if not matches:
+                print(f"Error: no .hqprj found in directory: {src}")
+                sys.exit(1)
+            src = matches[0]
+        run_seed_sweep(_resolve_hqprj(src), n, j, ins)
         return
 
     # Set top module

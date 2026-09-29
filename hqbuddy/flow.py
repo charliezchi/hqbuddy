@@ -196,15 +196,24 @@ def _resolve_hqfpga() -> str:
     return version['hqfpga_path']
 
 
-def _check_bitstream(work_dir: str, since: float) -> None:
-    """Verify a fresh bitstream was produced; the flow can exit 0 while
-    bitgen actually failed, so the artifact (not the exit code) is truth."""
+def _fresh_bitstream(work_dir: str, since: float) -> str | None:
+    """Return the newest .bin/.bit produced after `since`, or None. The flow
+    can exit 0 while bitgen actually failed, so the artifact (not the exit
+    code) is truth."""
     candidates = []
     for pat in ("*.bin", "*.bit"):
         candidates.extend(glob.glob(os.path.join(work_dir, pat)))
         candidates.extend(glob.glob(os.path.join(work_dir, "hq_run", pat)))
     fresh = [p for p in candidates if os.path.getmtime(p) >= since]
     if not fresh:
+        return None
+    return max(fresh, key=os.path.getmtime)
+
+
+def _check_bitstream(work_dir: str, since: float) -> None:
+    """Verify a fresh bitstream was produced; the flow can exit 0 while
+    bitgen actually failed, so the artifact (not the exit code) is truth."""
+    if _fresh_bitstream(work_dir, since) is None:
         print("")
         print("Error: flow finished but no fresh .bin/.bit was produced "
               "(bitgen likely failed). Check hqfpga.log and the .rpt reports.")
@@ -346,19 +355,136 @@ def run_flow_bin_only(hqprj_path: str, bin_name: str | None = None, output_tcl: 
             print(f"Cleaned up temp TCL: {temp_tcl}")
 
 
-def run_seed_sweep(hqprj_path: str, n: int = 3) -> None:
-    """Multi-seed P&R sweep: run the implementation with N placement/routing
-    seeds, report WNS per seed, and keep every seed's bitstream.
+def _extract_sweep_parts(lines: list) -> dict:
+    """Pull the pieces out of an hqprj2tcl flow script for seed sweep mode:
+    the synthesis section (everything through design.flatten), the constraint
+    block (tc.clear + sdc/upc foreach sitting between flatten and pack), and
+    the P&R/report/bitgen commands kept verbatim. Per-seed TCLs re-emit the
+    P&R commands unchanged — their writers all take cwd-relative filenames,
+    and each seed runs with cwd=<its own seed dir>."""
+    flatten_idx = next((i for i, ln in enumerate(lines)
+                        if ln.strip().startswith("design.flatten")), None)
+    pack_idx = next((i for i, ln in enumerate(lines)
+                     if ln.strip().startswith(("design.pack", "impl.pack"))), None)
+    if flatten_idx is None or pack_idx is None or flatten_idx >= pack_idx:
+        print("Error: cannot split synthesis from P&R in generated TCL "
+              "(need design.flatten followed by design.pack)")
+        sys.exit(1)
 
-    Sets the place step's -seed option per sweep seed (design.place/impl.place
-    natively support -seed <value>; R54 probe)."""
-    from .report import _parse_wns
-    from .hqprj_parser import extract_filelist  # noqa: F401 (parity with -flow)
+    def _last_cmd(*prefixes: str) -> str | None:
+        for ln in reversed(lines):
+            s = ln.strip()
+            if any(s.startswith(p) for p in prefixes):
+                return s
+        return None
+
+    pack_cmd = _last_cmd("design.pack", "impl.pack")
+    place_cmd = _last_cmd("design.place", "impl.place")
+    route_cmd = _last_cmd("design.route", "impl.route")
+    bitgen_cmd = _last_cmd("design.bitgen", "impl.bitgen")
+    fmax_cmd = _last_cmd("ta.fmax.report")
+    ta_cmd = _last_cmd("ta.report")  # the post-route one
+    # place utilization report: the nl.report line carrying -location
+    place_rpt_cmd = next((ln.strip() for ln in lines
+                          if ln.strip().startswith("nl.report") and "-location" in ln),
+                         None)
+
+    if not all((place_cmd, route_cmd, bitgen_cmd, ta_cmd)):
+        print("Error: could not locate place/route/bitgen/timing-report steps "
+              "in generated TCL")
+        sys.exit(1)
+
+    # the sweep owns -seed; strip any fixed value so seeds really differ
+    place_cmd = re.sub(r"\s+-seed\s+\S+", "", place_cmd)
+
+    return {
+        "synth_lines": lines[:flatten_idx + 1],
+        "constraint_block": lines[flatten_idx + 1:pack_idx],
+        "constraint_sets": [ln for ln in lines[:flatten_idx + 1]
+                            if ln.strip().startswith(("set SDC_FILE", "set UPC_FILE"))],
+        "pack_cmd": pack_cmd,
+        "place_cmd": place_cmd,
+        "route_cmd": route_cmd,
+        "bitgen_cmd": bitgen_cmd,
+        "fmax_cmd": fmax_cmd,
+        "ta_cmd": ta_cmd,
+        "place_rpt_cmd": place_rpt_cmd,
+    }
+
+
+def _build_synth_tcl(parts: dict, udb_abs: str) -> str:
+    """Synthesis-only TCL: run synthesis once, then design.save the
+    post-flatten design into a shared UDB for the per-seed P&R runs."""
+    return "".join(parts["synth_lines"]) + "\n" + f"design.save {udb_abs}\n"
+
+
+def _build_seed_tcl(parts: dict, seed: int, udb_abs: str) -> str:
+    """Per-seed P&R TCL. design.load clears ALL in-memory design data before
+    reloading the UDB, so every seed starts from the same post-synthesis
+    state (a bare re-pack would accumulate placement state and fail with
+    e.g. PHY-PLA-665 OSC capacity overflow). UDB does not store timing
+    constraints, so the SDC/UPC block is re-emitted; effort stays fixed,
+    only -seed varies. Reports/bitstream land in the seed's own cwd."""
+    lines = [
+        "# hqbuddy seed sweep: P&R for one seed; synthesis is shared via the UDB\n",
+    ]
+    lines += parts["constraint_sets"]
+    lines += ["\n", f"design.load {udb_abs}\n", "\n"]
+    lines += parts["constraint_block"]
+    lines += [
+        f"{parts['pack_cmd']}\n",
+        f"{parts['place_cmd']} -seed {seed}\n",
+    ]
+    if parts["place_rpt_cmd"]:
+        lines.append(f"{parts['place_rpt_cmd']}\n")
+    lines.append(f"{parts['route_cmd']}\n")
+    if parts["fmax_cmd"]:
+        lines.append(f"{parts['fmax_cmd']}\n")
+    lines.append(f"{parts['ta_cmd']}\n")
+    lines.append(f"{parts['bitgen_cmd']}\n")
+    return "".join(lines)
+
+
+def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False) -> None:
+    """Multi-seed P&R sweep: synthesize once into a shared UDB, then run the
+    per-seed P&R (pack/place/route/bitgen, fixed effort, only the placement
+    -seed varies) as up to -j parallel hqfpga processes, each isolated in
+    <prj_dir>/seed_sweep/seed<k>/. seed_sweep_summary.csv collects WNS/Fmax.
+
+    With ins=True, sweep the HqInsight-instrumented derived project
+    (hqins_run/hq_import/hqins_impl.hqprj) instead, so every seed's bitstream
+    carries the VLA probes; artifacts go to <prj_dir>/seed_sweep_ins/ to stay
+    out of hqins_run/. The official insight flow (run_hqprj2hqins_flow) is
+    run once first to refresh the derived project and the canonical bit.
+
+    design.place/impl.place natively support -seed <value> (R54 probe)."""
+    from .report import _parse_fmax, _parse_wns
 
     if not os.path.isfile(hqprj_path):
         print(f"Error: file not found: {hqprj_path}")
         sys.exit(1)
     work_dir = os.path.dirname(os.path.abspath(hqprj_path))
+    if ins:
+        from . import insight
+        proj = insight.resolve_insight_project(hqprj_path, require_hqins=True)
+        info = insight._load_signal_info(proj)
+        sigs = insight._collect_signals(info) if info else []
+        if not sigs:
+            print("Error: no probe signals selected — add some first "
+                  "(hqbuddy -insight -add <signal>).")
+            sys.exit(1)
+        print(f"[ins] Refreshing instrumented reference build "
+              f"(official insight flow) for {proj['hqprj']} ...")
+        insight.run_flow(proj)
+        impl_prj = os.path.join(proj["hqins_dir"], "hq_import", "hqins_impl.hqprj")
+        if not os.path.isfile(impl_prj):
+            print(f"Error: instrumented derived project not found: {impl_prj}")
+            sys.exit(1)
+        hqprj_path = impl_prj
+        sweep_dir = os.path.join(work_dir, "seed_sweep_ins")
+    else:
+        sweep_dir = os.path.join(work_dir, "seed_sweep")
+    os.makedirs(sweep_dir, exist_ok=True)
     hqfpga_path = _resolve_hqfpga()
     top = None
     m_top = re.search(r"TOP_MODULE[= ]+(\S+)",
@@ -366,47 +492,164 @@ def run_seed_sweep(hqprj_path: str, n: int = 3) -> None:
     if m_top:
         top = m_top.group(1)
 
-    # 1. generate the base flow TCL (hqprj2tcl)
-    run_flow(hqprj_path)
-    tcl_path = os.path.join(work_dir, "run_hqprj.tcl")
-    lines = open(tcl_path, encoding="utf-8", errors="replace").read().splitlines()
-    place_idx = next((i for i, ln in enumerate(lines)
-                      if ln.strip().startswith(("design.place", "impl.place"))), None)
-    if place_idx is None:
-        print("Error: place step not found in generated TCL (design.place/impl.place)")
+    # 1. generate the base flow TCL inside the sweep dir (hqprj2tcl writes
+    #    relative to cwd), so the project root stays clean
+    temp_tcl = os.path.join(sweep_dir, "_hqbuddy_sweep_temp.tcl")
+    hqprj_tcl = os.path.abspath(hqprj_path).replace("\\", "/")
+    with open(temp_tcl, "w", encoding="utf-8") as f:
+        f.write(f"hqprj2tcl {hqprj_tcl} run_hqprj.tcl\n")
+    try:
+        _run_hqfpga(hqfpga_path, temp_tcl, sweep_dir)
+    finally:
+        if os.path.exists(temp_tcl):
+            os.remove(temp_tcl)
+    tcl_path = os.path.join(sweep_dir, "run_hqprj.tcl")
+    if not os.path.isfile(tcl_path):
+        print(f"Error: hqprj2tcl did not generate expected TCL: {tcl_path}")
         sys.exit(1)
 
-    print(f"Seed sweep: {n} seeds on {hqprj_path}")
+    # per-project synthesis option overrides (-synopt sidecar), same as -flow
+    from .synopt import inject_synopt, load_overrides
+    lines = open(tcl_path, encoding="utf-8", errors="replace").read().splitlines()
+    if load_overrides(hqprj_path):
+        lines = inject_synopt(lines, hqprj_path)
+        with open(tcl_path, "w", encoding="utf-8", newline="") as f:
+            f.write(chr(10).join(lines) + chr(10))
+    lines = open(tcl_path, encoding="utf-8", errors="replace").readlines()
+    if any("_sweep_base.udb" in ln for ln in lines):
+        # hqprj2tcl must regenerate run_hqprj.tcl fresh; seeing sweep markers
+        # means it failed and a stale (already transformed) file is in place
+        print(f"Error: {tcl_path} looks like a stale sweep TCL (hqprj2tcl may "
+              f"have failed). Delete it and retry.")
+        sys.exit(1)
+
+    parts = _extract_sweep_parts(lines)
+    udb_abs = os.path.abspath(os.path.join(sweep_dir, "_sweep_base.udb")).replace("\\", "/")
+
+    # 2. synthesis once -> shared UDB, then per-seed P&R TCLs
+    synth_tcl = os.path.join(sweep_dir, "run_synth.tcl")
+    with open(synth_tcl, "w", encoding="utf-8", newline="") as f:
+        f.write(_build_synth_tcl(parts, udb_abs))
+    for seed in range(1, n + 1):
+        seed_dir = os.path.join(sweep_dir, f"seed{seed}")
+        if os.path.isdir(seed_dir):
+            shutil.rmtree(seed_dir)  # stale files can't mix into the new run
+        os.makedirs(seed_dir)
+        with open(os.path.join(seed_dir, "run_hqprj.tcl"), "w",
+                  encoding="utf-8", newline="") as f:
+            f.write(_build_seed_tcl(parts, seed, udb_abs))
+
+    workers = max(1, min(j, n))
+    label = " (insight VLA)" if ins else ""
+    print(f"Seed sweep{label}: {n} seeds, up to {workers} in parallel, on {hqprj_path}")
+    print(f"Output dir: {sweep_dir}")
+    print("Synthesis runs once into a shared UDB; per-seed P&R keeps effort "
+          "fixed (only -seed varies).")
+    started = time.time()
+    _run_hqfpga(hqfpga_path, synth_tcl, sweep_dir)
+    if not os.path.isfile(os.path.join(sweep_dir, "_sweep_base.udb")):
+        print("Error: design.save did not produce the shared UDB; cannot run "
+              "per-seed P&R. Check the synthesis log above.")
+        sys.exit(1)
+
+    # 3. parallel per-seed P&R: each seed is its own hqfpga process with
+    #    cwd=<seed dir>, so nothing is shared except the read-only UDB
+    elapsed_by_seed: dict = {}
+    rc_by_seed: dict = {}
+    queue = list(range(1, n + 1))
+    running = []  # [seed, proc, logfh, started]
+    try:
+        while queue or running:
+            while queue and len(running) < workers:
+                seed = queue.pop(0)
+                seed_dir = os.path.join(sweep_dir, f"seed{seed}")
+                seed_tcl = os.path.join(seed_dir, "run_hqprj.tcl")
+                logfh = None
+                kwargs = {"cwd": seed_dir}
+                if workers > 1:
+                    # parallel output would interleave; capture per seed
+                    logfh = open(os.path.join(seed_dir, "run.log"), "w",
+                                 encoding="utf-8", errors="replace", newline="")
+                    kwargs.update(stdout=logfh, stderr=subprocess.STDOUT)
+                proc = subprocess.Popen([hqfpga_path, "-cmd", seed_tcl], **kwargs)
+                print(f"[seed {seed}] P&R started"
+                      f" ({len(running) + 1}/{workers} running)")
+                running.append([seed, proc, logfh, time.time()])
+            time.sleep(0.5)
+            for item in running[:]:
+                seed, proc, logfh, t0 = item
+                if proc.poll() is None:
+                    continue
+                running.remove(item)
+                if logfh:
+                    logfh.close()
+                    item[2] = None
+                elapsed_by_seed[seed] = time.time() - t0
+                rc_by_seed[seed] = proc.returncode
+                msg = f"[seed {seed}] P&R finished in {elapsed_by_seed[seed]:.0f}s"
+                if proc.returncode != 0:
+                    msg += f"  (exit code {proc.returncode})"
+                print(msg)
+    except KeyboardInterrupt:
+        for seed, proc, logfh, t0 in running:
+            proc.terminate()
+        for seed, proc, logfh, t0 in running:
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            if logfh:
+                logfh.close()
+        raise
+    finally:
+        udb_path = os.path.join(sweep_dir, "_sweep_base.udb")
+        if os.path.exists(udb_path):
+            os.remove(udb_path)
+
+    # 4. collect per-seed results from the seed dirs
     results = []
     for seed in range(1, n + 1):
-        seeded = lines[:]
-        seeded[place_idx] = lines[place_idx].rstrip() + f" -seed {seed}"
-        sweep_tcl = os.path.join(work_dir, f"run_hqprj_seed{seed}.tcl")
-        with open(sweep_tcl, "w", encoding="utf-8", newline="\n") as f:
-            f.write(chr(10).join(seeded) + chr(10))
-        started = time.time()
-        print(f"[seed {seed}/{n}] running implementation ...")
-        _run_hqfpga(hqfpga_path, sweep_tcl, work_dir)
-        # WNS from the reports this run just wrote
-        from .report import _parse_wns
-        w = _parse_wns(work_dir, top)
-        setup = w["wns_setup_ps"] if w and w["wns_setup_ps"] is not None else None
-        hold = w["wns_hold_ps"] if w and w["wns_hold_ps"] is not None else None
-        # stash this seed's bitstream
-        bin_moved = None
-        for cand in glob.glob(os.path.join(work_dir, "*.bin")):
-            base_c = os.path.basename(cand)
-            if "_seed" in base_c:
-                continue  # previous stashes are not fresh flow outputs
-            if os.path.getmtime(cand) >= started:
-                stem = os.path.splitext(base_c)[0]
-                dst = os.path.join(work_dir, f"{stem}_seed{seed}.bin")
-                shutil.copyfile(cand, dst)
-                bin_moved = dst
+        seed_dir = os.path.join(sweep_dir, f"seed{seed}")
+        w = _parse_wns(seed_dir, top)
+        setup = w["wns_setup_ps"] if w else None
+        hold = w["wns_hold_ps"] if w else None
+        fmax_mhz = None
+        fm = _parse_fmax(seed_dir)
+        if fm:
+            m = re.match(r"([\d.]+)\s*(MHz|GHz|kHz)", fm[0].get("fmax", ""))
+            if m:
+                val = float(m.group(1))
+                fmax_mhz = {"GHz": val * 1000, "kHz": val / 1000}.get(m.group(2), val)
+        bin_path = _fresh_bitstream(seed_dir, started)
+        rc = rc_by_seed.get(seed)
+        if bin_path:
+            status = "ok"
+        elif rc:
+            status = f"FAIL: exit {rc}"
+        else:
+            status = "FAIL: no bitstream"
         results.append({"seed": seed, "setup": setup, "hold": hold,
-                        "bin": bin_moved})
+                        "fmax_mhz": fmax_mhz, "bin": bin_path,
+                        "elapsed_s": elapsed_by_seed.get(seed), "status": status})
         print(f"[seed {seed}] WNS setup={'?' if setup is None else setup} ps  "
-              f"hold={'?' if hold is None else hold} ps  bin={bin_moved}")
+              f"hold={'?' if hold is None else hold} ps  "
+              f"{'bin=' + os.path.relpath(bin_path, sweep_dir) if bin_path else 'NO BITSTREAM'}")
+
+    print()
+    print(f"All seeds done in {time.time() - started:.0f}s.")
+
+    # 5. summary CSV (utf-8-sig so Excel on Chinese Windows opens it cleanly)
+    csv_path = os.path.join(sweep_dir, "seed_sweep_summary.csv")
+    with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
+        f.write("seed,wns_setup_ps,wns_hold_ps,fmax_mhz,bin,elapsed_s,status\n")
+        for r in results:
+            setup_c = "" if r["setup"] is None else str(r["setup"])
+            hold_c = "" if r["hold"] is None else str(r["hold"])
+            fmax_c = "" if r["fmax_mhz"] is None else f"{r['fmax_mhz']:.2f}"
+            elapsed_c = "" if r["elapsed_s"] is None else f"{r['elapsed_s']:.0f}"
+            bin_c = os.path.relpath(r["bin"], sweep_dir).replace("\\", "/") if r["bin"] else ""
+            f.write(f"{r['seed']},{setup_c},{hold_c},{fmax_c},{bin_c},"
+                    f"{elapsed_c},{r['status']}\n")
 
     print()
     print("Seed sweep summary (worst setup slack first):")
@@ -418,3 +661,10 @@ def run_seed_sweep(hqprj_path: str, n: int = 3) -> None:
               f"{os.path.basename(r['bin']) if r['bin'] else '?'}{mark}")
     if not ranked:
         print("  (no seed produced parseable WNS — check reports)")
+    print(f"Summary CSV: {csv_path}")
+    if ins:
+        print()
+        print("[ins] Every seed's bitstream carries the VLA probes. To capture "
+              "with seed K's bit, copy it over the canonical one first:")
+        print(f"      copy seed_sweep_ins\\seed<K>\\<prj>.bin "
+              f"-> hqins_run\\hq_import\\hqins_impl\\  (then -insight -capture)")
