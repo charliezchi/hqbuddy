@@ -1,3 +1,3 @@
 """HqBuddy - Auxiliary toolkit for HqFPGA"""
 
-__version__ = "3.16.2"
+__version__ = "3.16.3"

@@ -14,6 +14,42 @@ from tkinter.scrolledtext import ScrolledText
 
 NOTES_FILE = '.hqbuddy_dl_notes.json'
 
+# FPGA bitstreams start with FF 00 + this ASCII signature, followed by a
+# "Key:<spaces>value" header (Design name / Device / Date / ...) that ends
+# with 0A FF FF FF before the binary frame data.
+BITSTREAM_MAGIC = b'\xff\x00XIST ASCII Bitstream'
+_HEADER_KEYS = re.compile(r'^(Design name|Device):\s*(\S.*)')
+
+
+def read_bin_info(path):
+    """Probe a .bin file and return (is_fpga, design, device).
+
+    Only XiST FPGA bitstreams carry the magic + ASCII header; MCU firmware,
+    HqInsight module data etc. lack it and are rejected. Unreadable files
+    are also rejected (counted as filtered)."""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(4096)
+    except OSError:
+        return False, '', ''
+    if not head.startswith(BITSTREAM_MAGIC):
+        return False, '', ''
+    design = device = ''
+    for line in head[len(BITSTREAM_MAGIC):].split(b'\n'):
+        try:
+            text = line.decode('ascii').rstrip('\r')
+        except UnicodeDecodeError:
+            break  # 0A FF FF FF terminator reached
+        m = _HEADER_KEYS.match(text)
+        if not m:
+            continue
+        if m.group(1) == 'Design name':
+            design = m.group(2).strip()
+        else:
+            device = m.group(2).strip()
+            break
+    return True, design, device
+
 
 def _no_window_flags():
     """CREATE_NO_WINDOW on Windows: keep cable.exe from popping a console."""
@@ -66,16 +102,18 @@ class DownloaderGUI(tk.Tk):
         ttk.Button(top, text="重置状态", command=self.reset_status).pack(side=tk.LEFT, padx=6)
         ttk.Label(top, text="双击行下载该 bin；双击备注列编辑备注").pack(side=tk.LEFT, padx=12)
 
-        cols = ("path", "size", "mtime", "status", "note")
+        cols = ("design", "device", "size", "mtime", "status", "note")
         self.tree = ttk.Treeview(self, columns=cols, show="tree headings")
         self.tree.heading("#0", text="目录 / 文件")
-        self.tree.heading("path", text="相对路径")
+        self.tree.heading("design", text="设计名")
+        self.tree.heading("device", text="器件")
         self.tree.heading("size", text="大小")
         self.tree.heading("mtime", text="修改时间")
         self.tree.heading("status", text="状态")
         self.tree.heading("note", text="备注")
         self.tree.column("#0", width=240, anchor=tk.W)
-        self.tree.column("path", width=320, anchor=tk.W)
+        self.tree.column("design", width=130, anchor=tk.W)
+        self.tree.column("device", width=160, anchor=tk.W)
         self.tree.column("size", width=80, anchor=tk.E)
         self.tree.column("mtime", width=140, anchor=tk.CENTER)
         self.tree.column("status", width=70, anchor=tk.CENTER)
@@ -111,30 +149,42 @@ class DownloaderGUI(tk.Tk):
 
     def rescan(self):
         self.tree.delete(*self.tree.get_children())
-        groups = {}  # rel dir -> [full paths]
+        groups = {}  # rel dir -> [(full path, design, device)]
+        n_filtered = 0
         for base, _dirs, files in os.walk(self.root_dir):
             for f in files:
-                if f.lower().endswith('.bin'):
-                    rel_dir = os.path.relpath(base, self.root_dir).replace(os.sep, '/')
-                    groups.setdefault(rel_dir, []).append(os.path.join(base, f))
+                if not f.lower().endswith('.bin'):
+                    continue
+                full = os.path.join(base, f)
+                is_fpga, design, device = read_bin_info(full)
+                if not is_fpga:
+                    n_filtered += 1
+                    continue
+                rel_dir = os.path.relpath(base, self.root_dir).replace(os.sep, '/')
+                groups.setdefault(rel_dir, []).append((full, design, device))
         n_bins = 0
         for rel_dir in sorted(groups, key=str.lower):
-            files = sorted(groups[rel_dir], key=lambda p: os.path.basename(p).lower())
+            files = sorted(groups[rel_dir],
+                           key=lambda t: os.path.basename(t[0]).lower())
             n_bins += len(files)
             dir_iid = f"dir:{rel_dir}"
             self.tree.insert("", tk.END, iid=dir_iid, open=True,
                              text=f"{rel_dir} ({len(files)})",
-                             values=("", "", "", "", ""))
-            for full in files:
+                             values=("", "", "", "", "", ""))
+            for full, design, device in files:
                 rel = os.path.relpath(full, self.root_dir).replace(os.sep, '/')
                 st = os.stat(full)
                 self.tree.insert(
                     dir_iid, tk.END, iid=rel, text=os.path.basename(full),
-                    values=(rel, _fmt_size(st.st_size),
+                    values=(design or "-", device or "-",
+                            _fmt_size(st.st_size),
                             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(st.st_mtime)),
                             "", self.notes.get(rel, "")))
-        self._log(f"[i] 扫描到 {n_bins} 个 bin 文件，分布在 {len(groups)} 个目录"
-                  f"（根目录: {self.root_dir}）")
+        msg = (f"[i] 扫描到 {n_bins} 个 FPGA bitstream，分布在 {len(groups)} 个目录"
+               f"（根目录: {self.root_dir}）")
+        if n_filtered:
+            msg += f"；已过滤 {n_filtered} 个非 FPGA bin"
+        self._log(msg)
 
     # ---------- interaction ----------
 
@@ -148,7 +198,7 @@ class DownloaderGUI(tk.Tk):
             self.tree.item(iid, open=not self.tree.item(iid, "open"))
             return "break"
         col = self.tree.identify_column(event.x)
-        if col == '#5':  # note column
+        if col == '#6':  # note column
             old = self.notes.get(iid, "")
             new = simpledialog.askstring("备注", iid, initialvalue=old, parent=self)
             if new is not None:

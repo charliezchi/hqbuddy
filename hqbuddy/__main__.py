@@ -103,7 +103,7 @@ Tools:
   -cmd [<file>]                         Launch hqfpga CLI (with TCL script, or interactive if omitted)
   -cmd -e "<tcl>" [-q]                  Execute a single TCL command string
                                         (-q: hide banner and Info: lines)
-  -dl                                   Open GUI downloader (recursive .bin scan, click to download; detached, non-blocking)
+  -dl                                   Open GUI downloader (recursive scan, FPGA bitstreams only, click to download; detached, non-blocking)
   -dl [-f <file>] [args...]             Launch hqdnload downloader (passthrough)
   -cable [args...]                      Launch cable.exe
   -wave [<file.vcd>]                    Open a captured waveform in GTKWave
