@@ -1155,6 +1155,33 @@ def run_flow(proj: dict) -> None:
     version = launcher.require_hqfpga_version()
     hqfpga_exe = version["hqfpga_path"]
 
+    # -run implements the EXISTING hq_import_with_bscan.v; it never re-instruments
+    # (R47d: stale netlists are reused silently). Warn when any elaborated source
+    # is newer than the netlist — best-effort only (IP-internal includes are not
+    # tracked anywhere); -seed_sweep -ins always refreshes for that reason.
+    netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
+    flist = os.path.join(proj["hqins_dir"], "hq_srcfile.f")
+    if os.path.isfile(netlist) and os.path.isfile(flist):
+        wdir = proj["work_dir"].replace(os.sep, "/").rstrip("/")
+        netlist_mtime = os.path.getmtime(netlist)
+        newer = 0
+        for ln in open(flist, encoding="utf-8", errors="replace"):
+            ln = ln.strip()
+            if not ln:
+                continue
+            if ln.startswith("$WORK_DIR$"):
+                ln = wdir + "/" + ln[len("$WORK_DIR$"):]
+            elif ln.startswith("$WORK_DIR"):
+                ln = wdir + "/" + ln[len("$WORK_DIR"):]
+            elif not os.path.isabs(ln):
+                ln = os.path.join(proj["work_dir"], ln)
+            if os.path.isfile(ln) and os.path.getmtime(ln) > netlist_mtime:
+                newer += 1
+        if newer:
+            print(f"Warning: 有 {newer} 个源文件比 hq_import_with_bscan.v 新——"
+                  f"-run 只实现现有插桩网表，不会重新探针插入（板上将是旧逻辑）。")
+            print("         先执行 hqbuddy -insight -refresh 重建网表"
+                  "（信号/层次有变化时用 -refresh -reelab）。")
 
     # insight 流程必须产出 .bin（下载验收用）。GUI 新建工程 BGEN_1/2 常为
     # false（只出 .bit），这里自动打开并写回 .hqprj。
@@ -1265,6 +1292,58 @@ def run_flow(proj: dict) -> None:
     print("[OK] Instrumented flow done.")
 
 
+def run_refresh(proj: dict, reelab: bool = False) -> None:
+    """Handle 'hqbuddy -insight -refresh': in-place rebuild of insight_ip.v and
+    hq_import_with_bscan.v while keeping every probe selection and armed trigger
+    condition (CLI equivalent of clicking 保存 in the HqInsight GUI).
+
+    With -reelab, first re-run hq_impor_t.tcl (rtl.elaborate -insight) to refresh
+    the signal database — needed after RTL signal/hierarchy changes so -ls can
+    see new signals; the probe selections are then merged back into the rewritten
+    .hqins (metadata keys re-seeded from the fresh dump)."""
+    version = launcher.require_hqfpga_version()
+
+    sig_info, la_info = _la_info_path(proj)
+    la_list = la_info.get("la_list", [])
+    if not la_list or not any(la_list[0].get(k) for k in ("s_list", "t_list", "st_list")):
+        print("Error: .hqins 中没有任何信号选择——先 -insight -add（或 GUI 选好信号）再 -refresh。")
+        sys.exit(1)
+
+    step = "1/1"
+    if reelab:
+        tcl = os.path.join(proj["hqins_dir"], "hq_impor_t.tcl")
+        if not os.path.isfile(tcl):
+            _write_import_tcls(proj, _vfiles_from_hqins(proj))
+        print("[1/2] Refreshing signal database (rtl.elaborate -insight) ...")
+        proc = subprocess.run([version["hqfpga_path"], "-cmd", tcl], cwd=proj["work_dir"])
+        if proc.returncode != 0:
+            print("Error: signal-database re-elaborate failed.")
+            sys.exit(1)
+        dump = os.path.join(proj["hqins_dir"], "hq_import",
+                            "hq_import_parser_staticelab_dump.json")
+        if not os.path.isfile(dump):
+            print("Error: re-elaborate produced no signal database.")
+            sys.exit(1)
+        # hqfpga may rewrite .hqins during -insight elaborate; restore the probe
+        # selections and re-seed the JSON metadata keys from the fresh dump.
+        sig_new = dict(sig_info)
+        sig_new["module_sample_list"] = sig_info.get("module_sample_list", [])
+        sig_new.update(_dump_metadata(dump))
+        _rewrite_hqins_sections(proj, sig_new, la_info)
+        sig_info = sig_new
+        print("[1/2] Signal database refreshed (probe selections kept).")
+        step = "2/2"
+
+    if not os.path.isfile(proj["ddf"]):
+        print("[i] .ddf 缺失——按 .hqins 重建（触发条件已重置，稍后请重新 -trig）。")
+        _write_ddf_from_la(proj, la_info)
+    print(f"[{step}] Rebuilding insight_ip.v + hq_import_with_bscan.v ...")
+    _rebuild_instrumented(proj, sig_info, la_info)
+    netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
+    print(f"[OK] Instrumented artifacts rebuilt: {netlist}")
+    print("Tip: 板上生效需 -insight -run 重新实现并下载（-run 只实现网表，不会重新探针插入）。")
+
+
 # --- Signal selection (-init/-ls/-add/-del) ---
 
 STYPE_TOKENS = {"sample": 2, "trigger": 3, "both": 4}
@@ -1356,6 +1435,28 @@ exit
         f.write(t)
     with open(os.path.join(proj["hqins_dir"], "hq_impor_new_rtl.tcl"), "w", encoding="utf-8") as f:
         f.write(new_rtl)
+
+
+def _vfiles_from_hqins(proj: dict) -> list:
+    """Reconstruct the elaborated vfile list from .hqins [PROJECT FILES]
+    ($WORK_DIR-prefixed or absolute), for regenerating the import tcls."""
+    out = []
+    wdir = proj["work_dir"].replace(os.sep, "/").rstrip("/")
+    for line in read_hqins(proj["hqins"]).get("PROJECT FILES", []):
+        f = line.strip()
+        if not f:
+            continue
+        if f.startswith("$WORK_DIR$"):
+            f = wdir + "/" + f[len("$WORK_DIR$"):]
+        elif f.startswith("$WORK_DIR"):
+            f = wdir + "/" + f[len("$WORK_DIR"):]
+        elif not os.path.isabs(f):
+            f = wdir + "/" + f
+        out.append(f)
+    if not out:
+        print("Error: .hqins [PROJECT FILES] 为空，无法重建 import TCL。")
+        sys.exit(1)
+    return out
 
 
 def _dump_metadata(dump_path: str) -> dict:
@@ -1942,11 +2043,12 @@ def del_signal(proj: dict, name: str) -> None:
     print("Tip: run -insight -run to rebuild the instrumented bitstream.")
 
 
-def _regenerate_ddf(proj: dict, sig_info: dict, la_info: dict) -> None:
-    """Regenerate the .ddf from .hqins [LA SIGNAL INFO], then refresh insight_ip.v
-    and the instrumented netlist. rtl.elaborate -new_rtl rewrites the .hqins JSON
-    sections (and loses show_hier_name), so the sections are restored afterwards."""
+def _write_ddf_from_la(proj: dict, la_info: dict) -> None:
+    """Build the .ddf XML from .hqins [LA SIGNAL INFO] (GUI DDFGeneration equivalent).
 
+    Trigger conditions come out as inert placeholders (ignore=yes); real armed
+    conditions are written by -trig and are LOST whenever the ddf is rebuilt —
+    callers that must keep the user's trigger config must not call this."""
     la = la_info["la_list"][0]
     sections = read_hqins(proj["hqins"])
     depth = _section_value(sections.get("MEMORY DEPTH INFO", [])) or "1024"
@@ -1994,11 +2096,21 @@ def _regenerate_ddf(proj: dict, sig_info: dict, la_info: dict) -> None:
     with open(proj["ddf"], "w", encoding="utf-8") as f:
         f.write("\n".join(out) + "\n")
 
+
+def _rebuild_instrumented(proj: dict, sig_info: dict, la_info: dict) -> None:
+    """Rebuild insight_ip.v + hq_import_with_bscan.v from the existing .ddf — the
+    GUI 保存 sequence (insight.load -> insight.debugip.create -> rtl.elaborate
+    -new_rtl). Probe selections and armed trigger conditions live in the .ddf and
+    are preserved; afterwards signal.inf is rewritten (elaborate blanks the hier
+    column) and the .hqins JSON/LA sections are restored (elaborate loses
+    show_hier_name)."""
     version = launcher.require_hqfpga_version()
 
     import_dir = os.path.join(proj["hqins_dir"], "hq_import")
     insight_ip = os.path.join(import_dir, "insight_ip.v")
     new_rtl_tcl = os.path.join(proj["hqins_dir"], "hq_impor_new_rtl.tcl")
+    if not os.path.isfile(new_rtl_tcl):
+        _write_import_tcls(proj, _vfiles_from_hqins(proj))
     _run_hqfpga_cmds(version["hqfpga_path"], [
         f"insight.load {_tcl_path(proj['ddf'])}",
         f"insight.debugip.create 1 False -f {_tcl_path(insight_ip)}",
@@ -2007,15 +2119,16 @@ def _regenerate_ddf(proj: dict, sig_info: dict, la_info: dict) -> None:
         print("Error: insight.debugip.create did not produce insight_ip.v")
         sys.exit(1)
     # regenerate the instrumented netlist (hq_import_with_bscan.v)
-    if os.path.isfile(new_rtl_tcl):
-        import subprocess
-        proc = subprocess.run([version["hqfpga_path"], "-cmd", new_rtl_tcl],
-                              cwd=proj["work_dir"], stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL)
-        if proc.returncode != 0:
-            print("Error: rtl.elaborate -new_rtl failed.")
-            sys.exit(1)
+    proc = subprocess.run([version["hqfpga_path"], "-cmd", new_rtl_tcl],
+                          cwd=proj["work_dir"], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL)
+    if proc.returncode != 0:
+        print("Error: rtl.elaborate -new_rtl failed.")
+        print("Tip: 若 RTL 层次/信号已变，先 -insight -refresh -reelab"
+              "（或对已不存在的信号 -del）。")
+        sys.exit(1)
     open(os.path.join(proj["hqins_dir"], ".hq_ins.chk_ok"), "w").close()
+    la = la_info["la_list"][0]
     # signal.inf: "<name>:<module>::<hier>" lines in s/t/st order.
     # Written AFTER -new_rtl, because elaborate rewrites it with an empty hier.
     def hier_of(e):
@@ -2026,6 +2139,14 @@ def _regenerate_ddf(proj: dict, sig_info: dict, la_info: dict) -> None:
         f.write("\n".join(inf_lines) + "\n")
     # elaborate -new_rtl rewrites the JSON sections (losing show_hier_name); restore
     _rewrite_hqins_sections(proj, sig_info, la_info)
+
+
+def _regenerate_ddf(proj: dict, sig_info: dict, la_info: dict) -> None:
+    """-add/-del path: rebuild the .ddf from .hqins [LA SIGNAL INFO] — which
+    resets armed trigger conditions, since the probe set changed — then
+    regenerate the instrumented artifacts."""
+    _write_ddf_from_la(proj, la_info)
+    _rebuild_instrumented(proj, sig_info, la_info)
 
 
 def run_selftest(proj: dict, signal: str, eq_value: int) -> None:
@@ -2118,8 +2239,17 @@ def run_insight(args: list) -> None:
         return
 
     proj = resolve_insight_project(hqprj_arg)
+
     if not rest:
         show_status(proj)
+        return
+
+    if rest[0] == "-refresh":
+        extra = [a for a in rest[1:] if a != "-reelab"]
+        if extra:
+            print(f"Error: unknown -refresh option: {' '.join(extra)}")
+            sys.exit(1)
+        run_refresh(proj, reelab="-reelab" in rest[1:])
         return
 
     if rest[0] in ("-depth", "-windows", "-level"):

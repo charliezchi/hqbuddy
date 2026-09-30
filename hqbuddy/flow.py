@@ -461,8 +461,10 @@ def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False) -
     With ins=True, sweep the HqInsight-instrumented derived project
     (hqins_run/hq_import/hqins_impl.hqprj) instead, so every seed's bitstream
     carries the VLA probes; artifacts go to <prj_dir>/seed_sweep_ins/ to stay
-    out of hqins_run/. The official insight flow (run_hqprj2hqins_flow) is
-    run once first to refresh the derived project and the canonical bit.
+    out of hqins_run/. The instrumented artifacts (insight_ip.v +
+    hq_import_with_bscan.v) are force-rebuilt first (run_refresh) — file-list
+    staleness checks cannot see IP-internal includes — then the official insight
+    flow (run_hqprj2hqins_flow) refreshes the derived project and canonical bit.
 
     design.place/impl.place natively support -seed <value> (R54 probe)."""
     from .report import _parse_fmax, _parse_wns
@@ -471,6 +473,15 @@ def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False) -
         print(f"Error: file not found: {hqprj_path}")
         sys.exit(1)
     work_dir = os.path.dirname(os.path.abspath(hqprj_path))
+    # FILE_TC 预检：sweep 的 TCL 由 hqprj2tcl 生成，工程无时序约束时它半路失败
+    # （实测），提前给出可操作的报错。
+    m_tc = re.search(r"^FILE_TC=(.*)$",
+                     open(hqprj_path, encoding="utf-8", errors="replace").read(), re.M)
+    tc = m_tc.group(1).strip() if m_tc else ""
+    if not tc or tc.upper() == "NONE":
+        print("Error: .hqprj 未配置 FILE_TC（时序约束）——seed_sweep 的 TCL 生成会失败。")
+        print("       请先在 .hqprj 中设置 FILE_TC=$WORK_DIR$<sdc 路径>（或用 GUI 挂约束）再重试。")
+        sys.exit(1)
     if ins:
         from . import insight
         proj = insight.resolve_insight_project(hqprj_path, require_hqins=True)
@@ -480,8 +491,12 @@ def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False) -
             print("Error: no probe signals selected — add some first "
                   "(hqbuddy -insight -add <signal>).")
             sys.exit(1)
-        print(f"[ins] Refreshing instrumented reference build "
-              f"(official insight flow) for {proj['hqprj']} ...")
+        # 强制重建插桩产物：文件清单 staleness 检测对 IP 内部 include 无解
+        # （改 IP 内部文件不会体现在任何 FILE_SRC 清单里），每次重建才可靠，
+        # 顺带自愈网表/insight_ip.v 被删后的 HQINS001。
+        print(f"[ins] Rebuilding instrumented artifacts (refresh) for {proj['hqprj']} ...")
+        insight.run_refresh(proj)
+        print("[ins] Running official insight flow (implementation) ...")
         insight.run_flow(proj)
         impl_prj = os.path.join(proj["hqins_dir"], "hq_import", "hqins_impl.hqprj")
         if not os.path.isfile(impl_prj):

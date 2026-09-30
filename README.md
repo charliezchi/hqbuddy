@@ -164,6 +164,7 @@ hqbuddy -xpn2bin debug.xpn -no_dl          # 只生成不下载
 
 ```bat
 hqbuddy -insight -init                     # 初始化 HqInsight 工程（elaborate 设计，无需 GUI）
+hqbuddy -insight -refresh [-reelab]     # 改了 RTL/IP 或探针后原地重建插桩产物，保留信号选择（-reelab 连信号库一起刷新）
 hqbuddy -insight -ls [关键字]              # 列出设计信号（* = 已选入，含层次路径）
 hqbuddy -insight -add dq_err -clk aclk -type both     # 添加信号（sample/trigger/both）
 hqbuddy -insight -del dq_err               # 移除信号
@@ -176,7 +177,7 @@ hqbuddy -insight -trig "state EQ 4 AND dq_err EQ 0 AND busy RISE"   # 多条件�
 hqbuddy -insight -capture                  # 布防并等待触发，抓取波形（默认超时 60s）
 hqbuddy -insight -capture -timeout 120     # 自定义超时
 hqbuddy -insight -capture -force           # 强制触发，立即抓取
-hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin；自动关闭其拉起的 hqdnload 窗口）
+hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin；自动关闭其拉起的 hqdnload 窗口）；源文件比插桩网表新时会警告
 hqbuddy -insight -selftest                 # 回归自测：布防 sig EQ 128 → 抓取 → 校验样本连续且 +1 递增
 hqbuddy -insight -selftest -signal cnt -value 200    # 指定信号与比较值
 ```
@@ -195,7 +196,7 @@ hqbuddy -report [<dir>]                    # 主流程报告摘要：Fmax/WNS/�
 hqbuddy -report . -paths 5                 # 另提取最差 5 条违例时序路径（源自 slack 报告）
 ```
 
-添加/移除信号后需执行 `-insight -run` 重新生成插桩 bitstream，并用 cable.exe 下载后方可抓取（`-run` 现已自动关闭流程末尾拉起的 hqdnload 窗口，不再阻塞）。注意：插桩探针只能 tap 综合后仍存在的 net——若触发信号被综合吸收，任何触发条件都不会命中（详见 `skills/hqfpga/references/insight.md` 的"插桩探针陷阱"）。
+改了代码或探针后的重建路径：只改 IP/RTL 内部逻辑（信号与层次未变，**含 IP 仓库内部 include 的文件**——任何文件清单 staleness 检测都看不住）→ `hqbuddy -insight -refresh` 原地重建 `insight_ip.v` + `hq_import_with_bscan.v`（信号选择与触发条件保留，等价 GUI 保存）；改了信号名/层次要浏览新信号 → `-insight -refresh -reelab`；增删信号 → `-insight -add/-del`。之后都需 `-insight -run` 重新生成插桩 bitstream 并用 cable.exe 下载（`-run` 只实现现有插桩网表、绝不重新探针插入，网表比源文件旧会警告；已自动关闭流程末尾拉起的 hqdnload 窗口）。注意：插桩探针只能 tap 综合后仍存在的 net——若触发信号被综合吸收，任何触发条件都不会命中（详见 `skills/hqfpga/references/insight.md` 的“插桩探针陷阱”）。
 
 抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。用 `hqbuddy -wave` 打开波形（自动定位 HqFPGA 自带的 GTKWave，可指定文件）。
 
@@ -469,7 +470,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
 | `-synopt <src.hqprj> [-set k=on\|off] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等旋钮，-flow/-build 自动注入 run_hqprj.tcl） |
 | `-doctor [<.hqprj>]`                | 工程体检：源文件/模块重复/时间戳一致性/器件合法性/HqInsight 状态一次全查 |
-| `-seed_sweep [-ins] [-n N] [-j J] [<.hqprj>]` | 多种子布局布线扫描：综合一次存共享 UDB，逐 seed 并行重跑 P&R（effort 固定，仅 `-seed` 变化，默认 4 进程并行，`-j 1` 串行），产物按 seed 放在 `seed_sweep/seed<N>/`（bin、布线后 XPN、时序/fmax/布局报告），汇总表写入 `seed_sweep/seed_sweep_summary.csv`（`.hqprj` 缺省时自动探测当前目录/指定目录）；`-ins` 改为扫描 HqInsight 插桩设计（先跑一次官方 insight 流程刷新 `hqins_impl`，各 seed 位流带 VLA 探针），产物在 `seed_sweep_ins/`；完成后自动清除上一轮下载备注 `.hqbuddy_dl_notes.json` 并在 sweep 目录 detached 拉起 `-dl` 下载 GUI，方便直接挑选 seed 位流下载 |
+| `-seed_sweep [-ins] [-n N] [-j J] [<.hqprj>]` | 多种子布局布线扫描：综合一次存共享 UDB，逐 seed 并行重跑 P&R（effort 固定，仅 `-seed` 变化，默认 4 进程并行，`-j 1` 串行），产物按 seed 放在 `seed_sweep/seed<N>/`（bin、布线后 XPN、时序/fmax/布局报告），汇总表写入 `seed_sweep/seed_sweep_summary.csv`（`.hqprj` 缺省时自动探测当前目录/指定目录；工程必须已挂 FILE_TC，缺失时提前报错）；`-ins` 改为扫描 HqInsight 插桩设计（每次先强制重建插桩产物（refresh——覆盖 IP 内部 include 改动与产物缺失导致的 HQINS001）再跑官方 insight 流程刷新 `hqins_impl`，各 seed 位流带 VLA 探针），产物在 `seed_sweep_ins/`；完成后自动清除上一轮下载备注 `.hqbuddy_dl_notes.json` 并在 sweep 目录 detached 拉起 `-dl` 下载 GUI，方便直接挑选 seed 位流下载 |
 | `-copy_prj <src.hqprj> <dst_dir>`   | 复制工程（源码+约束+.hqprj）到新目录并改写 FILE 路径为 `$WORK_DIR$` 相对引用 |
 | `-set_top <name>`                   | 设置顶层模块`TOP_MODULE`                                             |
 | `-clean [-force]`                   | 按`clean_list.json` 清理工程目录，`-force` 跳过确认                |
@@ -487,8 +488,9 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-insight [<file>]`                 | 查看 HqInsight 在线逻辑分析仪工程状态                                  |
 | `-insight -trig [<expr>]`           | 设置触发条件（缺省进入交互向导）                                       |
 | `-insight -capture [-force] [-timeout N]` | 布防并抓取波形为 VCD，`-force` 立即抓取                          |
-| `-insight -run`                     | 重跑插桩实现流程                                                       |
+| `-insight -run`                     | 重跑插桩实现流程（源文件比插桩网表新则警告）                                                       |
 | `-insight -init`                    | 初始化 HqInsight 工程（无需 GUI）                                      |
+| `-insight -refresh [-reelab]`       | 原地重建插桩产物（`insight_ip.v` + `hq_import_with_bscan.v` + `signal.inf`），保留信号选择与触发条件（GUI 保存等价）；`-reelab` 先刷新信号库（RTL 信号/层次变化后用） |
 | `-insight -ls [关键字]`             | 列出设计信号                                                           |
 | `-insight -add/-del <信号>`         | 添加/移除采样/触发信号                                                 |
 | `-insight -depth N [-windows W] [-level L]` | 采样参数（写 .hqins 深度/窗口/级数段；depth/windows 需 -run 重build生效，未生效时 capture 拒绝抓取防错位） |
