@@ -1340,7 +1340,9 @@ def run_refresh(proj: dict, reelab: bool = False) -> None:
     print(f"[{step}] Rebuilding insight_ip.v + hq_import_with_bscan.v ...")
     _rebuild_instrumented(proj, sig_info, la_info)
     netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
-    print(f"[OK] Instrumented artifacts rebuilt: {netlist}")
+    la = la_info["la_list"][0]
+    n_probes = len(la["s_list"]) + len(la["t_list"]) + len(la["st_list"])
+    print(f"[OK] Instrumented artifacts rebuilt ({n_probes} probe signal(s) preserved): {netlist}")
     print("Tip: 板上生效需 -insight -run 重新实现并下载（-run 只实现网表，不会重新探针插入）。")
 
 
