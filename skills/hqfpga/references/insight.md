@@ -12,7 +12,7 @@ HqInsight 是 XiST 的在线逻辑分析仪（内嵌 LA IP + JTAG 回读）。GU
 
 ```bat
 hqbuddy -insight -init                              :: 初始化（elaborate 设计，建立信号数据库）
-hqbuddy -insight -refresh [-reelab]              :: 改 RTL/IP 后原地重建插桩产物（保留选择；-reelab 连信号库刷新）
+hqbuddy -insight -refresh              :: 改 RTL/IP 后原地重建插桩产物（总重插桩、保留选择）
 hqbuddy -insight -ls [关键字]                       :: 浏览/搜索设计信号（* = 已选入，含层次路径）
 hqbuddy -insight -add <信号> -clk <采样时钟> -type both
 hqbuddy -insight -add <信号2>                        :: 同模块后续信号不必再给 -clk/-module
@@ -69,15 +69,17 @@ hqbuddy -insight -capture
 - 跨时钟域信号：确认其确实由现采样时钟驱动（同同步域）后可去掉 `-clk` 直接添加；若它属于别的时钟域，采样到的会是常数或无效值——这不是工具 bug。
 - **改了 RTL/IP 后的重建决策树**：`-insight -run` 只实现现有 `hq_import_with_bscan.v`，
   绝不重新探针插入——复用旧网表零警告，板上是旧逻辑（R47d 实测）。
-  - 只改 IP/RTL 内部逻辑（信号与层次未变，**含 IP 仓库内部 include 的文件**——任何
-    文件清单 staleness 检测都看不住它们）→ `hqbuddy -insight -refresh`：原地重建
-    `insight_ip.v` + `hq_import_with_bscan.v` + `signal.inf`，信号选择与已布防触发
-    条件全保留（等价 GUI 保存）。之后照旧 `-run` + 下载。
-  - 改了信号名/新增信号要浏览 → `hqbuddy -insight -refresh -reelab`：先重跑
-    `rtl.elaborate -insight` 刷新信号库（`-ls` 可见新信号），选择自动拼回；选中的
-    信号若已不存在，`-new_rtl` 会报错，`-del` 掉失效信号再 `-refresh`。
-  - 层次大改/选择已不可救 → 删 `hqins_run/` + `-insight -init` 从头来（清空全部
-    选择，最后手段）。
+  - 改了任何代码（逻辑**或属性** keep/HQ_LOC 等，**含 IP 仓库内部 include 的文件**——
+    任何文件清单 staleness 检测都看不住它们）→ `hqbuddy -insight -refresh`：先重跑
+    `rtl.elaborate -insight` 刷新信号库，再原地重建 `insight_ip.v` +
+    `hq_import_with_bscan.v` + `signal.inf`，信号选择与已布防触发条件全保留。之后照旧
+    `-run` + 下载。（3.19.0 起 refresh 一律重插桩：早期跳过 elaborate 的快路径会静默
+    丢弃 RTL 属性改动——真实设计实测两组变体中招；`-reelab` 已移除。）
+  - 改探针 → `-insight -add/-del`（快速重建）。**改过 RTL 属性后先 `-refresh` 再
+    `-add/-del`**：add/del 与快路径同链、不刷新信号库，同样会丢属性。
+  - 选中的信号已不存在（层次变了）→ `-new_rtl` 响亮报错，`-del` 掉失效信号再
+    `-refresh`；层次大改/选择已不可救 → 删 `hqins_run/` + `-insight -init` 从头来
+    （清空全部选择，最后手段）。
 - **HQINS001（"IP instrumentation hasn't completed"）恢复**：多为插桩产物缺失/不一致
   （手工删过 `hq_temp`/网表等）。`hqbuddy -insight -refresh` 重建产物后自愈；仍报错
   才走上面的从头路径。

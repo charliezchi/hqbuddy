@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.18.1
+3.19.0
 
 ## 功能特点
 
@@ -14,7 +14,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **路径解析**：自动将 `$WORK_DIR$` 替换为 `.hqprj` 文件所在目录的绝对路径
 - **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
 - **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式
-- **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；改 RTL/IP 后 `-refresh [-reelab]` 原地重建插桩产物（保留信号选择与触发条件，等价 GUI 保存）；`-capture` 支持自定义超时与输出前缀
+- **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；改 RTL/IP 后 `-refresh` 原地重建插桩产物（总是重插桩刷新信号库，RTL 逻辑/属性改动可靠带入；保留信号选择与触发条件，等价 GUI 保存）；`-capture` 支持自定义超时与输出前缀
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`，`-no_dl` 只生成不下载）；不指定 xpn 时批量转换当前目录所有 `.xpn` 并输出结果报告，多个 xpn 时不逐个下载，而是转换完后唤起 `-dl` GUI 下载器
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
 - **新建工程**：从模板创建 `.hqprj` 工程（`-new_prj`）
@@ -164,7 +164,7 @@ hqbuddy -xpn2bin debug.xpn -no_dl          # 只生成不下载
 
 ```bat
 hqbuddy -insight -init                     # 初始化 HqInsight 工程（elaborate 设计，无需 GUI）
-hqbuddy -insight -refresh [-reelab]     # 改了 RTL/IP 或探针后原地重建插桩产物，保留信号选择（-reelab 连信号库一起刷新）
+hqbuddy -insight -refresh        # 改了 RTL/IP（逻辑或属性）后原地重建插桩产物，自动重插桩、保留信号选择
 hqbuddy -insight -ls [关键字]              # 列出设计信号（* = 已选入，含层次路径）
 hqbuddy -insight -add dq_err -clk aclk -type both     # 添加信号（sample/trigger/both）
 hqbuddy -insight -del dq_err               # 移除信号
@@ -196,7 +196,7 @@ hqbuddy -report [<dir>]                    # 主流程报告摘要：Fmax/WNS/�
 hqbuddy -report . -paths 5                 # 另提取最差 5 条违例时序路径（源自 slack 报告）
 ```
 
-改了代码或探针后的重建路径：只改 IP/RTL 内部逻辑（信号与层次未变，**含 IP 仓库内部 include 的文件**——任何文件清单 staleness 检测都看不住）→ `hqbuddy -insight -refresh` 原地重建 `insight_ip.v` + `hq_import_with_bscan.v`（信号选择与触发条件保留，等价 GUI 保存）；改了信号名/层次要浏览新信号 → `-insight -refresh -reelab`；增删信号 → `-insight -add/-del`。之后都需 `-insight -run` 重新生成插桩 bitstream 并用 cable.exe 下载（`-run` 只实现现有插桩网表、绝不重新探针插入，网表比源文件旧会警告；已自动关闭流程末尾拉起的 hqdnload 窗口）。注意：插桩探针只能 tap 综合后仍存在的 net——若触发信号被综合吸收，任何触发条件都不会命中（详见 `skills/hqfpga/references/insight.md` 的“插桩探针陷阱”）。
+改了代码或探针后的重建路径：改了 IP/RTL（逻辑**或属性** keep/HQ_LOC 等，**含 IP 仓库内部 include 的文件**——任何文件清单 staleness 检测都看不住）→ `hqbuddy -insight -refresh` 原地重建 `insight_ip.v` + `hq_import_with_bscan.v`（总是先重新插桩刷新信号库——早期跳过 elaborate 的快路径会静默丢属性改动，3.19.0 起移除；信号选择与触发条件保留，等价 GUI 保存）；增删信号 → `-insight -add/-del`（快速重建，**改过 RTL 属性后先 -refresh 再用**，add/del 同链不刷新信号库也会丢属性）。之后都需 `-insight -run` 重新生成插桩 bitstream 并用 cable.exe 下载（`-run` 只实现现有插桩网表、绝不重新探针插入，网表比源文件旧会警告；已自动关闭流程末尾拉起的 hqdnload 窗口）。注意：插桩探针只能 tap 综合后仍存在的 net——若触发信号被综合吸收，任何触发条件都不会命中（详见 `skills/hqfpga/references/insight.md` 的“插桩探针陷阱”）。
 
 抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。用 `hqbuddy -wave` 打开波形（自动定位 HqFPGA 自带的 GTKWave，可指定文件）。
 
@@ -490,7 +490,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-insight -capture [-force] [-timeout N]` | 布防并抓取波形为 VCD，`-force` 立即抓取                          |
 | `-insight -run`                     | 重跑插桩实现流程（源文件比插桩网表新则警告）                                                       |
 | `-insight -init`                    | 初始化 HqInsight 工程（无需 GUI）                                      |
-| `-insight -refresh [-reelab]`       | 原地重建插桩产物（`insight_ip.v` + `hq_import_with_bscan.v` + `signal.inf`），保留信号选择与触发条件（GUI 保存等价）；`-reelab` 先刷新信号库（RTL 信号/层次变化后用） |
+| `-insight -refresh`                 | 原地重建插桩产物（`insight_ip.v` + `hq_import_with_bscan.v` + `signal.inf`），保留信号选择与触发条件（GUI 保存等价）；总是先重新插桩刷新信号库，RTL 逻辑/属性改动都可靠带入（3.19.0 起移除可选快路径） |
 | `-insight -ls [关键字]`             | 列出设计信号                                                           |
 | `-insight -add/-del <信号>`         | 添加/移除采样/触发信号                                                 |
 | `-insight -depth N [-windows W] [-level L]` | 采样参数（写 .hqins 深度/窗口/级数段；depth/windows 需 -run 重build生效，未生效时 capture 拒绝抓取防错位） |

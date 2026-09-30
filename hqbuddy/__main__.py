@@ -134,11 +134,11 @@ Debug:
                                         -o: output prefix, default <top>_insight → <prefix>_0_ww.vcd)
   -insight -run                         Run the instrumented implementation flow
   -insight -init                        Init HqInsight project (no GUI needed)
-  -insight -refresh [-reelab]           Rebuild insight_ip.v + hq_import_with_bscan.v
+  -insight -refresh                     Rebuild insight_ip.v + hq_import_with_bscan.v
                                         in place, keeping probe selections and trigger
-                                        conditions (GUI save equivalent). -reelab also
-                                        refreshes the signal database first (needed
-                                        after RTL signal/hierarchy changes)
+                                        conditions (GUI save equivalent). Always
+                                        re-elaborates first, so RTL logic AND attribute
+                                        changes are reliably picked up
   -insight -ls [keyword]                List design signals with hierarchy (* = selected)
   -insight -add <sig> [-clk c] [-type sample|trigger|both] [-module m]
                                         Add a signal to the HqInsight project

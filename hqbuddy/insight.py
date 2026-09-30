@@ -1181,7 +1181,7 @@ def run_flow(proj: dict) -> None:
             print(f"Warning: 有 {newer} 个源文件比 hq_import_with_bscan.v 新——"
                   f"-run 只实现现有插桩网表，不会重新探针插入（板上将是旧逻辑）。")
             print("         先执行 hqbuddy -insight -refresh 重建网表"
-                  "（信号/层次有变化时用 -refresh -reelab）。")
+                  "（自动重插桩刷新信号库，信号选择保留）。")
 
     # insight 流程必须产出 .bin（下载验收用）。GUI 新建工程 BGEN_1/2 常为
     # false（只出 .bit），这里自动打开并写回 .hqprj。
@@ -1292,15 +1292,17 @@ def run_flow(proj: dict) -> None:
     print("[OK] Instrumented flow done.")
 
 
-def run_refresh(proj: dict, reelab: bool = False) -> None:
+def run_refresh(proj: dict) -> None:
     """Handle 'hqbuddy -insight -refresh': in-place rebuild of insight_ip.v and
-    hq_import_with_bscan.v while keeping every probe selection and armed trigger
+    hq_import_with_bsan.v while keeping every probe selection and armed trigger
     condition (CLI equivalent of clicking 保存 in the HqInsight GUI).
 
-    With -reelab, first re-run hq_impor_t.tcl (rtl.elaborate -insight) to refresh
-    the signal database — needed after RTL signal/hierarchy changes so -ls can
-    see new signals; the probe selections are then merged back into the rewritten
-    .hqins (metadata keys re-seeded from the fresh dump)."""
+    ALWAYS re-runs hq_impor_t.tcl (rtl.elaborate -insight) first to refresh the
+    signal database: the -new_rtl writer consumes the DB that elaborate seeds,
+    so a skip-elaborate fast path risks silently dropping RTL attribute changes
+    (HQ_LOC/keep/... — observed on a real design; the earlier optional fast path
+    was removed with -reelab in 3.19.0). Selections are merged back into the
+    rewritten .hqins (metadata keys re-seeded from the fresh dump)."""
     version = launcher.require_hqfpga_version()
 
     sig_info, la_info = _la_info_path(proj)
@@ -1309,36 +1311,32 @@ def run_refresh(proj: dict, reelab: bool = False) -> None:
         print("Error: .hqins 中没有任何信号选择——先 -insight -add（或 GUI 选好信号）再 -refresh。")
         sys.exit(1)
 
-    step = "1/1"
-    if reelab:
-        tcl = os.path.join(proj["hqins_dir"], "hq_impor_t.tcl")
-        if not os.path.isfile(tcl):
-            _write_import_tcls(proj, _vfiles_from_hqins(proj))
-        print("[1/2] Refreshing signal database (rtl.elaborate -insight) ...")
-        proc = subprocess.run([version["hqfpga_path"], "-cmd", tcl], cwd=proj["work_dir"])
-        if proc.returncode != 0:
-            print("Error: signal-database re-elaborate failed.")
-            sys.exit(1)
-        dump = os.path.join(proj["hqins_dir"], "hq_import",
-                            "hq_import_parser_staticelab_dump.json")
-        if not os.path.isfile(dump):
-            print("Error: re-elaborate produced no signal database.")
-            sys.exit(1)
-        # hqfpga may rewrite .hqins during -insight elaborate; restore the probe
-        # selections and re-seed the JSON metadata keys from the fresh dump.
-        sig_new = dict(sig_info)
-        sig_new["module_sample_list"] = sig_info.get("module_sample_list", [])
-        sig_new.update(_dump_metadata(dump))
-        _rewrite_hqins_sections(proj, sig_new, la_info)
-        sig_info = sig_new
-        print("[1/2] Signal database refreshed (probe selections kept).")
-        step = "2/2"
+    tcl = os.path.join(proj["hqins_dir"], "hq_impor_t.tcl")
+    if not os.path.isfile(tcl):
+        _write_import_tcls(proj, _vfiles_from_hqins(proj))
+    print("[1/2] Refreshing signal database (rtl.elaborate -insight) ...")
+    proc = subprocess.run([version["hqfpga_path"], "-cmd", tcl], cwd=proj["work_dir"])
+    if proc.returncode != 0:
+        print("Error: signal-database re-elaborate failed.")
+        sys.exit(1)
+    dump = os.path.join(proj["hqins_dir"], "hq_import",
+                        "hq_import_parser_staticelab_dump.json")
+    if not os.path.isfile(dump):
+        print("Error: re-elaborate produced no signal database.")
+        sys.exit(1)
+    # hqfpga may rewrite .hqins during -insight elaborate; restore the probe
+    # selections and re-seed the JSON metadata keys from the fresh dump.
+    sig_new = dict(sig_info)
+    sig_new["module_sample_list"] = sig_info.get("module_sample_list", [])
+    sig_new.update(_dump_metadata(dump))
+    _rewrite_hqins_sections(proj, sig_new, la_info)
+    print("[1/2] Signal database refreshed (probe selections kept).")
 
     if not os.path.isfile(proj["ddf"]):
         print("[i] .ddf 缺失——按 .hqins 重建（触发条件已重置，稍后请重新 -trig）。")
         _write_ddf_from_la(proj, la_info)
-    print(f"[{step}] Rebuilding insight_ip.v + hq_import_with_bscan.v ...")
-    _rebuild_instrumented(proj, sig_info, la_info)
+    print("[2/2] Rebuilding insight_ip.v + hq_import_with_bsan.v ...")
+    _rebuild_instrumented(proj, sig_new, la_info)
     netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
     la = la_info["la_list"][0]
     n_probes = len(la["s_list"]) + len(la["t_list"]) + len(la["st_list"])
@@ -2126,8 +2124,7 @@ def _rebuild_instrumented(proj: dict, sig_info: dict, la_info: dict) -> None:
                           stderr=subprocess.DEVNULL)
     if proc.returncode != 0:
         print("Error: rtl.elaborate -new_rtl failed.")
-        print("Tip: 若 RTL 层次/信号已变，先 -insight -refresh -reelab"
-              "（或对已不存在的信号 -del）。")
+        print("Tip: 选中的信号若已不存在（RTL 层次变了），先 -insight -del 再重试。")
         sys.exit(1)
     open(os.path.join(proj["hqins_dir"], ".hq_ins.chk_ok"), "w").close()
     la = la_info["la_list"][0]
@@ -2247,11 +2244,12 @@ def run_insight(args: list) -> None:
         return
 
     if rest[0] == "-refresh":
-        extra = [a for a in rest[1:] if a != "-reelab"]
-        if extra:
-            print(f"Error: unknown -refresh option: {' '.join(extra)}")
+        if len(rest) > 1:
+            hint = ("（-reelab 已移除：refresh 总是重新插桩刷新信号库，无需参数。）"
+                    if rest[1] == "-reelab" else "")
+            print(f"Error: unknown -refresh option: {' '.join(rest[1:])}{hint}")
             sys.exit(1)
-        run_refresh(proj, reelab="-reelab" in rest[1:])
+        run_refresh(proj)
         return
 
     if rest[0] in ("-depth", "-windows", "-level"):
