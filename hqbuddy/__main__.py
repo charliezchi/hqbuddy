@@ -90,7 +90,7 @@ Project:
   -pinplan <src.hqprj> -board <board>  Pin plan skeleton: match ports to board nets (boards/*.md)
   -autosdc <src.hqprj> [-period ns]    Auto-generate clock constraints SDC (tc.autogen)
   -regression [base_dir]               One-command regression suite (capture+error paths+smoke)
-  -seed_sweep [-ins] [<src.hqprj>] [-n N] [-j J]
+  -seed_sweep [-ins] [-no_dl] [<src.hqprj>] [-n N] [-j J]
                                        Multi-seed P&R sweep: synthesize once into a shared UDB,
                                        then N P&R runs (fixed effort, -seed varies) as up to J
                                        parallel hqfpga processes (default 4); per-seed reports,
@@ -100,7 +100,9 @@ Project:
                                        refreshes hqins_impl via the official insight flow first),
                                        output in seed_sweep_ins/
                                        When done, the -dl downloader GUI opens in the sweep
-                                       dir (previous notes cleared).
+                                       dir (previous notes cleared); -no_dl skips the GUI
+                                       launch (agent/script mode; bins under seed_sweep/
+                                       seed<K>/ for direct -cable download).
   -set_top <name>                      Set top module name
   -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
 
@@ -1497,6 +1499,7 @@ def main():
         n = 3
         j = 4
         ins = False
+        no_dl = False
         i = 1
         while i < len(args):
             if args[i] == '-n' and i + 1 < len(args):
@@ -1505,6 +1508,8 @@ def main():
                 j = int(args[i + 1]); i += 2
             elif args[i] == '-ins':
                 ins = True; i += 1
+            elif args[i] == '-no_dl':
+                no_dl = True; i += 1
             elif src is None:
                 src = args[i]; i += 1
             else:
@@ -1518,7 +1523,7 @@ def main():
                 print(f"Error: no .hqprj found in directory: {src}")
                 sys.exit(1)
             src = matches[0]
-        run_seed_sweep(_resolve_hqprj(src), n, j, ins)
+        run_seed_sweep(_resolve_hqprj(src), n, j, ins, no_dl)
         return
 
     # Set top module

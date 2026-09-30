@@ -452,7 +452,8 @@ def _build_seed_tcl(parts: dict, seed: int, udb_abs: str) -> str:
     return "".join(lines)
 
 
-def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False) -> None:
+def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False,
+                   no_dl: bool = False) -> None:
     """Multi-seed P&R sweep: synthesize once into a shared UDB, then run the
     per-seed P&R (pack/place/route/bitgen, fixed effort, only the placement
     -seed varies) as up to -j parallel hqfpga processes, each isolated in
@@ -699,5 +700,9 @@ def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False) -
     if os.path.isfile(notes_path):
         os.remove(notes_path)
         print(f"Removed stale downloader notes: {notes_path}")
+    if no_dl:
+        print("(no_dl) Downloader GUI not launched — pick a bin from "
+              f"{sweep_dir}{os.sep}seed<K>{os.sep} and download with hqbuddy -cable.")
+        return
     spawn_gui_detached(cwd=sweep_dir)
     print("Downloader GUI launched (detached) in the sweep dir.")
