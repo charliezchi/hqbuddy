@@ -44,3 +44,8 @@ guides/
 TODO.md
 gtkwave_0.tcl
 
+
+# Reverse-engineering raw artifacts (decompiled .py / .pyc, e.g. insight_re archives):
+# local only, NEVER commit or push (user directive 2026-10-09)
+**/insight_re/
+**/decompiled/
