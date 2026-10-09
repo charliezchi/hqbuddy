@@ -269,6 +269,11 @@ def cmd_write(work: str, assigns: list) -> None:
             print(f"Error: value {val} does not fit {name}[{width}b]")
             sys.exit(1)
         values[name] = v
+    assigned = {a.partition("=")[0] for a in assigns}
+    unassigned = [p["name"] for p in outs if p["name"] not in assigned]
+    if unassigned:
+        print(f"Warning: unassigned output probes will be driven to 0: {', '.join(unassigned)}"
+              " (the JTAG chain shifts as a whole; assign every registered probe to keep its value)")
     # GUI packing: iterate probes in registration order, prepending each value's
     # bits, so the LAST registered probe occupies the LSB end of the literal.
     out_str = ""

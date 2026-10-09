@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.19.0
+3.19.1
 
 ## 功能特点
 
@@ -191,7 +191,8 @@ hqbuddy -insight -selftest -signal cnt -value 200    # 指定信号与比较值
 hqbuddy -vio -gen -in 8 -out 8             # 生成 VIO 探针模块（RTL 实例化 probe_in/probe_out）
 hqbuddy -vio -reg -in cnt:8 -out led:2     # 登记探针（hqvla_vio/probes.json）
 hqbuddy -vio -read [-loop N]               # 运行时读输入探针
-hqbuddy -vio -write led=0b10               # 运行时驱动输出探针
+hqbuddy -vio -write led=0b10               # 运行时驱动输出探针（整链移位，未赋值的
+                                           # 已登记输出探针会写 0 并打印警告）
 hqbuddy -report [<dir>]                    # 主流程报告摘要：Fmax/WNS/资源利用率/bit 文件
 hqbuddy -report . -paths 5                 # 另提取最差 5 条违例时序路径（源自 slack 报告）
 ```
