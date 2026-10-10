@@ -9,6 +9,7 @@ import glob
 import os
 import re
 import sys
+import tempfile
 
 from . import device as device_mod
 from .ipmgr import list_ip_files
@@ -145,6 +146,84 @@ def run_doctor(args: list) -> None:
                 warns.append(f"器件 {full} 未在 dv_list 合法表中")
     except SystemExit:
         warns.append("HqFPGA 版本未配置，跳过器件合法性检查（hqbuddy -cfg）")
+
+    # -- 5b. UPC pin pre-check (ball legality + clock-on-P-side) --------------
+    # PHY-CHK-030 / CDEV003 otherwise only surface mid-build; phycst.loc.check
+    # needs only dv.setup (no design), so we can validate before any build.
+    if file_pc and file_pc != ["NONE"]:
+        pkg = fields.get("PACKAGES", "")
+        spd = fields.get("SPEEDS", "")
+        cond = fields.get("CONDITION", "")
+        family = fields.get("FAMILY", "SEAL")
+        part_full = f"{die}-{spd}{pkg}{cond}" if (die and pkg and spd and cond) else None
+        pins = {}
+        for raw in file_pc:
+            p = _resolve(raw, work_dir)
+            if not p or not os.path.isfile(p):
+                continue
+            for ln in open(p, encoding="utf-8", errors="replace"):
+                m = re.match(r'\s*phycst\.pin\.set\s+\{([^}]+)\}\s+(\S+)', ln)
+                if m:
+                    pins[m.group(1).strip()] = m.group(2)
+        if not pins:
+            oks.append("UPC 无 phycst.pin.set 引脚条目——跳过引脚预检")
+        elif not part_full:
+            warns.append("UPC 引脚预检跳过：.hqprj 缺 PACKAGES/SPEEDS/CONDITION，"
+                         "无法确定完整型号")
+        else:
+            try:
+                from . import launcher
+                version = launcher.require_hqfpga_version()
+                import subprocess as _sp
+                balls = sorted(set(pins.values()))
+                tcl = (f"dv.setup {family} {part_full}\n"
+                       f"foreach b {{{' '.join(balls)}}} {{ "
+                       f"puts \"LOCCHK $b [phycst.loc.check $b]\" }}\nexit\n")
+                fd, tmp = tempfile.mkstemp(suffix='.tcl', prefix='hqbuddy_upcchk_')
+                try:
+                    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                        f.write(tcl)
+                    r = _sp.run([version['hqfpga_path'], '-cmd', tmp],
+                                capture_output=True, timeout=120)
+                finally:
+                    try:
+                        os.remove(tmp)
+                    except OSError:
+                        pass
+                out = ((r.stdout or b'') + (r.stderr or b'')).decode('utf-8', errors='replace')
+                legal = {m2.group(1) for m2 in
+                         re.finditer(r'^LOCCHK (\S+) 1\b', out, re.M)}
+                bad = [b for b in balls if b not in legal]
+                if not legal and not bad:
+                    warns.append(f"引脚预检无结果（dv.setup {part_full} 失败?），跳过")
+                elif bad:
+                    bad_pins = sorted(p for p, b in pins.items() if b in bad)
+                    fails.append(f"UPC 引脚球号非法（{part_full}）: {', '.join(bad)}"
+                                 f"（涉及: {', '.join(bad_pins)}）"
+                                 f"——用 phycst.loc.check 核对封装球号")
+                else:
+                    oks.append(f"UPC 引脚球号全部合法 ({len(balls)} 个，{part_full})")
+                # clock-on-P-side: clock ports (SDC create_clock get_ports) must
+                # sit on P-side balls, else PHY-CHK-030 at build time
+                clk_nets = set()
+                for raw in file_tc:
+                    s = _resolve(raw, work_dir)
+                    if not s or not os.path.isfile(s):
+                        continue
+                    for ln in open(s, encoding="utf-8", errors="replace"):
+                        m3 = re.search(r'get_ports\s+\{?([A-Za-z_][\w\[\]:]*)', ln)
+                        if m3 and re.match(r'\s*create_clock\b', ln):
+                            clk_nets.add(m3.group(1))
+                misplaced = sorted(n for n, b in pins.items()
+                                   if n in clk_nets and legal and b in legal
+                                   and not b.upper().startswith('P'))
+                if misplaced:
+                    fails.append(f"时钟脚未放在 P 侧球（build 会报 PHY-CHK-030）: "
+                                 f"{', '.join(f'{n}({pins[n]})' for n in misplaced)}")
+                elif clk_nets & set(pins):
+                    oks.append("时钟脚均在 P 侧球")
+            except SystemExit:
+                warns.append("HqFPGA 版本未配置，跳过引脚预检（hqbuddy -cfg）")
 
     # -- 6. IP consistency ---------------------------------------------------
     try:
