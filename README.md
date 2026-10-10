@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.19.1
+3.20.0
 
 ## 功能特点
 
@@ -18,8 +18,8 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`，`-no_dl` 只生成不下载）；不指定 xpn 时批量转换当前目录所有 `.xpn` 并输出结果报告，多个 xpn 时不逐个下载，而是转换完后唤起 `-dl` GUI 下载器
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
 - **新建工程**：从模板创建 `.hqprj` 工程（`-new_prj`）
-- **添加源文件**：向工程添加 `.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件并维护对应时间戳（`-add`）
-- **设置顶层模块**：修改 `TOP_MODULE`（`-set_top`）
+- **添加源文件**：向工程添加 `.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件并维护对应时间戳（`-add`；可带 `.hqprj` 显式指定目标工程，缺省自动探测当前目录）
+- **设置顶层模块**：修改 `TOP_MODULE`（`-set_top <name> [<.hqprj>]`）
 - **工程清理**：按 `clean_list.json` 清理工程目录中的中间产物（`-clean`）
 - **IP 网表生成**：根据 `.hqip` 自动定位并调用对应 ipgen 工具生成网表（`-ipgen` / `-update_ip`）
 - **HDL 加密**：调用版本自带的 `hq_ipencrypt.exe` 加密源文件，密钥自动定位（`-encrypt`）
@@ -308,6 +308,7 @@ hqbuddy -dl -f my_app\FPGA_Prj\hq_prj\my_app_merged.bin   # 下载合并镜像
 
 ```bat
 hqbuddy -add test.v test2.v timing.sdc physical.upc files.f
+hqbuddy -add test.v D:\prj\demo.hqprj   :: 显式指定目标工程（可跨目录）
 ```
 
 ### 刷新时间戳条目
@@ -324,6 +325,7 @@ hqbuddy -refresh_time [<.hqprj>]
 
 ```bat
 hqbuddy -set_top my_top
+hqbuddy -set_top my_top D:\prj\demo.hqprj
 ```
 
 ### 清理工程目录
@@ -393,7 +395,7 @@ hqbuddy example/ddrc_native_demo.hqprj  # 启动 GUI 并打开工程
 通过 hqfpga CLI 执行指定的 TCL 脚本。不带参数时直接进入 hqfpga 交互式 CLI；也可以用 `-e` 直接执行一条 TCL 命令字符串。`-e` 模式支持 `-q` 安静模式：过滤 banner 和所有 `Info:` 行，只保留结果与警告/错误。
 
 ```bat
-hqbuddy -cmd my_script.tcl              :: 执行 TCL 脚本
+hqbuddy -cmd my_script.tcl              :: 执行 TCL 脚本（flow 脚本比工程旧时警告）
 hqbuddy -cmd                            :: 进入 hqfpga 交互式 CLI
 hqbuddy -cmd -e "dv.setup SEALION SL2-12E-8F256; dv.query"  :: 执行单条 TCL 命令
 hqbuddy -cmd -e "dv.query" -q           :: 安静模式，只保留结果
@@ -467,20 +469,21 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-vla -gen [-name VLA] [-dir <dir>] [-device <part>]` | 调起 VLA IP 生成向导（产出 xsIP_VLA.v/hqip/cfg，自动检测生成完成） |
 | `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族） |
 | `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11）        |
-| `-add <files...>`                   | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程         |
+| `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测） |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
 | `-synopt <src.hqprj> [-set k=on\|off] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等旋钮，-flow/-build 自动注入 run_hqprj.tcl） |
-| `-doctor [<.hqprj>]`                | 工程体检：源文件/模块重复/时间戳一致性/器件合法性/HqInsight 状态一次全查 |
+| `-doctor [<.hqprj>]`                | 工程体检：源文件/模块重复/时间戳一致性/器件合法性/UPC 引脚预检（球号合法性+时钟 P 侧，提前于 build 报错）/HqInsight 状态一次全查 |
 | `-seed_sweep [-ins] [-no_dl] [-n N] [-j J] [<.hqprj>]` | 多种子布局布线扫描：综合一次存共享 UDB，逐 seed 并行重跑 P&R（effort 固定，仅 `-seed` 变化，默认 4 进程并行，`-j 1` 串行），产物按 seed 放在 `seed_sweep/seed<N>/`（bin、布线后 XPN、时序/fmax/布局报告），汇总表写入 `seed_sweep/seed_sweep_summary.csv`（`.hqprj` 缺省时自动探测当前目录/指定目录；工程必须已挂 FILE_TC，缺失时提前报错）；`-ins` 改为扫描 HqInsight 插桩设计（每次先强制重建插桩产物（refresh——覆盖 IP 内部 include 改动与产物缺失导致的 HQINS001）再跑官方 insight 流程刷新 `hqins_impl`，各 seed 位流带 VLA 探针），产物在 `seed_sweep_ins/`；完成后自动清除上一轮下载备注 `.hqbuddy_dl_notes.json` 并在 sweep 目录 detached 拉起 `-dl` 下载 GUI，方便直接挑选 seed 位流下载（`-no_dl` 跳过 GUI 拉起，适合 agent/脚本，各 seed bin 在 `seed_sweep[_ins]/seed<N>/` 直接 `-cable` 下载） |
 | `-copy_prj <src.hqprj> <dst_dir>`   | 复制工程（源码+约束+.hqprj）到新目录并改写 FILE 路径为 `$WORK_DIR$` 相对引用 |
-| `-set_top <name>`                   | 设置顶层模块`TOP_MODULE`                                             |
+| `-set_top <name> [<.hqprj>]`        | 设置顶层模块`TOP_MODULE`（工程可省略，自动探测）                      |
 | `-clean [-force]`                   | 按`clean_list.json` 清理工程目录，`-force` 跳过确认                |
 | `-ipgen [<file>] [-lang <lang>]`    | 根据`.hqip` 生成 IP 网表，省略时自动检测                             |
 | `-gen_hqip [<meta.xml>] [-device <part>]` | 生成默认配置 .hqip（省略 xml 时交互选择 IP）                  |
 | `-update_ip [<file>]`               | 重新生成工程内所有 IP 网表                                             |
 | `-encrypt [<files...>] [-d dir] [-m m] [-po]` | 加密 HDL 源文件（缺省处理当前目录所有 .v/.f，aes256-cbc，输出 encrypted/） |
 | `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
-| `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本；缺省时进入 hqfpga 交互式 CLI            |
+| `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本（flow 生成的脚本比工程旧时警告重新 `-flow`）；缺省时进入 hqfpga 交互式 CLI |
+| `-regression [--offline] [base_dir]` | 一键回归套件（触发捕获+错误路径+冒烟）；`--offline` 跳过板卡项 |
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |
 | `-dl`                               | 打开 GUI 下载器（detached，不阻塞终端）：递归扫描当前目录所有`.bin`，按位流头过滤出 FPGA bitstream，按目录分组（可折叠），显示设计名/器件，点击下载（cable.exe，自动探测型号），支持备注 |
 | `-dl [-f <file>] [args...]`         | 透传启动 hqdnload 下载器                                               |
