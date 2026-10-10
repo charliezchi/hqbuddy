@@ -24,7 +24,9 @@ def _check(name, ok, detail=""):
     return ok
 
 def run_regression(args):
-    """Entry for 'hqbuddy -regression [base_dir]'."""
+    """Entry for 'hqbuddy -regression [--offline] [base_dir]'."""
+    offline = '--offline' in args
+    args = [a for a in args if a != '--offline']
     base = os.path.abspath(args[0]) if args else os.path.join(BASE, "r21a")
     hqprj = os.path.join(base, "r21a.hqprj")
     if not os.path.isfile(hqprj):
@@ -32,17 +34,22 @@ def run_regression(args):
         sys.exit(1)
 
     results = []
-    print(f"hqbuddy regression suite (base: {base})")
+    print(f"hqbuddy regression suite (base: {base})" + ("  [--offline]" if offline else ""))
     print()
 
     # 1. baseline capture (needs board + LA bit)
-    print("1. Baseline capture (board)")
-    print("  setting trigger...")
-    _run(["hqbuddy", "-insight", hqprj, "-trig", "cnt EQ 200 AND lfsr NE 0"])
-    rc, out = _run(["hqbuddy", "-insight", hqprj, "-capture", "-timeout", "60"], timeout=120)
-    ok = "Trigger at" in out and "0xc8" in out
-    results.append(_check("capture trigger", ok,
-                          "fired" if ok else out[-200:]))
+    if offline:
+        print("1. Baseline capture (board)")
+        print("  [SKIP] board required (--offline)")
+        results.append(True)
+    else:
+        print("1. Baseline capture (board)")
+        print("  setting trigger...")
+        _run(["hqbuddy", "-insight", hqprj, "-trig", "cnt EQ 200 AND lfsr NE 0"])
+        rc, out = _run(["hqbuddy", "-insight", hqprj, "-capture", "-timeout", "60"], timeout=120)
+        ok = "Trigger at" in out and "0xc8" in out
+        results.append(_check("capture trigger", ok,
+                              "fired" if ok else out[-200:]))
 
     # 2. contradictory trigger rejection (offline)
     rc, out = _run(["hqbuddy", "-insight", hqprj, "-trig", "cnt EQ 5 AND cnt EQ 9"])
