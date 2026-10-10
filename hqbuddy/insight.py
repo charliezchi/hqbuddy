@@ -1857,17 +1857,26 @@ def _current_context_module(proj: dict) -> str | None:
 def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str | None = None) -> None:
     """Handle 'hqbuddy -insight -add <signal>[:msb:lsb] [-clk <clk>] [-type ...] [-module <mod>]'."""
     catalog = _signal_catalog(proj)
-    # 总线片选：name[msb:lsb] 只采样总线的一段（硬件按片宽分配捕获位宽）
-    slice_rng = None
-    m = (re.match(r"^(.+)\[(-?\d+):(-?\d+)\]$", name)
-         or re.match(r"^(.+):(-?\d+):(-?\d+)$", name))
-    if m:
-        name = m.group(1)
-        slice_rng = (int(m.group(2)), int(m.group(3)))
-        if slice_rng[0] < slice_rng[1]:
-            print(f"Error: slice msb must be >= lsb: {name}[{slice_rng[0]}:{slice_rng[1]}]")
-            sys.exit(1)
+    # 精确名优先：网表里存在字面名为 "cnt[7]" 的单比特网——能精确命中就不当切片解析
+    # （否则 cnt[7:7] 会被切成总线 cnt 的一段，与 cnt[7] 命中不同网，行为不一致 R25）
     matches = [c for c in catalog if c["name"] == name]
+    slice_rng = None
+    if not matches:
+        # 总线片选：name[msb:lsb] / name:msb:lsb 取一段；name[N] 等价 name[N:N]
+        m = (re.match(r"^(.+)\[(-?\d+):(-?\d+)\]$", name)
+             or re.match(r"^(.+):(-?\d+):(-?\d+)$", name)
+             or re.match(r"^(.+)\[(-?\d+)\]$", name))
+        if m:
+            base = m.group(1)
+            if m.lastindex == 2:  # cnt[7] → 等价 cnt[7:7]
+                slice_rng = (int(m.group(2)), int(m.group(2)))
+            else:
+                slice_rng = (int(m.group(2)), int(m.group(3)))
+            if slice_rng[0] < slice_rng[1]:
+                print(f"Error: slice msb must be >= lsb: {base}[{slice_rng[0]}:{slice_rng[1]}]")
+                sys.exit(1)
+            name = base
+        matches = [c for c in catalog if c["name"] == name]
     if module:
         matches = [c for c in matches if c["module"] == module or c["module"].split("[")[0] == module]
     elif len(matches) > 1:
