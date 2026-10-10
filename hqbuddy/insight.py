@@ -60,7 +60,7 @@ def resolve_insight_project(hqprj_arg: str | None, require_hqins: bool = True) -
     die = fields.get("DIE")
     family = fields.get("FAMILY")
     if not top or not die:
-        print("Error: missing TOP_MODULE or DIE in .hqprj")
+        print("Error: .hqprj 缺少 TOP_MODULE 或 DIE 字段")
         sys.exit(1)
 
     hqins_dir = os.path.join(work_dir, "hqins_run")
@@ -68,7 +68,7 @@ def resolve_insight_project(hqprj_arg: str | None, require_hqins: bool = True) -
     ddf = os.path.join(hqins_dir, "hq_import", f"{top}_insight.ddf")
 
     if require_hqins and not os.path.isfile(hqins):
-        print("Error: HqInsight project not found (no hqins_run/hq_import.hqins).")
+        print("Error: 找不到 HqInsight 工程（缺少 hqins_run/hq_import.hqins）。")
         print("Tip: run -insight -init, or configure signals in the HqFpga GUI first.")
         sys.exit(1)
 
@@ -215,7 +215,7 @@ def _parse_value(token: str) -> int:
     try:
         return int(token, 0)
     except ValueError:
-        print(f"Error: invalid value: {token}")
+        print(f"Error: 无效的值: {token}")
         sys.exit(1)
 
 
@@ -261,11 +261,11 @@ def parse_trig_expr(tokens: list) -> dict:
     for w in words:
         if w.upper() in ("AND", "OR"):
             if not current:
-                print("Error: missing condition before AND/OR")
+                print("Error: AND/OR 前缺少条件")
                 sys.exit(1)
             groups.append(current)
             if combine and combine != w.upper():
-                print("Error: cannot mix AND and OR")
+                print("Error: AND 与 OR 不能混用")
                 sys.exit(1)
             combine = w.upper()
             current = []
@@ -275,7 +275,7 @@ def parse_trig_expr(tokens: list) -> dict:
         groups.append(current)
 
     if len(groups) >= 2 and not combine:
-        print("Error: multiple conditions require AND or OR between them")
+        print("Error: 多条件之间需要 AND 或 OR 连接")
         sys.exit(1)
 
     conds = []
@@ -285,7 +285,7 @@ def parse_trig_expr(tokens: list) -> dict:
             negate = True
             g = g[1:]
         if len(g) < 2:
-            print(f"Error: incomplete condition: {' '.join(g)}")
+            print(f"Error: 条件不完整: {' '.join(g)}")
             sys.exit(1)
         signal, op = g[0], g[1].upper()
         if op in ARITH_OPS:
@@ -308,7 +308,7 @@ def parse_trig_expr(tokens: list) -> dict:
                 sys.exit(1)
             conds.append({"signal": signal, "kind": "edge", "op": op, "negate": negate})
         else:
-            print(f"Error: unknown trigger operator: {op}")
+            print(f"Error: 未知触发算子: {op}")
             print(f"       arithmetic: {'/'.join(ARITH_OPS)}; range: "
                   f"{'/'.join(RANGE_OPS)} lo hi; edge: RISE/FALL/BOTH/X")
             sys.exit(1)
@@ -712,7 +712,7 @@ def _trig_wizard(proj: dict) -> None:
     info = _load_signal_info(proj)
     signals = [s for s in (_collect_signals(info) if info else []) if s["sample_type"] in (3, 4)]
     if not signals:
-        print("Error: no trigger-capable signals in HqInsight project.")
+        print("Error: 工程中没有可触发信号（触发至少需要 1 个 -type trigger/both 信号）。")
         sys.exit(1)
 
     conds = []
@@ -804,7 +804,7 @@ def _run_hqfpga_cmds(hqfpga_exe: str, cmds: list, cwd: str) -> None:
     finally:
         os.unlink(tcl_path)
     if proc.returncode != 0:
-        print(f"Error: hqfpga.exe exited abnormally (code {proc.returncode}).")
+        print(f"Error: hqfpga.exe 异常退出（code {proc.returncode}）。")
         sys.exit(1)
 
 
@@ -819,7 +819,7 @@ def _play_svf(cable_exe: str, svf_path: str) -> list:
                            "--outTDO", CAPTURE_OUT_TDO, "--debug"],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if proc.returncode != 0:
-        print(f"Error: cable.exe failed to play SVF (code {proc.returncode}).")
+        print(f"Error: cable.exe 播放 SVF 失败（code {proc.returncode}）。")
         sys.exit(1)
     values = []
     try:
@@ -906,7 +906,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
             sys.exit(1)
     cond_path = os.path.join(import_dir, "trigger_cond.json")
     if not os.path.isfile(cond_path):
-        print("Error: no trigger condition set. Use -insight -trig first.")
+        print("Error: 尚未设置触发条件——先执行 -insight -trig。")
         sys.exit(1)
     if not os.path.isfile(proj["ddf"]):
         print(f"Error: .ddf not found: {proj['ddf']}")
@@ -1032,7 +1032,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
                     print(f"[OK] Triggered (pointer={pointer}, overflow={overflow}).")
                     break
             if time.time() >= deadline:
-                print(f"Error: trigger timeout ({timeout}s). Re-run with -force to capture immediately.")
+                print(f"Error: 触发超时（{timeout}s）——加 -force 可立即抓取当前波形。")
                 sys.exit(1)
 
     # 3. Read status + waveform (only 'pointer' words if the buffer never wrapped)
@@ -1057,7 +1057,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
     if not force and len(tdo) >= 2:
         overflow, done, pointer = _parse_status(tdo[1], status_bits)
     if len(data) < limit:
-        print(f"Error: expected {limit} waveform words, got {len(data)}.")
+        print(f"Error: 波形字数不符：期望 {limit}，实际 {len(data)}。")
         sys.exit(1)
     while len(header) < 2:
         header.insert(0, "0")
@@ -1076,7 +1076,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
 
     vcd = f"{prefix}_0_ww.vcd"
     if not os.path.isfile(vcd):
-        print("Error: VCD was not generated (dump_vcd failed silently).")
+        print("Error: VCD 未生成（dump_vcd 静默失败）。")
         sys.exit(1)
     print(f"[OK] Waveform captured: {vcd}")
     summarize_vcd(vcd)
@@ -1146,7 +1146,7 @@ def summarize_vcd(vcd_path: str) -> None:
                 pv = hex(int(v, 2)) if set(v) <= {"0", "1"} else v
                 print(f"  {name} = {v} ({pv})" if pv != v else f"  {name} = {v}")
     else:
-        print("Trigger moment: not found in VCD.")
+        print("Error: VCD 中未找到触发时刻。")
 
 
 def run_flow(proj: dict) -> None:
@@ -1236,7 +1236,7 @@ def run_flow(proj: dict) -> None:
     finally:
         os.unlink(tcl_path)
     if proc.returncode != 0:
-        print(f"Error: hqfpga.exe flow failed (code {proc.returncode}).")
+        print(f"Error: hqfpga.exe 流程失败（code {proc.returncode}）。")
         sys.exit(1)
     # The flow can exit 0 even when implementation fails (e.g. JTAG capacity
     # overflow); only a fresh instrumented bitstream counts as success.
@@ -1897,7 +1897,7 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
         sys.exit(1)
     if len(matches) > 1:
         mods = ", ".join(c["module"] for c in matches)
-        print(f"Error: '{name}' exists in multiple modules: {mods}; pick one with -module")
+        print(f"Error: 信号 {name} 存在于多个模块: {mods}——用 -module 消歧")
         sys.exit(1)
     sig = matches[0]
     if slice_rng:
@@ -1927,7 +1927,7 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
             sys.exit(1)
     else:
         if not clk:
-            print("Error: first signal requires -clk <clock signal>.")
+            print("Error: 首个信号需要 -clk <时钟信号>。")
             sys.exit(1)
         clk_entry = {"clk_module_name": sig["module"], "clk_signal_name": clk,
                      "modules_sample_data": []}
