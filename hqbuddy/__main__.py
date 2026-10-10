@@ -917,21 +917,32 @@ def cmd_set_top(args):
 
 
 def cmd_xpn(args):
-    """Generate XPN file from routed design."""
+    """Generate XPN file from routed design.
+
+    All flags (-ins/-no_open/-from_src) are position-independent; a project
+    path may appear anywhere.  Unknown flags are rejected instead of silently
+    dropped (a silently-ignored -ins used to fall back to product-flow mode
+    and mislead the user into debugging the wrong database)."""
     hqinsight = False
-    if args and args[0] == '-ins':
-        hqinsight = True
-        args = args[1:]
-
-    # -no_open: skip auto-opening the generated XPN (agent/silent workflows)
     open_file = '-no_open' not in args
-    args = [a for a in args if a != '-no_open']
-    # -from_src: with -ins, auto-run the insight implementation flow when the
-    # route dump is missing (source-to-XPN in one command)
     from_src = '-from_src' in args
-    args = [a for a in args if a != '-from_src']
+    rest = []
+    for a in args:
+        if a == '-ins':
+            hqinsight = True
+        elif a in ('-no_open', '-from_src'):
+            pass
+        else:
+            rest.append(a)
 
-    hqprj_path, output_name = _parse_args_with_output(args)
+    unknown = [a for a in rest if a.startswith('-') and a != '-o'
+               and not a.startswith('-o')]
+    if unknown:
+        print(f"Error: unknown -xpn option(s): {' '.join(unknown)}")
+        print("  (flags are position-independent; supported: -ins -no_open -from_src -o <file> [<.hqprj>])")
+        sys.exit(1)
+
+    hqprj_path, output_name = _parse_args_with_output(rest)
     run_xpn(hqprj_path, output_name, hqinsight, open_file=open_file, from_src=from_src)
 
 
