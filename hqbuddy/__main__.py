@@ -52,9 +52,14 @@ Project:
     -looptdo                            Looptdo mode (synthesis + looptdo)
     -bin_only [<name>]                  Bin-only mode (synthesis -> bitgen, no intermediate files)
   -xpn [<.hqprj>] [-o <file>] [-no_open]
-                                        Generate XPN (normal mode; -no_open skips
-                                        auto-opening the file — agent/silent use)
-    -ins                                Generate XPN (hqinsight mode)
+                                        Generate XPN from the PRODUCT flow route result
+                                        (hq_run; run -build first).  -no_open skips
+                                        auto-opening (agent/silent use)
+    -ins [-from_src]                    From the INSIGHT flow result instead (hqins_impl;
+                                        run -insight -run first).  -from_src auto-runs
+                                        that flow when the route result is missing
+                                        (source-to-XPN in one command; needs an existing
+                                        HqInsight project with registered signals)
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN, then auto-download to board
                                         (multiple .xpn in cwd: convert all + report,
                                          then open the GUI downloader)
@@ -921,9 +926,13 @@ def cmd_xpn(args):
     # -no_open: skip auto-opening the generated XPN (agent/silent workflows)
     open_file = '-no_open' not in args
     args = [a for a in args if a != '-no_open']
+    # -from_src: with -ins, auto-run the insight implementation flow when the
+    # route dump is missing (source-to-XPN in one command)
+    from_src = '-from_src' in args
+    args = [a for a in args if a != '-from_src']
 
     hqprj_path, output_name = _parse_args_with_output(args)
-    run_xpn(hqprj_path, output_name, hqinsight, open_file=open_file)
+    run_xpn(hqprj_path, output_name, hqinsight, open_file=open_file, from_src=from_src)
 
 
 def cmd_xpn2bin(args):

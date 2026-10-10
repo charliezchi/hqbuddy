@@ -1,5 +1,6 @@
 """XPN generation: generate temp TCL and launch hqfpga -cmd."""
 
+import glob
 import os
 import re
 import subprocess
@@ -7,6 +8,35 @@ import sys
 import webbrowser
 
 from . import launcher
+
+
+def _hqprj_source_files(hqprj_path: str) -> list:
+    """FILE_SRC/FILE_TC/FILE_PC entries resolved to existing absolute paths."""
+    files = []
+    work = os.path.dirname(os.path.abspath(hqprj_path)) + os.sep
+    for line in open(hqprj_path, encoding="utf-8", errors="replace"):
+        line = line.strip()
+        if line.startswith(("FILE_SRC=", "FILE_TC=", "FILE_PC=")):
+            val = line.split("=", 1)[1]
+            if not val or val == "NONE":
+                continue
+            p = val.replace("$WORK_DIR$", work).replace("/", os.sep)
+            if os.path.isfile(p):
+                files.append(p)
+    return files
+
+
+def _stale_sources(hqprj_path: str, work_dir: str, dump_abs: str) -> list:
+    """Source/constraint files newer than the route dump (relative paths)."""
+    dump_mt = os.path.getmtime(dump_abs)
+    newer = []
+    for p in _hqprj_source_files(hqprj_path):
+        try:
+            if os.path.getmtime(p) > dump_mt:
+                newer.append(os.path.relpath(p, work_dir))
+        except OSError:
+            pass
+    return sorted(newer)
 
 
 def _generate_xpn_tcl(work_dir: str, dump_path: str, output_xpn: str) -> str:
@@ -34,7 +64,7 @@ xpn.write {output_xpn}
 
 
 def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = False,
-            open_file: bool = True) -> None:
+            open_file: bool = True, from_src: bool = False) -> None:
     """
     Run the xpn generation command.
 
@@ -44,6 +74,9 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
         hqinsight: If True, use hqinsight mode path; otherwise normal mode.
         open_file: Auto-open the generated XPN after generation (default True;
             pass False for agent/silent workflows via -xpn -no_open).
+        from_src: With -ins, auto-run the insight implementation flow when the
+            route dump is missing (source-to-XPN in one command).  The HqInsight
+            project must already exist (-insight -init + -add).
     """
     if not os.path.isfile(hqprj_path):
         print(f"Error: file not found: {hqprj_path}")
@@ -66,15 +99,60 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
         # Allow user to specify full name with or without .xpn extension
         output_xpn = output_name if output_name.lower().endswith(".xpn") else f"{output_name}.xpn"
 
-    # Check if dump file exists
+    # Pre-flight: dump existence + freshness.  The route dump is a cleanable
+    # intermediate — finished P&R is proven by bin/xpn artifacts, so a missing
+    # dump after a build means "re-run the flow", not "never routed".  A dump
+    # older than any source file means the XPN would silently reflect the OLD
+    # design (ddrc_fifo_demo case, 2026-10-10).
     dump_abs = os.path.join(work_dir, dump_path.lstrip("./").replace("/", os.sep))
     if not os.path.isfile(dump_abs):
-        mode_str = "hqinsight" if hqinsight else "normal"
-        print(f"Error: route dump file not found for {mode_str} mode.")
-        print(f"  Expected: {dump_abs}")
-        print(f"")
-        print(f"Please ensure the design has been routed before generating XPN.")
-        sys.exit(1)
+        # -xpn reads a SPECIFIC flow's route result; the two flows' DBs are NOT
+        # interchangeable (product: hq_run — insight: hqins_impl).
+        if from_src and hqinsight:
+            print("route dump 不存在——按 -from_src 自动执行 insight 实现流程"
+                  "（等价 -insight -run，实现现有插桩网表，不重新探针插入）...")
+            from . import insight as _insight
+            proj = _insight.resolve_insight_project(hqprj_path, require_hqins=True)
+            _insight.run_flow(proj, require_bin=False)
+        if not os.path.isfile(dump_abs):
+            mode_str = "hqinsight" if hqinsight else "normal"
+            print(f"Error: route dump file not found for {mode_str} mode.")
+            print(f"  Expected: {dump_abs}")
+            has_bin = (glob.glob(os.path.join(work_dir, "hq_run", "*.bin"))
+                       or glob.glob(os.path.join(work_dir, "*.bin")))
+            if hqinsight and from_src:
+                print(f"")
+                print(f"  insight 实现流程已执行但 route dump 仍未生成——"
+                      f"请检查上方流程日志中的 ERROR。")
+            elif has_bin:
+                names = ", ".join(os.path.basename(b) for b in has_bin[:2])
+                print(f"")
+                print(f"  工程存在布线产物（{names}），但那属于另一条流的数据库——"
+                      f"两条流的布线结果不通用。")
+                if hqinsight:
+                    print(f"  insight 流的库在 hqins_impl：先 -insight -run，"
+                          f"或直接 -xpn -ins -from_src 源码直达。")
+                else:
+                    print(f"  产品流的库在 hq_run：先 -build（或 -flow），"
+                          f"或用 -xpn2bin 直接转换现成 XPN。")
+            else:
+                print(f"")
+                print(f"  工程尚无任何布线产物——请先完成布局布线。")
+                if hqinsight:
+                    print(f"  insight 模式：先 -insight -init/-add 登记信号，再 -insight -run；"
+                          f"或 -xpn -ins -from_src 源码直达。")
+                else:
+                    print(f"  产品模式：先 -build（或 -flow）。")
+            sys.exit(1)
+
+    stale = _stale_sources(hqprj_path, work_dir, dump_abs)
+    if stale:
+        print(f"Warning: 布线 dump 落后于 {len(stale)} 个更新的源文件——生成的 XPN 将基于旧设计：")
+        for p in stale[:5]:
+            print(f"  {p}")
+        if len(stale) > 5:
+            print(f"  ... 共 {len(stale)} 个")
+        print(f"  如需反映最新设计，先重跑实现流程（hqbuddy -build 或 -flow）再 -xpn。", flush=True)
 
     # Resolve hqfpga (selected or latest version)
     version = launcher.require_hqfpga_version()

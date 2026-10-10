@@ -1149,8 +1149,11 @@ def summarize_vcd(vcd_path: str) -> None:
         print("Error: VCD 中未找到触发时刻。")
 
 
-def run_flow(proj: dict) -> None:
-    """Handle 'hqbuddy -insight -run': run the instrumented implementation flow."""
+def run_flow(proj: dict, require_bin: bool = True) -> None:
+    """Handle 'hqbuddy -insight -run': run the instrumented implementation flow.
+
+    require_bin=False (-xpn -ins -from_src) tolerates a missing instrumented
+    bitstream: only the route result is needed for XPN export."""
 
     version = launcher.require_hqfpga_version()
     hqfpga_exe = version["hqfpga_path"]
@@ -1246,21 +1249,24 @@ def run_flow(proj: dict) -> None:
                                              "hqins_impl", "*.bin"))
     fresh = [b for b in bin_candidates if os.path.getmtime(b) >= flow_start]
     if not fresh:
-        print(f"Error: flow reported success but no fresh instrumented bitstream "
-              f"was produced under hqins_run/hq_import/hqins_impl/ (checked for "
-              f"{prj_stem}.bin). Check the reports there (place/route errors).")
-        sys.exit(1)
-    stamp_dir = os.path.join(proj["hqins_dir"], "hq_import")
-    with open(os.path.join(stamp_dir, ".bit_stamp"), "w") as sf:
-        sf.write(str(max(os.path.getmtime(b) for b in fresh)))
-    # record the signal set this bit was built with, so -capture can detect
-    # -add/-del since the last -run (stale signal set => misplaced data view)
-    info = _load_signal_info(proj)
-    if info is not None:
-        sigs = sorted(f"{s['name']}:{s['msb']}:{s['lsb']}"
-                      for s in _collect_signals(info))
-        with open(os.path.join(stamp_dir, ".bit_signals"), "w") as sf:
-            sf.write("\n".join(sigs))
+        if require_bin:
+            print(f"Error: flow reported success but no fresh instrumented bitstream "
+                  f"was produced under hqins_run/hq_import/hqins_impl/ (checked for "
+                  f"{prj_stem}.bin). Check the reports there (place/route errors).")
+            sys.exit(1)
+        print("Note: 本次流程未产出新的插桩 bit——-xpn -from_src 只需布线结果，继续导出 XPN。")
+    if fresh:
+        stamp_dir = os.path.join(proj["hqins_dir"], "hq_import")
+        with open(os.path.join(stamp_dir, ".bit_stamp"), "w") as sf:
+            sf.write(str(max(os.path.getmtime(b) for b in fresh)))
+        # record the signal set this bit was built with, so -capture can detect
+        # -add/-del since the last -run (stale signal set => misplaced data view)
+        info = _load_signal_info(proj)
+        if info is not None:
+            sigs = sorted(f"{s['name']}:{s['msb']}:{s['lsb']}"
+                          for s in _collect_signals(info))
+            with open(os.path.join(stamp_dir, ".bit_signals"), "w") as sf:
+                sf.write("\n".join(sigs))
 
     # 常量探针预警：扫描实现目录的 log，报告被综合器常量折叠的探针信号
     impl_dir = os.path.join(proj["hqins_dir"], "hq_import", "hqins_impl")
