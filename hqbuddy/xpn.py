@@ -33,7 +33,8 @@ xpn.write {output_xpn}
     return temp_tcl
 
 
-def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = False) -> None:
+def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = False,
+            open_file: bool = True) -> None:
     """
     Run the xpn generation command.
 
@@ -41,6 +42,8 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
         hqprj_path: Path to the .hqprj file.
         output_name: Optional custom output XPN file name.
         hqinsight: If True, use hqinsight mode path; otherwise normal mode.
+        open_file: Auto-open the generated XPN after generation (default True;
+            pass False for agent/silent workflows via -xpn -no_open).
     """
     if not os.path.isfile(hqprj_path):
         print(f"Error: file not found: {hqprj_path}")
@@ -118,7 +121,10 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
 
     # Auto-open the generated XPN file
     output_abs = os.path.join(work_dir, output_xpn)
-    if os.path.isfile(output_abs):
+    if not os.path.isfile(output_abs):
+        print(f"")
+        print(f"Warning: XPN file was not generated: {output_abs}")
+    elif open_file:
         print(f"")
         print(f"Opening XPN file: {output_abs}")
         try:
@@ -127,7 +133,7 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
             print(f"Warning: failed to open XPN file: {e}")
     else:
         print(f"")
-        print(f"Warning: XPN file was not generated: {output_abs}")
+        print(f"XPN ready: {output_abs}")
 
 
 def run_xpn_inspect(xpn_path: str) -> None:

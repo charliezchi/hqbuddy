@@ -51,7 +51,9 @@ Project:
   -flow [<.hqprj>] [-o <file>]         Generate TCL via hqprj2tcl
     -looptdo                            Looptdo mode (synthesis + looptdo)
     -bin_only [<name>]                  Bin-only mode (synthesis -> bitgen, no intermediate files)
-  -xpn [<.hqprj>] [-o <file>]          Generate XPN (normal mode)
+  -xpn [<.hqprj>] [-o <file>] [-no_open]
+                                        Generate XPN (normal mode; -no_open skips
+                                        auto-opening the file — agent/silent use)
     -ins                                Generate XPN (hqinsight mode)
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN, then auto-download to board
                                         (multiple .xpn in cwd: convert all + report,
@@ -916,8 +918,12 @@ def cmd_xpn(args):
         hqinsight = True
         args = args[1:]
 
+    # -no_open: skip auto-opening the generated XPN (agent/silent workflows)
+    open_file = '-no_open' not in args
+    args = [a for a in args if a != '-no_open']
+
     hqprj_path, output_name = _parse_args_with_output(args)
-    run_xpn(hqprj_path, output_name, hqinsight)
+    run_xpn(hqprj_path, output_name, hqinsight, open_file=open_file)
 
 
 def cmd_xpn2bin(args):

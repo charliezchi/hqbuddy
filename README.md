@@ -6,14 +6,14 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.20.0
+3.20.1
 
 ## 功能特点
 
 - **提取 filelist**：从 `.hqprj` 工程文件中提取 `FILE_SRC` 源文件列表
 - **路径解析**：自动将 `$WORK_DIR$` 替换为 `.hqprj` 文件所在目录的绝对路径
 - **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
-- **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式
+- **XPN 生成**：从布线后的设计生成 XPN 文件，支持普通模式和 hqinsight 模式（生成后自动打开文件；`-no_open` 跳过打开，适合 agent/脚本静默流程）
 - **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；改 RTL/IP 后 `-refresh` 原地重建插桩产物（总是重插桩刷新信号库，RTL 逻辑/属性改动可靠带入；保留信号选择与触发条件，等价 GUI 保存）；`-capture` 支持自定义超时与输出前缀
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`，`-no_dl` 只生成不下载）；不指定 xpn 时批量转换当前目录所有 `.xpn` 并输出结果报告，多个 xpn 时不逐个下载，而是转换完后唤起 `-dl` GUI 下载器
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
@@ -131,6 +131,7 @@ hqbuddy -xpn                               # 自动检测，默认生成 hq.xpn
 hqbuddy -xpn example/ddrc_native_demo.hqprj
 hqbuddy -xpn -o my_design.xpn              # 自动检测，生成 my_design.xpn
 hqbuddy -xpn example/ddrc_native_demo.hqprj -o my_design.xpn
+hqbuddy -xpn -no_open                      # 静默生成，不自动打开（agent 用）
 ```
 
 ### 生成 XPN（hqinsight 模式）
