@@ -80,7 +80,8 @@ Project:
   -netlist_build <a.edif> --upc <u.upc> --sdc <s.sdc>
      [-o <file>] [-device <part>]       Netlist P&R + bitgen (flatten before pack;
                                         needs .upc/.sdc, else bitgen BIT-11)
-  -add <file1> [<file2> ...]           Add source/constraint files to project
+  -add <file1> [<file2> ...] [<.hqprj>] Add source/constraint files to project
+                                        (explicit .hqprj target optional; else cwd)
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
   -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
   -doctor [<.hqprj>]                   Project health check: files/modules/times/device/depth
@@ -89,7 +90,8 @@ Project:
                                        into -flow/-build to match FILE_SRC/FILE_TC/FILE_PC)
   -pinplan <src.hqprj> -board <board>  Pin plan skeleton: match ports to board nets (boards/*.md)
   -autosdc <src.hqprj> [-period ns]    Auto-generate clock constraints SDC (tc.autogen)
-  -regression [base_dir]               One-command regression suite (capture+error paths+smoke)
+  -regression [--offline] [base_dir]   One-command regression suite (--offline skips
+                                        board-dependent checks)
   -seed_sweep [-ins] [-no_dl] [<src.hqprj>] [-n N] [-j J]
                                        Multi-seed P&R sweep: synthesize once into a shared UDB,
                                        then N P&R runs (fixed effort, -seed varies) as up to J
@@ -103,7 +105,7 @@ Project:
                                        dir (previous notes cleared); -no_dl skips the GUI
                                        launch (agent/script mode; bins under seed_sweep/
                                        seed<K>/ for direct -cable download).
-  -set_top <name>                      Set top module name
+  -set_top <name> [<.hqprj>]           Set top module name (project: arg or cwd)
   -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
 
 Tools:
@@ -514,13 +516,23 @@ def cmd_add(args):
     """Add source/constraint files to the .hqprj project."""
     if not args:
         print("Error: -add requires at least one file")
-        print("Usage: hqbuddy -add <file1> [<file2> ...]")
+        print("Usage: hqbuddy -add <file1> [<file2> ...] [<.hqprj>]")
         print("  .v / .vh / .f  → add to FILE_SRC")
         print("  .sdc           → set FILE_TC")
         print("  .upc           → set FILE_PC")
+        print("  .hqprj         → target project (default: auto-detect in cwd)")
         sys.exit(1)
 
-    hqprj_path = _find_hqprj()
+    # Optional explicit project: first *.hqprj argument; rest are files.
+    hqprj_arg = next((a for a in args if a.lower().endswith(".hqprj")), None)
+    file_args = [a for a in args if a is not hqprj_arg]
+    if not file_args:
+        print("Error: -add requires at least one file")
+        sys.exit(1)
+    if hqprj_arg:
+        hqprj_path = hqprj_arg
+    else:
+        hqprj_path = _find_hqprj()
     if not hqprj_path:
         print("Error: no .hqprj file found in current directory.")
         sys.exit(1)
@@ -612,7 +624,7 @@ def cmd_add(args):
     errors = []
 
     # Process each file argument
-    for file_arg in args:
+    for file_arg in file_args:
         ext = os.path.splitext(file_arg)[1].lower()
 
         if ext == '.f':
@@ -866,7 +878,14 @@ def cmd_set_top(args):
         print("Error: module name cannot start with '-'")
         sys.exit(1)
 
-    hqprj_path = _find_hqprj()
+    if len(args) > 1:
+        if args[1].lower().endswith(".hqprj"):
+            hqprj_path = args[1]
+        else:
+            print(f"Error: unexpected extra argument: {args[1]} (usage: -set_top <name> [<.hqprj>])")
+            sys.exit(1)
+    else:
+        hqprj_path = _find_hqprj()
     if not hqprj_path:
         print("Error: no .hqprj file found in current directory.")
         sys.exit(1)
@@ -1115,6 +1134,29 @@ def _run_hqfpga_cmd(version: dict, tool_args: list, quiet: bool) -> None:
         sys.exit(proc.returncode)
 
 
+def _warn_stale_flow_tcl(tcl_path: str) -> None:
+    """Warn when a flow TCL (hqprj2tcl marker line) is older than its source
+    .hqprj: files/constraints added after generation are not in the script."""
+    try:
+        with open(tcl_path, encoding="utf-8", errors="replace") as f:
+            first = f.readline().strip()
+    except OSError:
+        return
+    marker = "#[hqprj2tcl] Converted from "
+    if not first.startswith(marker):
+        return
+    src = first[len(marker):].strip()
+    if not src or not os.path.isfile(src):
+        return
+    try:
+        if os.path.getmtime(src) > os.path.getmtime(tcl_path):
+            print(f"Warning: {os.path.basename(tcl_path)} is older than its source project "
+                  f"{os.path.basename(src)} — regenerate with hqbuddy -flow so project "
+                  f"changes (added files/constraints) take effect.", flush=True)
+    except OSError:
+        pass
+
+
 def cmd_launch_cmd(args):
     """Launch hqfpga CLI: interactively (no args), with a TCL script,
     or with an inline command string via '-e'.
@@ -1142,6 +1184,9 @@ def cmd_launch_cmd(args):
             except OSError:
                 pass
         return
+
+    if args and args[0].lower().endswith('.tcl') and os.path.isfile(args[0]):
+        _warn_stale_flow_tcl(args[0])
 
     tool_args = ['-cmd'] + args if args else []
     launcher.launch_tool(version, 'hqfpga', tool_args)
