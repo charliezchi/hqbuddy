@@ -7,7 +7,8 @@ Usage:
 Cleans build artifacts, builds hqbuddy.exe with PyInstaller,
 copies it to %APPDATA%\\hqbuddy\\, registers it to the user PATH,
 and installs the hqfpga skill to Kimi Code (~/.kimi-code/skills/),
-Xiaomi MIMO (~/.claude/skills/) and ZCode (~/.zcode/skills/).
+Claude Code (~/.claude/skills/), ZCode (~/.zcode/skills/)
+and Codex (~/.agents/skills/).
 """
 
 import glob

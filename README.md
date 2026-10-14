@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.21.1
+3.21.2
 
 ## 功能特点
 
@@ -563,7 +563,7 @@ hqbuddy/
 │   └── user_manual/      # HqFpga 官方用户手册（md / pdf）
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
 ├── build.py              # 构建 / 清理统一管理，build 成功后自动注册 PATH 并安装 Skill
-├── install_skill.py      # 安装 hqfpga Skill 到 Kimi Code / Xiaomi MIMO / ZCode 用户级 skills 目录
+├── install_skill.py      # 安装 hqfpga Skill 到 Kimi Code / Claude Code / ZCode / Codex 用户级 skills 目录
 ├── .gitignore
 ├── .gitattributes
 ├── AGENTS.md
@@ -580,17 +580,21 @@ hqbuddy/
 | 目标 | 目录 | 生效方式 |
 | --- | --- | --- |
 | Kimi Code | `~/.kimi-code/skills/hqfpga/` | 重启 Kimi Code CLI 或新开会话 |
-| Xiaomi MIMO | `~/.claude/skills/hqfpga/` | 新开 MiMo Desktop 对话（会自动写入 Plugins 页 locales 元数据） |
+| Claude Code | `~/.claude/skills/hqfpga/` | 新开 Claude Code 会话 |
 | ZCode | `~/.zcode/skills/hqfpga/` | 重启 ZCode 或新开会话 |
+| Codex | `~/.agents/skills/hqfpga/` | 自动检测 skill 变化；未出现时重启 Codex |
 
-运行 `python build.py` 打包时会自动安装到上述三个目标；也可单独手动安装：
+运行 `python build.py` 打包时会自动安装到上述四个目标；也可单独手动安装：
 
 ```bat
-python install_skill.py              # 默认安装到 Kimi Code + Xiaomi MIMO + ZCode
+python install_skill.py              # 默认安装到 Kimi Code + Claude Code + ZCode + Codex
 python install_skill.py --kimi       # 仅 Kimi Code
-python install_skill.py --mimo       # 仅 Xiaomi MIMO
+python install_skill.py --claude       # 仅 Claude Code
 python install_skill.py --zcode      # 仅 ZCode
+python install_skill.py --codex      # 仅 Codex
 ```
+
+可组合多个选项，例如 `python install_skill.py --kimi --codex`。Codex 使用官方文档列出的用户级目录 `~/.agents/skills/`（Windows 下为 `%USERPROFILE%\.agents\skills\`），参见 [Codex skills 文档](https://learn.chatgpt.com/docs/build-skills)。重复安装会替换所选目标目录中的旧版 hqfpga skill。
 
 Skill 源文件在 `skills/hqfpga/`，随仓库版本管理；开发板板卡资料（`skills/hqfpga/references/boards/`）也随 skill 一起安装，安装后 agent 可直接查阅。
 
