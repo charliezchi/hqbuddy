@@ -56,7 +56,7 @@ python export.py --no-build      # 只打包现有 exe（缺失则报错）
 python export.py -o <dir>        # 指定输出目录（默认仓库根目录）
 ```
 
-产出 `hqbuddy_v<版本>_win64.zip`（约 12 MB），解压为 `hqbuddy_v<版本>/` 目录，内含 `hqbuddy.exe`、`README.md`、`LICENSE`、`install_skill.py` 与 `skills/hqfpga/`。收件人解压后可直接运行 `hqbuddy.exe`（首次使用同样需配置 HqFPGA 路径）；如需 AI Agent skill，在解压目录运行 `python install_skill.py`（需 Python，可选）。
+产出 `hqbuddy_v<版本>_win64.zip`（约 14 MB），解压为 `hqbuddy_v<版本>/` 目录，内含 `hqbuddy.exe`、`hqbuddy/` 源码包、`templates/` 工程模板、`README.md`、`LICENSE`、`install_skill.py` 与 `skills/hqfpga/`。收件人解压后可直接运行 `hqbuddy.exe`（首次使用同样需配置 HqFPGA 路径）；有 Python 3.10+ 时也可从源码运行（`python -m hqbuddy`）；如需 AI Agent skill，在解压目录运行 `python install_skill.py`（可选）。
 
 ## ⚠️ 首次使用：配置 HqFPGA 安装路径（必读）
 

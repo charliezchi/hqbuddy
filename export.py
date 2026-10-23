@@ -9,6 +9,8 @@ Usage:
 
 产出 hqbuddy_v<版本>_win64.zip，解压后是一个 hqbuddy_v<版本>/ 目录：
     hqbuddy.exe         主程序（PyInstaller 单文件，双击/命令行直接用）
+    hqbuddy/            Python 源码包（有 Python 3.10+ 时可 python -m hqbuddy 运行）
+    templates/          工程模板（从源码运行时 -new_prj 等需要）
     README.md           使用说明
     LICENSE             许可证
     install_skill.py    hqfpga skill 安装脚本（可选，需 Python）
@@ -65,8 +67,9 @@ def rebuild():
     print()
 
 
-def iter_skill_files():
-    root = os.path.join(SCRIPT_DIR, "skills", "hqfpga")
+def iter_tree(subdir: str):
+    """遍历仓库下某个子目录，跳过 __pycache__ 与字节码文件。"""
+    root = os.path.join(SCRIPT_DIR, subdir)
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d != "__pycache__"]
         for name in filenames:
@@ -122,14 +125,16 @@ def main():
             full = os.path.join(SCRIPT_DIR, src)
             if os.path.isfile(full):
                 z.write(full, f"{top}/{arc}")
-        for full, rel in iter_skill_files():
-            z.write(full, f"{top}/{rel.replace(os.sep, '/')}")
+        for subdir in ("hqbuddy", "templates", os.path.join("skills", "hqfpga")):
+            for full, rel in iter_tree(subdir):
+                z.write(full, f"{top}/{rel.replace(os.sep, '/')}")
 
     n_files = len(zipfile.ZipFile(zip_path).namelist())
     size_mb = os.path.getsize(zip_path) / 1024 / 1024
     print(f"[OK] 导出完成: {zip_path}")
     print(f"     {n_files} 个文件, {size_mb:.1f} MB")
-    print(f"     内容: hqbuddy.exe / README.md / LICENSE / install_skill.py / skills/hqfpga/")
+    print(f"     内容: hqbuddy.exe / hqbuddy/ 源码 / templates/ / README.md / "
+          f"LICENSE / install_skill.py / skills/hqfpga/")
     print("     用户解压后可直接运行 hqbuddy.exe；如需 AI skill，运行 "
           "python install_skill.py（需 Python）。")
 
