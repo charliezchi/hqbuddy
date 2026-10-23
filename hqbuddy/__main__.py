@@ -18,6 +18,7 @@ from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstrea
 from .flow import run_seed_sweep
 from .xpn import run_xpn, run_xpn_inspect
 from .xpn2bin import run_xpn2bin
+from .heatmap import run_heatmap
 from .netlist import run_edf2v, run_netlist_build, run_vla_gen
 from .doctor import run_doctor
 from .synopt import run_synopt
@@ -64,6 +65,11 @@ Project:
                                         (multiple .xpn in cwd: convert all + report,
                                          then open the GUI downloader)
     -no_dl                              Only generate BIN, skip download
+  -heatmap [<.xpn>] [-o <file>]        Routing heatmap: generate the rtheatmap
+                                        viewer JSON from a routed XPN and open it
+                                        (a single .xpn in cwd is used automatically;
+                                         -no_open skips the viewer launch, agent use;
+                                         -lang chs|eng, default chs)
   -get_device [<.hqprj>]                Show device part
   -set_device [<part>] [<.hqprj>]       Set device part (interactive if no part)
   -get_pin_bank <pin> [-device <part>]  Show the IO bank of a pin
@@ -985,6 +991,54 @@ def cmd_xpn2bin(args):
     run_xpn2bin(xpn_path, bin_path, download)
 
 
+def cmd_heatmap(args):
+    """Generate the routing-heatmap viewer JSON from a routed XPN.
+
+    Position-independent flags like -xpn: -no_open, -lang <chs|eng>;
+    one positional .xpn (single .xpn in cwd auto-detected); -o <file>."""
+    open_viewer = '-no_open' not in args
+    lang = "chs"
+    xpn_path = None
+    output_name = None
+
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == '-no_open':
+            i += 1
+        elif a == '-lang':
+            if i + 1 >= len(args):
+                print("Error: -lang requires a value (chs|eng)")
+                sys.exit(1)
+            lang = args[i + 1].lower()
+            i += 2
+        elif a == '-o':
+            if i + 1 >= len(args):
+                print("Error: -o requires an output name")
+                sys.exit(1)
+            output_name = args[i + 1]
+            i += 2
+        elif a.startswith('-o'):
+            output_name = a[2:]
+            i += 1
+        elif a.startswith('-'):
+            print(f"Error: unknown -heatmap option(s): {a}")
+            print("  (supported: -no_open -lang <chs|eng> -o <file> [<.xpn>])")
+            sys.exit(1)
+        elif xpn_path is None:
+            xpn_path = a
+            i += 1
+        else:
+            print(f"Error: unexpected argument: {a}")
+            sys.exit(1)
+
+    if lang not in ('chs', 'eng'):
+        print(f"Error: unsupported -lang value '{lang}' (chs|eng)")
+        sys.exit(1)
+
+    run_heatmap(xpn_path, output_name, open_viewer=open_viewer, lang=lang)
+
+
 def cmd_edf2v(args):
     """Convert a third-party EDIF netlist to a Verilog netlist."""
     edif_path = None
@@ -1628,6 +1682,11 @@ def main():
     # XPN to BIN
     if first == '-xpn2bin':
         cmd_xpn2bin(args[1:])
+        return
+
+    # Routing heatmap viewer JSON from routed XPN
+    if first == '-heatmap':
+        cmd_heatmap(args[1:])
         return
 
     # Device

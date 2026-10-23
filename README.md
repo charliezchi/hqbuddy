@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.21.2
+3.22.0
 
 ## 功能特点
 
@@ -16,6 +16,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **XPN 生成**：从布线后的设计生成 XPN 文件（生成后自动打开；`-no_open` 静默）。前置条件：**对应实现流的布线结果必须已存在，且两条流的库不通用**——普通模式读产品流 `hq_run`（先 `-build`），`-ins` 模式读 insight 流 `hqins_impl`（先 `-insight -run`）；`-ins -from_src` 源码直达：布线结果缺失时自动补跑 insight 实现（一条命令源码到 XPN）
 - **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；改 RTL/IP 后 `-refresh` 原地重建插桩产物（总是重插桩刷新信号库，RTL 逻辑/属性改动可靠带入；保留信号选择与触发条件，等价 GUI 保存）；`-capture` 支持自定义超时与输出前缀
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`，`-no_dl` 只生成不下载）；不指定 xpn 时批量转换当前目录所有 `.xpn` 并输出结果报告，多个 xpn 时不逐个下载，而是转换完后唤起 `-dl` GUI 下载器
+- **布线热力图**：从布线后的 XPN 生成 rtheatmap 查看器的输入 JSON 并自动打开 GUI 热力图（`-heatmap`），等价 GUI 的 Routing Heatmap Viewer（布线资源使用率按 tile/线型展示）；`-no_open` 静默生成（agent 用），`-o` 自定义输出，`-lang chs|eng` 查看器语言
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
 - **新建工程**：从模板创建 `.hqprj` 工程（`-new_prj`）
 - **添加源文件**：向工程添加 `.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件并维护对应时间戳（`-add`；可带 `.hqprj` 显式指定目标工程，缺省自动探测当前目录）
@@ -161,6 +162,20 @@ hqbuddy -xpn2bin debug.xpn                 # 只转换 debug.xpn，默认生成 
 hqbuddy -xpn2bin -o my_bitstream.bin debug.xpn   # 自定义输出名（-o 需指定 xpn）
 hqbuddy -xpn2bin debug.xpn -no_dl          # 只生成不下载
 ```
+
+### 布线热力图
+
+从**布线后**的 `.xpn` 物理网表生成 rtheatmap 查看器的输入 JSON（等价 GUI 打开 Routing Heatmap Viewer 时写入 `hq_temp/.rt_heatmap.json` 的过程），并自动拉起 `build/rtheatmap/rtheatmap.exe -w <json> -l <lang>` 打开热力图窗口。输入 XPN 必须含布线信息（每个 signal 带 `route` 段，即 `-xpn` 从布线后设计导出的、或流程 `xpn.write` 在 route 之后写的网表）——只有布局没有布线的 XPN 会生成全零热力图（命令会预先检测并警告）。生成完成后打印器件/线型/使用率摘要；`.cexpn`（流程内部二进制网表）不能作为输入。
+
+```bat
+hqbuddy -heatmap t2.xpn                    # 生成 t2_heatmap.json 并打开热力图
+hqbuddy -heatmap                           # 当前目录只有一个 .xpn 时自动使用
+hqbuddy -heatmap -o my.json t2.xpn         # 自定义输出 JSON 路径
+hqbuddy -heatmap -no_open t2.xpn           # 静默生成 JSON，不拉起查看器（agent 用）
+hqbuddy -heatmap -lang eng t2.xpn          # 查看器英文界面（缺省 chs）
+```
+
+典型工作流：`hqbuddy -build` 完成布局布线 → `hqbuddy -xpn` 导出布线后 XPN → `hqbuddy -heatmap hq.xpn` 查看布线资源热力图。
 
 ### HqInsight 在线逻辑分析仪
 
@@ -461,6 +476,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-xpn inspect <file.xpn>`           | 解析 XPN 物理网表：设计/器件/comp 统计/IO 列表 |
 | `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN 并自动下载到开发板；不指定 file 时批量转换当前目录所有 `.xpn` 并输出报告（多个 xpn 时转换完唤起 `-dl` GUI 下载器，不逐个下载） |
 | `-xpn2bin [<file>] -no_dl`          | 只生成 BIN 不下载                                                  |
+| `-heatmap [<.xpn>] [-o <file>]`     | 从布线后 XPN 生成 rtheatmap 查看器 JSON 并自动打开热力图（当前目录唯一 `.xpn` 时可省略；`-no_open` 静默、`-lang chs\|eng`） |
 | `-get_device [<file>]`              | 查看`.hqprj` 使用的器件型号                                          |
 | `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
 | `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |

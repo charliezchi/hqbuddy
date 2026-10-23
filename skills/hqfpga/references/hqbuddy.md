@@ -51,6 +51,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -flow <file> -bin_only [<name>]` — bin-only 模式：生成的 TCL 被精简为只产出 `.bin`（自动删除 .xpn/.rpt/.log 等中间文件的生成指令），名称缺省用流程默认
 - `hqbuddy -xpn [<file>] [-o <out>]` / `-xpn -ins ...` — 生成 XPN 物理网表（普通 / hqinsight 模式）
 - `hqbuddy -xpn2bin [<file>] [-o <out>] [-no_dl]` — XPN 转 BIN：单个 xpn 成功后自动探测板上型号并下载（cable.exe `--Burst`）；`-no_dl` 只生成不下载；不指定 file 时批量转换当前目录所有 `.xpn` 并输出每个文件的生成结果报告（任一失败退出码非零），多个 xpn 时不逐个下载，转换完唤起 `-dl` GUI 下载器
+- `hqbuddy -heatmap [<.xpn>] [-o <out>] [-no_open] [-lang chs|eng]` — 布线热力图：从**布线后** XPN（每个 signal 带 route 段）生成 rtheatmap 查看器 JSON 并自动拉起 GUI 热力图（等价 GUI 的 Routing Heatmap Viewer；内部走 `xpn.read` + `'rt.genResourceUsage`）；当前目录唯一 `.xpn` 时可省略参数；`-no_open` 静默（agent 用）；只布局未布线的 XPN 会生成全零热力图（有预检警告）；典型链路 `-build` → `-xpn` → `-heatmap hq.xpn`（3.22.0）
 - **insight 流程约束路径坑**：`.hqprj` 的 FILE_TC/FILE_PC 若被 insight 流程
   （run_hqprj2hqins_flow）使用，必须是 `$WORK_DIR$` 前缀（其 cwd 是 hqins_impl/）；
   相对路径会导致流程"成功"却无 bin
