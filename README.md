@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.22.0
+3.23.0
 
 ## 功能特点
 
@@ -260,6 +260,26 @@ hqbuddy -get_pin_bank A4
 hqbuddy -get_pin_bank A4 -device SA5Z-30-D1-8U213C
 ```
 
+### 器件原生报告（'udev.*）
+
+调用所选 HqFPGA 版本的原生 `'udev.*` 命令导出**器件级**信息（只需器件、无需设计网表）。目标可以是 `part` 或 `.hqprj`（取工程器件）；两者都省略时先探测当前目录唯一 `.hqprj`，没有则进入交互式器件选择器（上下键 + 回车，支持模糊搜索）。
+
+```bat
+hqbuddy -udev                                   # .hqprj 或交互式选器件，三件套全出
+hqbuddy -udev SA5Z-30-D0-8U324C                 # 指定器件
+hqbuddy -udev my.hqprj --pkg                    # 工程器件 + 只出封装管脚
+hqbuddy -udev SA5Z-30-D0-8U324C --arch --fmt csv
+hqbuddy -udev SA5Z-30-D0-8U324C -o out_dir      # 指定输出目录（默认当前目录）
+```
+
+输出（`<part>` 前缀命名）：
+
+| 选择 | 文件 | 内容 |
+| --- | --- | --- |
+| `--arch`（默认含） | `_arch.txt` / `_arch.html` / `_arch_tiles.csv` + `_arch_sites.csv` | tile 架构图：`--fmt html`（默认）出着色网格地图（tile 类型配色 + site 名称图 + 资源 Count 表），`csv` 出 36×N 网格两份，`text` 为原生全量文本 |
+| `--iotype`（默认含） | `_iotype.txt` | 各 bank 支持的 IO 电气标准表 |
+| `--pkg`（默认含） | `_pkg.txt` + `_pkg.csv` | 封装管脚：IO/site/tile/bank/desc（CSV 供 Excel 筛选） |
+
 ### 编译 XiST 仿真库
 
 自动将 XiST 原语仿真库编译到 ModelSim/QuestaSim 中。默认自动检测所选版本的 HqFPGA 根目录，也可以手动指定。
@@ -491,6 +511,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-get_device [<file>]`              | 查看`.hqprj` 使用的器件型号                                          |
 | `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
 | `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
+| `-udev [<part>\|<.hqprj>] [--arch\|--iotype\|--pkg]` | 原生器件报告：tile 架构图（`--fmt html\|csv\|text`，默认 html 着色地图）/ IO 类型表 / 封装管脚（+CSV）；无需设计，目标缺省先探测 `.hqprj` 再进交互选择 |
 | `-new_prj <name> [-device <part>]`  | 从模板创建`.hqprj` 工程                                              |
 | `-new_soc <name> [-core cm3\|star] [-preset <ex>]` | 从 Demo 预设生成 SoC 工程（FPGA+MCU 全套）             |
 | `-list_soc`                         | 列出可用 SoC 预设                                                    |

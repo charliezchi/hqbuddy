@@ -40,6 +40,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -set_top <name>` — 修改 TOP_MODULE
 - `hqbuddy -get_device [<file>]` — 查看器件；`hqbuddy -set_device [<part>] [<file>]` — 修改器件（支持交互式选择+模糊搜索），自动同步工程内 `.hqip` 的 `device=` 字段并校验 dv_list.xml
 - `hqbuddy -get_pin_bank <pin> [-device <part>]` — 查询引脚所属 IO bank（缺省器件取当前目录 `.hqprj`），底层用 `dv.get_pin_bank`
+- `hqbuddy -udev [<part>|<.hqprj>] [--arch|--iotype|--pkg] [-o <dir>] [--fmt text|csv|html]` — 原生 `'udev.*` 器件报告（**只需器件、无需设计**；`dv.setup` 后即可调用）。`--arch` tile 架构图：html（默认，着色网格地图 + site 名图 + 资源 Count）/ csv（两份 36×N 网格）/ text（原生全量 dump，含 Count 汇总、Wire Group、逐 pin 详情）；`--iotype` 各 bank IO 电气标准表；`--pkg` 封装管脚 txt + CSV（IO/site/tile/bank/desc）。目标缺省：先探测 cwd 唯一 `.hqprj`，否则交互选器件。实现坑：同会话 `'udev.*` 互相干扰要分会话跑；`'udev.pkg.report` 输出直写控制台（管道/重定向都抓不到）必须用 `-file`；`'udev.report -file` 出的是无网格 XML，网格只在控制台输出里（3.23.0）
 - `hqbuddy -filelist [<file>] [-o <out>]` — 提取 FILE_SRC 列表
 - `hqbuddy -clean [-force]` — 按内置清单清理工程目录（保留 .hqprj；当前目录无 .hqprj 时拒绝执行；`-force` 跳过确认，同时删除空目录）
 

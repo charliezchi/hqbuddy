@@ -19,6 +19,7 @@ from .flow import run_seed_sweep
 from .xpn import run_xpn, run_xpn_inspect
 from .xpn2bin import run_xpn2bin
 from .heatmap import run_heatmap
+from .udev import run_udev
 from .netlist import run_edf2v, run_netlist_build, run_vla_gen
 from .doctor import run_doctor
 from .synopt import run_synopt
@@ -74,6 +75,14 @@ Project:
   -set_device [<part>] [<.hqprj>]       Set device part (interactive if no part)
   -get_pin_bank <pin> [-device <part>]  Show the IO bank of a pin
                                         (device from .hqprj, or -device <part>)
+  -udev [<part>|<.hqprj>] [--arch|--iotype|--pkg]
+     [-o <dir>] [--fmt text|csv|html]   Device reports via native 'udev.*' — no
+                                        design needed: --arch tile-architecture
+                                        map (html colored map default; csv; text
+                                        native dump), --iotype IO standards,
+                                        --pkg package pins (+csv).  No target:
+                                        single .hqprj in cwd, else interactive
+                                        part picker (arrows + Enter)
   -new_prj <name> [-device <part>]     Create .hqprj project from template
   -new_soc <name> [-core cm3|star]     Scaffold a full SoC project (FPGA+MCU)
      [-preset <example>] [-dir <p>]      from a demo preset (-list_soc to see)
@@ -1039,6 +1048,64 @@ def cmd_heatmap(args):
     run_heatmap(xpn_path, output_name, open_viewer=open_viewer, lang=lang)
 
 
+def cmd_udev(args):
+    """Native device reports ('udev.*), no design netlist needed.
+
+    Positional: part or .hqprj (omitted: single .hqprj in cwd, else
+    interactive part picker).  Flags: --arch/--iotype/--pkg (default all),
+    -o <dir>, --fmt text|csv|html (arch rendering, html default)."""
+    sections = []
+    out_dir = None
+    fmt = "html"
+    target = None
+
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a in ('--arch', '--iotype', '--pkg'):
+            name = a[2:]
+            if name not in sections:
+                sections.append(name)
+            i += 1
+        elif a == '-o':
+            if i + 1 >= len(args):
+                print("Error: -o requires an output directory")
+                sys.exit(1)
+            out_dir = args[i + 1]
+            i += 2
+        elif a.startswith('-o') and len(a) > 2:
+            out_dir = a[2:]
+            i += 1
+        elif a == '--fmt':
+            if i + 1 >= len(args):
+                print("Error: --fmt requires a value (text|csv|html)")
+                sys.exit(1)
+            fmt = args[i + 1].lower()
+            i += 2
+        elif a.startswith('--fmt'):
+            fmt = a[5:].lower()
+            i += 1
+        elif a.startswith('-'):
+            print(f"Error: unknown -udev option(s): {a}")
+            print("  (supported: --arch --iotype --pkg -o <dir> "
+                  "--fmt <text|csv|html> [<part>|<.hqprj>])")
+            sys.exit(1)
+        elif target is None:
+            target = a
+            i += 1
+        else:
+            print(f"Error: unexpected argument: {a}")
+            sys.exit(1)
+
+    if fmt not in ('text', 'csv', 'html'):
+        print(f"Error: unsupported --fmt value '{fmt}' (text|csv|html)")
+        sys.exit(1)
+    if not sections:
+        sections = ['arch', 'iotype', 'pkg']
+
+    run_udev(target, sections, out_dir=out_dir, arch_fmt=fmt)
+
+
 def cmd_edf2v(args):
     """Convert a third-party EDIF netlist to a Verilog netlist."""
     edif_path = None
@@ -1687,6 +1754,11 @@ def main():
     # Routing heatmap viewer JSON from routed XPN
     if first == '-heatmap':
         cmd_heatmap(args[1:])
+        return
+
+    # Native device reports ('udev.*), no design needed
+    if first == '-udev':
+        cmd_udev(args[1:])
         return
 
     # Device
