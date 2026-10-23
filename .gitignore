@@ -3,7 +3,7 @@
 dist/
 build/
 *.spec
-hqbuddy_v*_win64.zip
+hqbuddy_v*.zip
 
 # Python
 __pycache__/

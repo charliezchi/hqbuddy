@@ -45,18 +45,16 @@ python build.py
 
 > **构建/安装完成后，首次使用前请先配置 HqFPGA 路径（见下）**，否则 hqbuddy 会一直提示 `no HqFPGA versions found`。
 
-## 导出离线分发压缩包
+## 导出离线分发源码包
 
-给无法访问 GitHub 的用户分发版本时，用一键导出脚本打包：
+给无法访问 GitHub 的用户分发版本时，用一键导出脚本打源码包：
 
 ```bat
-python export.py                 # 打包现有 hqbuddy.exe（缺失或落后于源码时自动重建）
-python export.py --build         # 强制先重建再打包
-python export.py --no-build      # 只打包现有 exe（缺失则报错）
-python export.py -o <dir>        # 指定输出目录（默认仓库根目录）
+python export.py                 # 打包到仓库根目录
+python export.py -o <dir>        # 指定输出目录
 ```
 
-产出 `hqbuddy_v<版本>_win64.zip`（约 14 MB），解压为 `hqbuddy_v<版本>/` 目录，内含 `hqbuddy.exe`、`hqbuddy/` 源码包、`templates/` 工程模板、`README.md`、`LICENSE`、`install_skill.py` 与 `skills/hqfpga/`。收件人解压后可直接运行 `hqbuddy.exe`（首次使用同样需配置 HqFPGA 路径）；有 Python 3.10+ 时也可从源码运行（`python -m hqbuddy`）；如需 AI Agent skill，在解压目录运行 `python install_skill.py`（可选）。
+产出 `hqbuddy_v<版本>_src.zip`（约 2 MB），解压为 `hqbuddy_v<版本>/` 目录，内含 `build.py`、`hqbuddy/` 源码包、`templates/` 工程模板、`skills/hqfpga/`、`install_skill.py`、`README.md` 与 `LICENSE`。**包内不含 exe**——收件人在解压目录运行 `python build.py` 自行构建（需 Python 3.10+，PyInstaller 自动安装，构建后自动注册 PATH 并可选安装 AI skill），之后的首次使用配置与在线用户一致。
 
 ## ⚠️ 首次使用：配置 HqFPGA 安装路径（必读）
 
