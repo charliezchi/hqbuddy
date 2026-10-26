@@ -79,17 +79,17 @@ def run_encrypt(args: list) -> None:
             i += 1
 
     if not inputs:
-        # Default: all .v files and .f filelists in the current directory
+        # Default: all .v/.vh files and .f filelists in the current directory
         inputs = sorted(
             f for f in os.listdir('.')
-            if os.path.isfile(f) and os.path.splitext(f)[1].lower() in ('.v', '.f')
+            if os.path.isfile(f) and os.path.splitext(f)[1].lower() in _SRC_EXTS + ('.f',)
         )
         if inputs:
-            print(f"No input specified, encrypting all .v/.f in current directory: "
+            print(f"No input specified, encrypting all .v/.vh/.f in current directory: "
                   f"{', '.join(inputs)}")
         else:
             print("Error: -encrypt requires input files (.v/.vh/.f), "
-                  "and no .v/.f files found in current directory")
+                  "and no .v/.vh/.f files found in current directory")
             sys.exit(1)
 
     if method not in ('aes128-cbc', 'aes256-cbc'):
@@ -107,7 +107,7 @@ def run_encrypt(args: list) -> None:
     failed = 0
     total = len(files) + len(lists)
 
-    def _run(mode: str, target: str) -> bool:
+    def _run(mode: str, target: str) -> tuple[bool, str]:
         cmd = [exe, mode, target, '-pk', keys, '-m', method, '-d', outdir]
         if protect_only:
             cmd.append('-po')

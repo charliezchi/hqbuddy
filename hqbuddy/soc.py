@@ -42,7 +42,9 @@ def refresh_hqprj_times(hqprj_abs: str) -> tuple[int, int]:
         if stripped.startswith("FILE_TIME_CST=") or stripped.startswith("FILE_TIME="):
             continue
         out.append(line)
-        if stripped.startswith("FILE_SRC="):
+        # FILE_SRC=NONE is a placeholder, not a source: the GUI writes no
+        # FILE_TIME for it (see templates/project.hqprj)
+        if stripped.startswith("FILE_SRC=") and stripped != "FILE_SRC=NONE":
             src_count += 1
             out.append(f"FILE_TIME={now}\n")
         elif stripped.startswith("FILE_TC=") and stripped != "FILE_TC=NONE":
@@ -278,11 +280,35 @@ def cmd_merge_bin(args):
             sys.exit(1)
 
 
+def _uv4_from_registry() -> str | None:
+    """Keil MDK registers its install path; query it before guessing drives."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        for sub in (r"SOFTWARE\WOW6432Node\Keil\Products\MDK",
+                    r"SOFTWARE\Keil\Products\MDK"):
+            try:
+                with winreg.OpenKey(root, sub) as k:
+                    path, _ = winreg.QueryValueEx(k, "Path")
+            except OSError:
+                continue
+            exe = os.path.join(path, "UV4", "UV4.exe")
+            if os.path.isfile(exe):
+                return exe
+    return None
+
+
 def _find_uv4() -> str | None:
-    """Locate Keil uVision UV4.exe: config key 'keil_uv4', then common paths."""
+    """Locate Keil uVision UV4.exe: config key 'keil_uv4', then the registry
+    (Keil MDK writes its install path there), then common paths."""
     p = config.load_config().get("keil_uv4")
     if p and os.path.isfile(p):
         return p
+    reg = _uv4_from_registry()
+    if reg:
+        return reg
     drive_candidates = []
     for drive in "CDEFGH":
         drive_candidates += [

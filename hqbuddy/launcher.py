@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from . import config, scanner
+from .utils import wait_process
 
 
 def resolve_hqfpga_version() -> dict | None:
@@ -78,28 +79,7 @@ def launch_tool(version: dict, tool: str, extra_args: list) -> None:
         else:
             # CLI tool: run in foreground, inherit stdin/stdout/stderr
             proc = subprocess.Popen(cmd)
-            try:
-                proc.wait()
-            except KeyboardInterrupt:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    proc.wait()
-                raise
+            wait_process(proc)
     except Exception as e:
         print(f"Error launching {tool}: {e}")
-        sys.exit(1)
-
-
-def open_path(path: str) -> None:
-    """Open a file or directory with the default application."""
-    if not os.path.exists(path):
-        print(f"Error: Path not found: {path}")
-        sys.exit(1)
-    try:
-        os.startfile(path)
-    except Exception as e:
-        print(f"Error opening path: {e}")
         sys.exit(1)

@@ -29,7 +29,7 @@ def _work_dir(hqprj_arg: str | None) -> str:
     if hqprj_arg:
         hqprj = hqprj_arg
     else:
-        matches = glob.glob("*.hqprj")
+        matches = sorted(glob.glob("*.hqprj"))
         if not matches:
             print("Error: no .hqprj file specified and none found in current directory.")
             sys.exit(1)
@@ -68,9 +68,11 @@ def save_registry(work: str, reg: dict) -> None:
 
 def _parse_probe(spec: str) -> dict:
     """Parse 'name:width' (width optional, default 1)."""
-    name, _, w = spec.rpartition(":")
-    name = name or spec
-    if name != name.strip() or not name:
+    name, sep, w = spec.rpartition(":")
+    if not sep or not name:
+        # no colon -> bare name; empty name -> ':8'-style typo, not a probe
+        name, w = spec, ""
+    if not name or name != name.strip() or ":" in name:
         print(f"Error: invalid probe name in '{spec}' (use name:width; "
               f"repeat -in/-out or comma-separate for multiple probes)")
         sys.exit(1)
@@ -79,11 +81,14 @@ def _parse_probe(spec: str) -> dict:
     except ValueError:
         print(f"Error: invalid probe width in '{spec}'")
         sys.exit(1)
+    if width < 1:
+        print(f"Error: probe width must be >= 1 in '{spec}'")
+        sys.exit(1)
     return {"name": name, "width": width}
 
 
 def _read_die(work: str) -> str:
-    matches = glob.glob(os.path.join(work, "*.hqprj"))
+    matches = sorted(glob.glob(os.path.join(work, "*.hqprj")))
     if matches:
         with open(matches[0], "r", encoding="utf-8") as f:
             for line in f:
@@ -110,7 +115,7 @@ def cmd_gen(work: str, module: str, in_width: int, out_width: int) -> None:
 
     # hqfpga's vio.ip.create emits the module to a file named after the -O value
     scratch = os.path.join(work, "_vio_ip_tmp").replace(os.sep, "/")
-    tcl_path = os.path.join(work, "_hqbuddy_vio_gen.tcl")
+    tcl_path = os.path.join(work, f"_hqbuddy_vio_gen_{os.getpid()}.tcl")
     with open(tcl_path, "w", encoding="utf-8") as f:
         f.write(f"vio.ip.create -O {scratch} -output_module {module}\nexit\n")
     import subprocess
@@ -164,15 +169,37 @@ def cmd_gen(work: str, module: str, in_width: int, out_width: int) -> None:
     print("      register named probes: hqbuddy -vio -reg -in name:w [-in ...] [-out name:w ...]")
 
 
-def cmd_reg(work: str, ins: list, outs: list) -> None:
+def cmd_reg(work: str, ins: list, outs: list, clear: bool = False) -> None:
+    """Upsert probes into the registry by name (-reg is no longer a
+    whole-table replace: re-registering one probe used to silently drop
+    every other registered probe)."""
     reg = load_registry(work)
+
+    if clear:
+        reg["inputs"], reg["outputs"] = [], []
+        save_registry(work, reg)
+        print(f"[OK] Probe registry cleared: {_registry_path(work)}")
+        return
 
     def expand(specs):
         # accept comma-separated probes in one -in/-out: "-in cnt:8,fb:8"
         return [t for s in specs for t in s.split(",") if t]
 
-    reg["inputs"] = [_parse_probe(s) for s in expand(ins)]
-    reg["outputs"] = [_parse_probe(s) for s in expand(outs)]
+    def upsert(table: str, specs: list):
+        probes = reg.setdefault(table, [])
+        for p in (_parse_probe(s) for s in expand(specs)):
+            for q in probes:
+                if q["name"] == p["name"]:
+                    if q["width"] != p["width"]:
+                        print(f"Note: probe {p['name']} width "
+                              f"{q['width']} -> {p['width']}")
+                        q["width"] = p["width"]
+                    break
+            else:
+                probes.append(p)
+
+    upsert("inputs", ins)
+    upsert("outputs", outs)
     reg["in_width"] = sum(p["width"] for p in reg["inputs"])
     reg["out_width"] = sum(p["width"] for p in reg["outputs"])
     save_registry(work, reg)
@@ -343,18 +370,22 @@ def run_vio(args: list) -> None:
 
     if rest[0] == "-reg":
         ins, outs = [], []
+        clear = False
         target = None
         for a in rest[1:]:
             if a == "-in":
                 target = ins
             elif a == "-out":
                 target = outs
+            elif a == "-clear":
+                clear = True
+                target = None
             elif target is None:
                 print(f"Error: -reg needs -in/-out before probes: {a}")
                 sys.exit(1)
             else:
                 target.append(a)
-        cmd_reg(work, ins, outs)
+        cmd_reg(work, ins, outs, clear=clear)
         return
 
     if rest[0] == "-read":

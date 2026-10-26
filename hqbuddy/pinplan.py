@@ -174,8 +174,4 @@ def run_pinplan(args: list) -> None:
         print(f"     未匹配: {', '.join(unmatched)}")
 
 
-def _board_table_unused():
-    pass
-
-
 from . import launcher  # noqa: E402

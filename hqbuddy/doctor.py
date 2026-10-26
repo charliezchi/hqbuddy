@@ -12,35 +12,8 @@ import sys
 import tempfile
 
 from . import device as device_mod
+from .hqprj_parser import parse_hqprj
 from .ipmgr import list_ip_files
-
-
-def _hqprj_fields(hqprj_path: str) -> tuple[dict, list, list, list]:
-    fields: dict = {}
-    file_src: list = []
-    file_tc: list = []
-    file_pc: list = []
-    for line in open(hqprj_path, encoding="utf-8", errors="replace"):
-        line = line.rstrip("\r\n")
-        if "=" not in line:
-            continue
-        key, val = line.split("=", 1)
-        if key == "FILE_SRC":
-            file_src.append(val)
-        elif key == "FILE_TC":
-            file_tc.append(val)
-        elif key == "FILE_PC":
-            file_pc.append(val)
-        elif key not in fields:
-            fields[key] = val
-    return fields, file_src, file_tc, file_pc
-
-
-def _resolve(raw: str, work_dir: str) -> str:
-    if raw == "NONE":
-        return ""
-    p = raw.replace("$WORK_DIR$", os.path.join(work_dir, ""))
-    return os.path.normpath(p)
 
 
 def run_doctor(args: list) -> None:
@@ -50,7 +23,11 @@ def run_doctor(args: list) -> None:
         print(f"Error: file not found: {hqprj_path}")
         sys.exit(1)
     work_dir = os.path.dirname(hqprj_path)
-    fields, file_src, file_tc, file_pc = _hqprj_fields(hqprj_path)
+    info = parse_hqprj(hqprj_path)
+    fields = info["fields"]
+    file_src = info["sources"]
+    file_tc = info["tc"]
+    file_pc = info["pc"]
 
     fails: list = []
     warns: list = []
@@ -71,12 +48,9 @@ def run_doctor(args: list) -> None:
     resolved_src = []
     seen = {}
     missing_src = 0
-    for raw in file_src:
-        if raw == "NONE":
-            continue
-        p = _resolve(raw, work_dir)
+    for p in file_src:
         resolved_src.append(p)
-        seen.setdefault(os.path.normcase(p), []).append(raw)
+        seen.setdefault(os.path.normcase(p), []).append(p)
         if not os.path.isfile(p):
             fails.append(f"FILE_SRC 文件不存在: {p}")
             missing_src += 1
@@ -111,18 +85,15 @@ def run_doctor(args: list) -> None:
 
     # -- 4. constraints & time entries (R15 defect class) --------------------
     for kind, lst in (("FILE_TC", file_tc), ("FILE_PC", file_pc)):
-        for raw in lst:
-            p = _resolve(raw, work_dir)
-            if p and not os.path.isfile(p):
+        for p in lst:
+            if not os.path.isfile(p):
                 fails.append(f"{kind} 文件不存在: {p}")
-    if not file_pc or file_pc == ["NONE"]:
+    if not file_pc:
         warns.append("无管脚约束（FILE_PC=NONE）——bitgen 会报 BIT-11")
-    n_src = len([f for f in file_src if f != "NONE"])
+    n_src = len(file_src)
     n_cst = len(file_tc) + len(file_pc)
-    n_time = sum(1 for ln in open(hqprj_path, encoding="utf-8", errors="replace")
-                 if ln.startswith("FILE_TIME="))
-    n_timecst = sum(1 for ln in open(hqprj_path, encoding="utf-8", errors="replace")
-                    if ln.startswith("FILE_TIME_CST="))
+    n_time = len(info["times"])
+    n_timecst = len(info["times_cst"])
     if n_time != n_src:
         fails.append(f"FILE_TIME 条目数({n_time}) != FILE_SRC 数({n_src})"
                      f"——用 hqbuddy -refresh_time 修复")
@@ -152,16 +123,15 @@ def run_doctor(args: list) -> None:
     # -- 5b. UPC pin pre-check (ball legality + clock-on-P-side) --------------
     # PHY-CHK-030 / CDEV003 otherwise only surface mid-build; phycst.loc.check
     # needs only dv.setup (no design), so we can validate before any build.
-    if file_pc and file_pc != ["NONE"]:
+    if file_pc:
         pkg = fields.get("PACKAGES", "")
         spd = fields.get("SPEEDS", "")
         cond = fields.get("CONDITION", "")
         family = fields.get("FAMILY", "SEAL")
         part_full = f"{die}-{spd}{pkg}{cond}" if (die and pkg and spd and cond) else None
         pins = {}
-        for raw in file_pc:
-            p = _resolve(raw, work_dir)
-            if not p or not os.path.isfile(p):
+        for p in file_pc:
+            if not os.path.isfile(p):
                 continue
             for ln in open(p, encoding="utf-8", errors="replace"):
                 m = re.match(r'\s*phycst\.pin\.set\s+\{([^}]+)\}\s+(\S+)', ln)
@@ -208,9 +178,8 @@ def run_doctor(args: list) -> None:
                 # clock-on-P-side: clock ports (SDC create_clock get_ports) must
                 # sit on P-side balls, else PHY-CHK-030 at build time
                 clk_nets = set()
-                for raw in file_tc:
-                    s = _resolve(raw, work_dir)
-                    if not s or not os.path.isfile(s):
+                for s in file_tc:
+                    if not os.path.isfile(s):
                         continue
                     for ln in open(s, encoding="utf-8", errors="replace"):
                         m3 = re.search(r'get_ports\s+\{?([A-Za-z_][\w\[\]:]*)', ln)
@@ -240,10 +209,6 @@ def run_doctor(args: list) -> None:
         oks.append("HqInsight 工程存在")
         ddf = os.path.join(work_dir, "hqins_run", "hq_import",
                            f"{top}_insight.ddf")
-        hqins_depth = None
-        for ln in open(hqins, encoding="utf-8", errors="replace"):
-            if ln.startswith("0_LA:") and "MEMORY" not in ln:
-                pass
         depth_txt = None
         in_sec = False
         for ln in open(hqins, encoding="utf-8", errors="replace"):
@@ -254,8 +219,7 @@ def run_doctor(args: list) -> None:
             if in_sec and ":" in st:
                 depth_txt = st.split(":", 1)[1].strip()
                 break
-        if depth_txt:
-            hqins_depth = int(depth_txt)
+        hqins_depth = int(depth_txt) if depth_txt else None
         if os.path.isfile(ddf):
             oks.append(f"ddf 存在（流程权威配置）")
             m = re.search(r"<depth>(\d+)</depth>",
@@ -292,8 +256,11 @@ def run_doctor(args: list) -> None:
 
 def _detect_hqprj() -> str:
     import glob
-    hits = glob.glob("*.hqprj")
+    hits = sorted(glob.glob("*.hqprj"))
     if not hits:
         print("Error: no .hqprj in current directory; pass a project path.")
         sys.exit(1)
+    if len(hits) > 1:
+        print(f"Note: multiple .hqprj files in cwd; using {hits[0]} "
+              f"(others: {', '.join(hits[1:])})")
     return hits[0]

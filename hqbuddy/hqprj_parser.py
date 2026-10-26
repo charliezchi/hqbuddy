@@ -8,7 +8,6 @@ Provides GUI-parity project understanding:
 """
 
 import os
-from typing import Optional
 
 
 def _to_forward_slash(path: str) -> str:
@@ -17,8 +16,12 @@ def _to_forward_slash(path: str) -> str:
 
 
 def _resolve(raw_path: str, work_dir: str) -> str:
-    """Resolve $WORK_DIR$ and make absolute with forward slashes."""
+    """Resolve $WORK_DIR$ and relative paths against work_dir, absolute with
+    forward slashes (the GUI resolves bare relative paths against the project
+    directory, not its own cwd)."""
     resolved = raw_path.replace("$WORK_DIR$", work_dir + os.sep)
+    if not os.path.isabs(resolved):
+        resolved = os.path.join(work_dir, resolved)
     return _to_forward_slash(os.path.normpath(resolved))
 
 
@@ -33,9 +36,12 @@ def parse_hqprj(hqprj_path: str) -> dict:
       disabled                -- FILE_SRC_DISABLED files (present but excluded
                                  from synthesis by the GUI)
       missing                 -- enabled sources that do not exist on disk
-      times                   -- FILE_TIME entries in file order
+      times / times_cst       -- FILE_TIME / FILE_TIME_CST entries in file order
+      tc / pc                 -- resolved constraint files (FILE_TC / FILE_PC,
+                                 NONE entries skipped)
       include_dir             -- RTL_9 include path ('' when NONE)
       top, die, family, out_dir, proj_name -- common scalar conveniences
+      out_dir_abs             -- OUT_DIR resolved against the project dir
     """
     hqprj_path = os.path.abspath(hqprj_path)
     work_dir = os.path.dirname(hqprj_path)
@@ -44,6 +50,13 @@ def parse_hqprj(hqprj_path: str) -> dict:
     sources: list = []
     disabled: list = []
     times: list = []
+    times_cst: list = []
+    tc: list = []
+    pc: list = []
+
+    def _is_none(value: str) -> bool:
+        # FILE_SRC=NONE / FILE_TC=NONE are GUI placeholders, not paths
+        return value.strip() == "NONE"
 
     with open(hqprj_path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
@@ -52,11 +65,21 @@ def parse_hqprj(hqprj_path: str) -> dict:
                 continue
             key, value = line.split("=", 1)
             if key == "FILE_SRC":
-                sources.append(_resolve(value, work_dir))
+                if not _is_none(value):
+                    sources.append(_resolve(value, work_dir))
             elif key == "FILE_SRC_DISABLED":
-                disabled.append(_resolve(value, work_dir))
+                if not _is_none(value):
+                    disabled.append(_resolve(value, work_dir))
+            elif key == "FILE_TC":
+                if not _is_none(value):
+                    tc.append(_resolve(value, work_dir))
+            elif key == "FILE_PC":
+                if not _is_none(value):
+                    pc.append(_resolve(value, work_dir))
             elif key == "FILE_TIME":
                 times.append(value)
+            elif key == "FILE_TIME_CST":
+                times_cst.append(value)
             elif key not in fields:
                 fields[key] = value
 
@@ -66,6 +89,7 @@ def parse_hqprj(hqprj_path: str) -> dict:
         v = fields.get(key, default)
         return default if v in ("NONE", "undefined") and default != "" else (v or default)
 
+    out_dir = field("OUT_DIR", "hq_run")
     return {
         "path": _to_forward_slash(hqprj_path),
         "work_dir": _to_forward_slash(work_dir),
@@ -74,12 +98,16 @@ def parse_hqprj(hqprj_path: str) -> dict:
         "disabled": disabled,
         "missing": missing,
         "times": times,
+        "times_cst": times_cst,
+        "tc": tc,
+        "pc": pc,
         "include_dir": _resolve(fields.get("RTL_9", ""), work_dir)
         if fields.get("RTL_9", "NONE") != "NONE" else "",
         "top": field("TOP_MODULE"),
         "die": field("DIE"),
         "family": field("FAMILY"),
-        "out_dir": field("OUT_DIR", "hq_run"),
+        "out_dir": out_dir,
+        "out_dir_abs": _resolve(out_dir, work_dir),
         "proj_name": field("PROJ_NAME"),
     }
 

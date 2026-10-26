@@ -9,6 +9,8 @@ import sys
 import time
 
 from . import launcher
+from .hqprj_parser import parse_hqprj
+from .utils import wait_process
 
 
 def _generate_temp_tcl(hqprj_path: str, output_tcl: str | None = None) -> str:
@@ -25,8 +27,9 @@ def _generate_temp_tcl(hqprj_path: str, output_tcl: str | None = None) -> str:
     work_dir = os.path.dirname(os.path.abspath(hqprj_path))
     hqprj_abs = os.path.abspath(hqprj_path)
 
-    # Use a fixed temp file name to avoid collisions
-    temp_tcl = os.path.join(work_dir, "_hqbuddy_flow_temp.tcl")
+    # PID-qualified name: a fixed name breaks concurrent hqbuddy runs in the
+    # same project directory (each overwrites the other's TCL)
+    temp_tcl = os.path.join(work_dir, f"_hqbuddy_flow_temp_{os.getpid()}.tcl")
 
     # Use forward slashes in TCL to avoid backslash escaping issues
     hqprj_tcl = hqprj_abs.replace("\\", "/")
@@ -182,16 +185,7 @@ def _run_hqfpga(hqfpga_path: str, temp_tcl: str, work_dir: str) -> None:
     print("")
 
     proc = subprocess.Popen(cmd, cwd=work_dir)
-    try:
-        proc.wait()
-    except KeyboardInterrupt:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        raise
+    wait_process(proc)
 
     if proc.returncode != 0:
         print(f"")
@@ -239,24 +233,46 @@ def _resolve_hqfpga() -> str:
     return version['hqfpga_path']
 
 
-def _fresh_bitstream(work_dir: str, since: float) -> str | None:
+def _bitstream_dirs(work_dir: str, hqprj_path: str | None = None) -> list:
+    """Directories a flow may drop its bitstream in: the project dir itself,
+    the default hq_run/, and the project's own OUT_DIR when known (a custom
+    OUT_DIR in the .hqprj is where the GUI flow actually writes)."""
+    dirs = [work_dir, os.path.join(work_dir, "hq_run")]
+    if hqprj_path and os.path.isfile(hqprj_path):
+        try:
+            dirs.append(parse_hqprj(hqprj_path)["out_dir_abs"])
+        except OSError:
+            pass
+    uniq: list = []
+    seen = set()
+    for d in dirs:
+        key = os.path.normcase(os.path.normpath(d))
+        if key not in seen:
+            seen.add(key)
+            uniq.append(d)
+    return uniq
+
+
+def _fresh_bitstream(work_dir: str, since: float,
+                     hqprj_path: str | None = None) -> str | None:
     """Return the newest .bin/.bit produced after `since`, or None. The flow
     can exit 0 while bitgen actually failed, so the artifact (not the exit
     code) is truth."""
     candidates = []
-    for pat in ("*.bin", "*.bit"):
-        candidates.extend(glob.glob(os.path.join(work_dir, pat)))
-        candidates.extend(glob.glob(os.path.join(work_dir, "hq_run", pat)))
+    for d in _bitstream_dirs(work_dir, hqprj_path):
+        for pat in ("*.bin", "*.bit"):
+            candidates.extend(glob.glob(os.path.join(d, pat)))
     fresh = [p for p in candidates if os.path.getmtime(p) >= since]
     if not fresh:
         return None
     return max(fresh, key=os.path.getmtime)
 
 
-def _check_bitstream(work_dir: str, since: float) -> None:
+def _check_bitstream(work_dir: str, since: float,
+                     hqprj_path: str | None = None) -> None:
     """Verify a fresh bitstream was produced; the flow can exit 0 while
     bitgen actually failed, so the artifact (not the exit code) is truth."""
-    if _fresh_bitstream(work_dir, since) is None:
+    if _fresh_bitstream(work_dir, since, hqprj_path) is None:
         print("")
         print("Error: flow finished but no fresh .bin/.bit was produced "
               "(bitgen likely failed). Check hqfpga.log and the .rpt reports.")
@@ -502,12 +518,10 @@ def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False,
         print(f"Error: file not found: {hqprj_path}")
         sys.exit(1)
     work_dir = os.path.dirname(os.path.abspath(hqprj_path))
+    prj = parse_hqprj(hqprj_path)
     # FILE_TC 预检：sweep 的 TCL 由 hqprj2tcl 生成，工程无时序约束时它半路失败
     # （实测），提前给出可操作的报错。
-    m_tc = re.search(r"^FILE_TC=(.*)$",
-                     open(hqprj_path, encoding="utf-8", errors="replace").read(), re.M)
-    tc = m_tc.group(1).strip() if m_tc else ""
-    if not tc or tc.upper() == "NONE":
+    if not prj["tc"]:
         print("Error: .hqprj 未配置 FILE_TC（时序约束）——seed_sweep 的 TCL 生成会失败。")
         print("       请先在 .hqprj 中设置 FILE_TC=$WORK_DIR$<sdc 路径>（或用 GUI 挂约束）再重试。")
         sys.exit(1)
@@ -537,15 +551,11 @@ def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False,
         sweep_dir = os.path.join(work_dir, "seed_sweep")
     os.makedirs(sweep_dir, exist_ok=True)
     hqfpga_path = _resolve_hqfpga()
-    top = None
-    m_top = re.search(r"TOP_MODULE[= ]+(\S+)",
-                      open(hqprj_path, encoding="utf-8", errors="replace").read())
-    if m_top:
-        top = m_top.group(1)
+    top = prj["top"] or None
 
     # 1. generate the base flow TCL inside the sweep dir (hqprj2tcl writes
     #    relative to cwd), so the project root stays clean
-    temp_tcl = os.path.join(sweep_dir, "_hqbuddy_sweep_temp.tcl")
+    temp_tcl = os.path.join(sweep_dir, f"_hqbuddy_sweep_temp_{os.getpid()}.tcl")
     hqprj_tcl = os.path.abspath(hqprj_path).replace("\\", "/")
     tcl_path = os.path.join(sweep_dir, "run_hqprj.tcl")
     _remove_stale_tcl(tcl_path)
@@ -671,7 +681,7 @@ def run_seed_sweep(hqprj_path: str, n: int = 3, j: int = 4, ins: bool = False,
             if m:
                 val = float(m.group(1))
                 fmax_mhz = {"GHz": val * 1000, "kHz": val / 1000}.get(m.group(2), val)
-        bin_path = _fresh_bitstream(seed_dir, started)
+        bin_path = _fresh_bitstream(seed_dir, started, hqprj_path)
         rc = rc_by_seed.get(seed)
         if bin_path:
             status = "ok"

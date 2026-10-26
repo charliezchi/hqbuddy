@@ -13,24 +13,10 @@ import xml.etree.ElementTree as ET
 
 
 from . import launcher
-from .hqprj_parser import extract_filelist
+from .hqprj_parser import extract_filelist, parse_hqprj
 
 # sample_type encoding in .hqins [SIGNAL JSON INFO]
 SAMPLE_TYPES = {2: "sample", 3: "trigger", 4: "sample+trigger"}
-
-
-def _read_hqprj_fields(hqprj_path: str, keys: tuple) -> dict:
-    """Read selected KEY=VALUE fields from a .hqprj file."""
-    result = {}
-    with open(hqprj_path, "r", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            line = line.strip()
-            if "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            if key in keys:
-                result[key] = value
-    return result
 
 
 def resolve_insight_project(hqprj_arg: str | None, require_hqins: bool = True) -> dict:
@@ -43,7 +29,7 @@ def resolve_insight_project(hqprj_arg: str | None, require_hqins: bool = True) -
     if hqprj_arg:
         hqprj = hqprj_arg
     else:
-        matches = glob.glob("*.hqprj")
+        matches = sorted(glob.glob("*.hqprj"))
         if not matches:
             print("Error: no .hqprj file specified and none found in current directory.")
             sys.exit(1)
@@ -55,10 +41,10 @@ def resolve_insight_project(hqprj_arg: str | None, require_hqins: bool = True) -
 
     hqprj = os.path.abspath(hqprj)
     work_dir = os.path.dirname(hqprj)
-    fields = _read_hqprj_fields(hqprj, ("TOP_MODULE", "DIE", "FAMILY"))
-    top = fields.get("TOP_MODULE")
-    die = fields.get("DIE")
-    family = fields.get("FAMILY")
+    info = parse_hqprj(hqprj)
+    top = info["top"]
+    die = info["die"]
+    family = info["family"]
     if not top or not die:
         print("Error: .hqprj 缺少 TOP_MODULE 或 DIE 字段")
         sys.exit(1)
@@ -369,40 +355,42 @@ def _check_trigger_signals(proj: dict, parsed: dict) -> list:
     return result
 
 
+def _fold_err(msg):
+    print(f"Error: {msg}")
+    print("       硬件上每个触发信号只有一个比较单元，同信号多条件无法组合；")
+    print("       请改写成单条件，或用跨信号条件表达。")
+    sys.exit(1)
+
+
+def _canon_cond(c: dict) -> dict:
+    """Push NOT into the operator: NOT EQ v -> NE v etc.  Edges cannot be
+    pushed (NOT RISE is steady-high OR steady-low, NOT 'FALL'), so a negated
+    edge condition is an error here."""
+    c = dict(c)
+    if not c.get("negate"):
+        return c
+    if c["kind"] == "arith":
+        if c["op"] not in ("EQ", "NE"):
+            _fold_err(f"信号 {c['signal']} 的 NOT {c['op']} 无法合并为单比较单元")
+        c["op"] = "NE" if c["op"] == "EQ" else "EQ"
+    elif c["kind"] == "edge":
+        _fold_err(f"信号 {c['signal']} 的 NOT {c['op']} 无法合并为单比较单元"
+                  f"（NOT 边沿不等价于反向边沿，硬件取反位实测会被丢弃）")
+    else:
+        _fold_err(f"信号 {c['signal']} 的 NOT RANGE 无法合并为单比较单元")
+    c["negate"] = False
+    return c
+
+
 def _fold_same_signal(a: dict, b: dict) -> dict:
-    """Fold two conditions on the SAME signal into one compare-unit condition.
+    """Fold two conditions on the SAME signal into one compare-unit condition
+    (AND/intersection semantics).
 
     The LA hardware has exactly ONE compare unit per trigger signal, so a
     second condition on the same signal silently replaces the first.  Fold the
     semantically expressible cases and error on the rest."""
-
-    def err(msg):
-        print(f"Error: {msg}")
-        print("       硬件上每个触发信号只有一个比较单元，同信号多条件无法组合；")
-        print("       请改写成单条件，或用跨信号条件表达。")
-        sys.exit(1)
-
-    def canon(c):
-        """Push NOT into the operator: NOT EQ v -> NE v etc."""
-        c = dict(c)
-        if not c.get("negate"):
-            return c
-        if c["kind"] == "arith":
-            if c["op"] == "EQ":
-                c["op"] = "NE"
-            elif c["op"] == "NE":
-                c["op"] = "EQ"
-            else:
-                err(f"信号 {c['signal']} 的 NOT {c['op']} 无法合并为单比较单元")
-        elif c["kind"] == "edge":
-            m = {"RISE": "FALL", "FALL": "RISE", "BOTH": "X"}
-            if c["op"] not in m:
-                err(f"信号 {c['signal']} 的 NOT X 无法合并为单比较单元")
-            c["op"] = m[c["op"]]
-        else:
-            err(f"信号 {c['signal']} 的 NOT RANGE 无法合并为单比较单元")
-        c["negate"] = False
-        return c
+    err = _fold_err
+    canon = _canon_cond
 
     def fold_pair(x, y):
         if x["kind"] == "edge" and y["kind"] == "edge":
@@ -464,6 +452,109 @@ def _fold_same_signal(a: dict, b: dict) -> dict:
     return fold_pair(canon(a), canon(b))
 
 
+def _cond_intervals(c: dict) -> "list[tuple] | None":
+    """Inclusive integer intervals of an arith/range condition (None bound =
+    unbounded).  Returns None for wildcard compares (a masked EQ has no
+    interval form) and [] for an empty condition."""
+    if c["kind"] == "arith":
+        if c.get("wild"):
+            return None
+        v = c["value"]
+        return {"EQ": [(v, v)], "GE": [(v, None)], "GT": [(v + 1, None)],
+                "LE": [(None, v)], "LT": [(None, v - 1)],
+                "NE": [(None, v - 1), (v + 1, None)]}[c["op"]]
+    lop, rop = RANGE_OPS[c["op"]]
+    lo = c["lo"] + (1 if lop == "GT" else 0)
+    hi = c["hi"] - (1 if rop == "LT" else 0)
+    return [(lo, hi)] if lo <= hi else []
+
+
+def _merge_intervals(a: list, b: list) -> list:
+    """Union of two inclusive-interval lists (overlapping or adjacent
+    intervals merge into one)."""
+    ivs = sorted(a + b, key=lambda t: (t[0] is not None, t[0] or 0))
+    out: list = []
+    for lo, hi in ivs:
+        if out:
+            _plo, phi = out[-1]
+            if phi is None or (lo is not None and lo - 1 <= phi):
+                out[-1] = (out[-1][0],
+                           None if (phi is None or hi is None) else max(phi, hi))
+                continue
+        out.append((lo, hi))
+    return out
+
+
+def _interval_to_cond(base: dict, iv: tuple):
+    """Map one inclusive interval back to a single compare-unit condition
+    shaped like `base`; returns the string 'TAUT' when it covers everything."""
+    lo, hi = iv
+    if lo is None and hi is None:
+        return "TAUT"
+    if lo is not None and hi is not None:
+        if lo == hi:
+            return {**base, "kind": "arith", "op": "EQ", "value": lo}
+        return {**base, "kind": "range", "op": "RANGE_C", "lo": lo, "hi": hi}
+    if lo is None:
+        return {**base, "kind": "arith", "op": "LE", "value": hi}
+    return {**base, "kind": "arith", "op": "GE", "value": lo}
+
+
+def _fold_same_signal_or(a: dict, b: dict) -> dict:
+    """Fold two same-signal conditions under OR (union) semantics.
+
+    The ddf keeps ONE active compare unit per trigger signal, so an OR chain
+    listing the same signal twice keeps only the last condition written
+    (last-write-wins) — the user's other condition silently disappears.
+    Identical conditions dedup; unions one compare unit can express
+    (contiguous value intervals, edge widening to BOTH/X) fold; the rest is
+    rejected with an explanation."""
+    err = _fold_err
+    if a.get("negate") or b.get("negate"):
+        err(f"信号 {a['signal']} 的带 NOT 条件无法与其他同信号条件做 OR 折叠"
+            f"（硬件取反位实测会被丢弃，R25）")
+    x, y = _canon_cond(a), _canon_cond(b)
+
+    def same(p, q):
+        if p["kind"] != q["kind"]:
+            return False
+        if p["kind"] == "edge":
+            return p["op"] == q["op"]
+        if p["kind"] == "arith":
+            return (p["op"] == q["op"] and p["value"] == q["value"]
+                    and p.get("wild", 0) == q.get("wild", 0))
+        return p["op"] == q["op"] and p["lo"] == q["lo"] and p["hi"] == q["hi"]
+
+    if same(x, y):
+        return x
+
+    if x["kind"] == "edge" and y["kind"] == "edge":
+        if x["op"] == "X" or y["op"] == "X":
+            return {**x, "op": "X"}
+        if x["op"] == "BOTH" or y["op"] == "BOTH":
+            return {**x, "op": "BOTH"}
+        print(f"Note: {x['signal']} 的 {x['op']} | {y['op']} 折叠为 BOTH"
+              f"（单边沿检测单元可监视双沿）")
+        return {**x, "op": "BOTH"}
+
+    if x["kind"] == "edge" or y["kind"] == "edge":
+        err(f"信号 {x['signal']} 的边沿条件与电平条件无法在单比较单元内做 OR")
+
+    ia, ib = _cond_intervals(x), _cond_intervals(y)
+    if ia is None or ib is None:
+        err(f"信号 {x['signal']} 的通配符比较无法与其他同信号条件做 OR 折叠")
+    merged = _merge_intervals(ia, ib)
+    if not merged:
+        err(f"信号 {x['signal']} 的两个条件交集为空")
+    if len(merged) > 1:
+        err(f"信号 {x['signal']} 的 OR 并集不连续（两个分离的取值区间），"
+            f"单比较单元无法表达——请改写成单条件或跨信号条件")
+    res = _interval_to_cond(x, merged[0])
+    if res == "TAUT":
+        err(f"信号 {x['signal']} 的 OR 并集覆盖全部取值——表达式恒真，请简化条件")
+    return res
+
+
 _ARITH_NEGATE = {"EQ": "NE", "NE": "EQ", "GT": "LE", "GE": "LT",
                  "LT": "GE", "LE": "GT"}
 
@@ -492,17 +583,18 @@ def _eliminate_arith_negate(parsed: dict) -> None:
 
 
 def collapse_same_signal(parsed: dict) -> dict:
-    """Fold same-signal conditions in AND chains into one compare-unit condition.
+    """Fold same-signal conditions into one compare-unit condition.
 
-    The hardware keeps ONE compare unit per trigger signal: in an AND chain a
-    second condition on the same signal silently overwrites the first.  OR
-    chains keep their operands (board-verified for EQ|EQ on one signal)."""
+    The hardware keeps ONE compare unit per trigger signal: a second
+    condition on the same signal silently overwrites the first in the ddf
+    (last-write-wins).  AND chains fold by intersection, OR chains by union;
+    inexpressible same-signal combinations are rejected instead of silently
+    dropping a condition."""
     _eliminate_arith_negate(parsed)
-    if parsed.get("combine") == "OR":
-        return parsed
     conds = list(parsed["conds"])
     if len(conds) < 2:
         return parsed
+    or_chain = parsed.get("combine") == "OR"
     order, groups = [], {}
     for c in conds:
         key = (c["signal"], c["negate"])
@@ -519,6 +611,7 @@ def collapse_same_signal(parsed: dict) -> dict:
             print("       （每个触发信号只有一个比较单元；跨信号条件不受影响）")
             sys.exit(1)
         seen_sig[sig] = True
+    fold = _fold_same_signal_or if or_chain else _fold_same_signal
     new_conds = []
     changed = False
     for key in order:
@@ -526,7 +619,7 @@ def collapse_same_signal(parsed: dict) -> dict:
         cur = group[0]
         for other in group[1:]:
             changed = True
-            cur = _fold_same_signal(cur, other)
+            cur = fold(cur, other)
         new_conds.append(cur)
     if not changed:
         return parsed
@@ -708,19 +801,20 @@ def _write_ddf(proj: dict, parsed: dict, sigs: list) -> None:
     tree.write(proj["ddf"], encoding="utf-8", xml_declaration=True)
 
 
-def write_trigger_files(proj: dict, parsed: dict) -> None:
-    """Validate and write all three trigger files consistently."""
+def write_trigger_files(proj: dict, parsed: dict) -> dict:
+    """Validate and write all three trigger files consistently.
+    Returns the effective (folded) parsed expression."""
     parsed = collapse_same_signal(parsed)
     sigs = _check_trigger_signals(proj, parsed)
     _write_trigger_expr(proj, parsed, sigs)
     _write_trigger_cond(proj, parsed, sigs)
     _write_ddf(proj, parsed, sigs)
+    return parsed
 
 
 def cmd_trig(proj: dict, tokens: list) -> None:
     """Handle 'hqbuddy -insight -trig ...'."""
-    parsed = parse_trig_expr(tokens)
-    write_trigger_files(proj, parsed)
+    parsed = write_trigger_files(proj, parse_trig_expr(tokens))
     desc = []
     for c in parsed["conds"]:
         prefix = "NOT " if c["negate"] else ""
@@ -1607,20 +1701,10 @@ def _preflight_check(proj: dict) -> None:
         print(f"Error: .hqprj not found: {hqprj}")
         sys.exit(1)
 
-    fields: dict = {}
-    file_src: list = []
-    file_disabled: list = []
-    for line in open(hqprj, encoding="utf-8", errors="replace"):
-        line = line.strip()
-        if "=" not in line:
-            continue
-        key, val = line.split("=", 1)
-        if key == "FILE_SRC":
-            file_src.append(val)
-        elif key == "FILE_SRC_DISABLED":
-            file_disabled.append(val)
-        elif key not in fields:
-            fields[key] = val
+    info = parse_hqprj(hqprj)
+    fields = info["fields"]
+    file_src = info["sources"]        # resolved; FILE_SRC=NONE skipped
+    file_disabled = info["disabled"]
 
     if not fields.get("TOP_MODULE"):
         issues.append("TOP_MODULE 为空——请用 `hqbuddy -set_top <模块名>` 设置顶层")
@@ -1629,16 +1713,12 @@ def _preflight_check(proj: dict) -> None:
     if fields.get("IS_PC_AUTO_CONS", "false") == "false" and fields.get("FILE_PC", "NONE") == "NONE":
         warns.append("无管脚约束文件（FILE_PC=NONE）——bitgen 阶段会报 BIT-11")
 
-    # $WORK_DIR$ entries may omit the separator ($WORK_DIR$rtl/x.v); expand with one
-    work_dir_url = proj["work_dir"].replace(os.sep, "/").rstrip("/") + "/"
     for f in file_src:
-        resolved = os.path.normpath(f.replace("$WORK_DIR$", work_dir_url))
-        if not os.path.isfile(resolved):
-            issues.append(f"FILE_SRC 文件不存在: {resolved}")
+        if not os.path.isfile(f):
+            issues.append(f"FILE_SRC 文件不存在: {f}")
     for f in file_disabled:
-        resolved = os.path.normpath(f.replace("$WORK_DIR$", work_dir_url))
-        if not os.path.isfile(resolved):
-            warns.append(f"FILE_SRC_DISABLED 文件不存在: {resolved}")
+        if not os.path.isfile(f):
+            warns.append(f"FILE_SRC_DISABLED 文件不存在: {f}")
 
     # _sim.v / testbench 文件不应出现在 FILE_SRC（会引发 SFE-E-58 重复声明）
     for f in file_src + file_disabled:

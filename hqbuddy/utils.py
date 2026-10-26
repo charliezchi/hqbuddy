@@ -1,7 +1,25 @@
 """Utility functions for version parsing and comparison."""
 
 import re
+import subprocess
 from typing import Tuple, Optional
+
+
+def wait_process(proc: subprocess.Popen, grace: int = 5) -> None:
+    """proc.wait() with Ctrl+C handling shared by every foreground tool run.
+
+    On KeyboardInterrupt: terminate, wait `grace` seconds, kill, then
+    re-raise so the caller's own cleanup (temp files etc.) still runs."""
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        proc.terminate()
+        try:
+            proc.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        raise
 
 
 def parse_version_info(dir_name: str) -> Optional[Tuple[int, str, str]]:

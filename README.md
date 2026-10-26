@@ -175,7 +175,7 @@ hqbuddy -xpn -ins example/ddrc_native_demo.hqprj -o my_ins_design.xpn
 hqbuddy -xpn2bin                           # 批量转换当前目录所有 .xpn + 报告，完成后唤起 GUI 下载器
 hqbuddy -xpn2bin -no_dl                    # 批量转换，只生成不下载（也不唤起 GUI）
 hqbuddy -xpn2bin debug.xpn                 # 只转换 debug.xpn，默认生成 debug.bin 并自动下载
-hqbuddy -xpn2bin -o my_bitstream.bin debug.xpn   # 自定义输出名（-o 需指定 xpn）
+hqbuddy -xpn2bin -o my_bitstream.bin debug.xpn   # 自定义输出路径（目录自动创建；-o 需指定 xpn）
 hqbuddy -xpn2bin debug.xpn -no_dl          # 只生成不下载
 ```
 
@@ -246,14 +246,20 @@ hqbuddy -insight -selftest                 # 回归自测：布防 sig EQ 128 �
 hqbuddy -insight -selftest -signal cnt -value 200    # 指定信号与比较值
 ```
 
-`-selftest` 面向确定性计数器类设计（采样的信号每拍 +1），一条命令验证
+`同信号多条件会自动折叠为单比较单元（硬件每信号仅一个比较单元）：AND 链按交集
+折叠（`EQ 5 AND NE 5` 等恒假组合直接报错），OR 链按并集折叠（`RANGE_C 1 3 OR
+RANGE_C 4 6` → `RANGE_C 1 6`、`RISE OR FALL` → `BOTH`）；并集不连续或恒真等单
+比较单元无法表达的表达式会被拒绝并说明原因，而不是静默丢弃某个条件。
+
+-selftest` 面向确定性计数器类设计（采样的信号每拍 +1），一条命令验证
 "下载 → 布防 → 触发 → 抓取 → VCD 样本完整性"整条链路；HqFPGA 升级后先跑它。
 
 ### VIO 虚拟 IO（运行时读/驱动设计信号，无需重编译）
 
 ```bat
 hqbuddy -vio -gen -in 8 -out 8             # 生成 VIO 探针模块（RTL 实例化 probe_in/probe_out）
-hqbuddy -vio -reg -in cnt:8 -out led:2     # 登记探针（hqvla_vio/probes.json）
+hqbuddy -vio -reg -in cnt:8 -out led:2     # 登记探针（hqvla_vio/probes.json；按名 upsert，重复登记不会清掉已有探针）
+hqbuddy -vio -reg -clear                    # 清空探针表
 hqbuddy -vio -read [-loop N]               # 运行时读输入探针
 hqbuddy -vio -write led=0b10               # 运行时驱动输出探针（整链移位，未赋值的
                                            # 已登记输出探针会写 0 并打印警告）
@@ -376,7 +382,7 @@ hqbuddy -dl -f my_app\FPGA_Prj\hq_prj\my_app_merged.bin   # 下载合并镜像
 
 - `-new_soc` 生成的工程已改好 `PROJ_NAME`、校准时间戳、还原去重的 CMSIS 库，并把 Demo 里硬编码工具路径的合并脚本替换为基于 `-merge_bin` 的版本（合并不下板；`mergeBinFileAndProgram.bat -dl` 才下载）
 - `-build` 生成的 FPGA bin 位于 `.hqprj` 同目录（CLI 流程不使用 GUI 的 `hq_run` 输出目录）
-- `-mcu_build` 自动定位 Keil UV4（`config.json` 可加 `"keil_uv4": "C:\\Keil_v5\\UV4\\UV4.exe"` 指定）；也支持 GCC：config 加 `"mcu_toolchain": "gcc"`（可选 `"arm_gcc": "<toolchain>\\bin"` 指定工具链，缺省自动探测），此时在 `MCU_Prj/` 跑 `make`（PATH 或 MSYS2 的 make），产物约定为 `MCU_Prj/build/*.bin`，成功后自动与最新 FPGA bin 合并（型号从 .hqprj DEVICE 推断）
+- `-mcu_build` 自动定位 Keil UV4（config `keil_uv4` 指定 → 注册表 Keil MDK 安装路径 → 常见盘符路径）；也支持 GCC：config 加 `"mcu_toolchain": "gcc"`（可选 `"arm_gcc": "<toolchain>\bin"` 指定工具链，缺省自动探测），此时在 `MCU_Prj/` 跑 `make`（PATH 或 MSYS2 的 make），产物约定为 `MCU_Prj/build/*.bin`，成功后自动与最新 FPGA bin 合并（型号从 .hqprj DEVICE 推断）
 - `-merge_bin <fpga.bin> <mcu.bin>` 支持 `-o`、`-model SA30K|SA50K`、`-remap`、`-dl`（合并后下载）
 - merge bat 依赖 PATH 上的 hqbuddy，更新代码后需 `python build.py` 重新构建安装
 - 巨型例程（lwip/mqtt/FreeRTOS/bootloader/DDR/CAN）未内置为预设，需要时从 Demo 目录手动拷贝；用法详见 skills/hqfpga/references/soc_workflow.md
@@ -460,7 +466,7 @@ hqbuddy -update_ip
 调用当前所选版本自带的 `hq_ipencrypt.exe` 加密 `.v` / `.vh` 源文件（密钥文件自动定位，无需指定）：
 
 ```bat
-hqbuddy -encrypt                         :: 缺省处理当前目录所有 .v 和 .f（.f 走 -l 分支）
+hqbuddy -encrypt                         :: 缺省处理当前目录所有 .v/.vh/.f（.f 走 -l 分支）
 hqbuddy -encrypt top.v core.v            :: 加密多个文件，输出到 encrypted/
 hqbuddy -encrypt filelist.f -d out       :: 支持 .f filelist，-d 指定输出目录（自动创建）
 hqbuddy -encrypt top.v -m aes128-cbc     :: 指定算法（缺省 aes256-cbc）
@@ -558,8 +564,8 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-mcu_build [-p <uvprojx>]`         | 无人值守编译 MCU 固件（Keil UV4；config `mcu_toolchain=gcc` 时走 arm-none-eabi-gcc + Makefile） |
 | `-merge_bin <fpga> <mcu>`           | 合并 FPGA+MCU bin（`-o`/`-model`/`-dl`）                             |
 | `-vla -gen [-name VLA] [-dir <dir>] [-device <part>]` | 调起 VLA IP 生成向导（产出 xsIP_VLA.v/hqip/cfg，自动检测生成完成） |
-| `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族） |
-| `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11）        |
+| `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族；`-o` 目录不存在时自动创建） |
+| `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11；报告/日志统一落 `netlist_run/`，不散落在 .edif 目录） |
 | `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测） |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
 | `-synopt [<src.hqprj>] [-set k=on\|off] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等旋钮；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL） |
@@ -571,7 +577,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-ipgen [<file>] [-lang <lang>]`    | 根据`.hqip` 生成 IP 网表，省略时自动检测                             |
 | `-gen_hqip [<meta.xml>] [-device <part>]` | 生成默认配置 .hqip（省略 xml 时交互选择 IP）                  |
 | `-update_ip [<file>]`               | 重新生成工程内所有 IP 网表                                             |
-| `-encrypt [<files...>] [-d dir] [-m m] [-po]` | 加密 HDL 源文件（缺省处理当前目录所有 .v/.f，aes256-cbc，输出 encrypted/） |
+| `-encrypt [<files...>] [-d dir] [-m m] [-po]` | 加密 HDL 源文件（缺省处理当前目录所有 .v/.vh/.f，aes256-cbc，输出 encrypted/） |
 | `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本（flow 生成的脚本比工程旧时警告重新 `-flow`）；缺省时进入 hqfpga 交互式 CLI |
 | `-regression [--offline] [base_dir]` | 一键回归套件（触发捕获+错误路径+冒烟）；`--offline` 跳过板卡项；显式 `base_dir` 时自动识别其中的 `.hqprj`（缺省基线仅开发机存在，缺失时提示传 base_dir；SKIP 项单列不计入 PASS） |

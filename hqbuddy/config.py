@@ -21,6 +21,12 @@ def get_config_path() -> str:
     return os.path.join(get_config_dir(), 'config.json')
 
 
+def _default_config() -> dict:
+    """Fresh copy of the defaults (scan_path must not be shared with
+    DEFAULT_CONFIG or caller mutations would corrupt it)."""
+    return {**DEFAULT_CONFIG, "scan_path": list(DEFAULT_CONFIG["scan_path"])}
+
+
 def parse_config_text(text: str) -> dict:
     """Parse config JSON into a dict; migrates scan_roots -> scan_path.
     Raises json.JSONDecodeError if the content is not valid JSON."""
@@ -31,7 +37,7 @@ def parse_config_text(text: str) -> dict:
         data["scan_path"] = data["scan_roots"]
     data.pop("scan_roots", None)
     for key, default in DEFAULT_CONFIG.items():
-        data.setdefault(key, default)
+        data.setdefault(key, list(default) if isinstance(default, list) else default)
     return data
 
 
@@ -45,8 +51,8 @@ def load_config() -> dict:
         except (json.JSONDecodeError, OSError) as e:
             print(f"Warning: Failed to load config ({e}), using defaults.",
                   file=sys.stderr)
-            return dict(DEFAULT_CONFIG)
-    return dict(DEFAULT_CONFIG)
+            return _default_config()
+    return _default_config()
 
 
 def save_config(cfg: dict) -> None:

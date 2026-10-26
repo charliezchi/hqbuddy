@@ -13,6 +13,7 @@ import time
 
 from . import __version__
 from . import config, launcher, build_selector, soc
+from .utils import wait_process
 from .hqprj_parser import extract_filelist
 from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstream
 from .flow import run_seed_sweep
@@ -208,7 +209,7 @@ def show_version():
 
 def _find_hqprj() -> str | None:
     """Auto-detect the first .hqprj file in the current directory."""
-    matches = glob.glob("*.hqprj")
+    matches = sorted(glob.glob("*.hqprj"))
     return matches[0] if matches else None
 
 
@@ -515,7 +516,6 @@ def cmd_new_prj(args):
 
     # Validate and parse device part
     from .device import _DEVICE_PART_RE, get_family_for_device, normalize_part
-    from .device import set_device as validate_device
     device = normalize_part(device)
     match = _DEVICE_PART_RE.match(device)
     if not match:
@@ -687,7 +687,7 @@ def cmd_add(args):
 
         if ext == '.f':
             # Filelist: read and expand
-            flist_path = os.path.abspath(file_arg) if os.path.isabs(file_arg) else os.path.abspath(file_arg)
+            flist_path = os.path.abspath(file_arg)
             if not os.path.isfile(flist_path):
                 errors.append(f"filelist not found: {file_arg}")
                 continue
@@ -716,7 +716,7 @@ def cmd_add(args):
                 if add_src(entry):
                     added_src.append(rel)
         elif ext in supported_src:
-            src_path = os.path.abspath(file_arg) if os.path.isabs(file_arg) else os.path.abspath(file_arg)
+            src_path = os.path.abspath(file_arg)
             if not os.path.isfile(src_path):
                 errors.append(f"file not found: {file_arg}")
                 continue
@@ -725,7 +725,7 @@ def cmd_add(args):
             if add_src(entry):
                 added_src.append(rel)
         elif ext == '.sdc':
-            sdc_path = os.path.abspath(file_arg) if os.path.isabs(file_arg) else os.path.abspath(file_arg)
+            sdc_path = os.path.abspath(file_arg)
             if not os.path.isfile(sdc_path):
                 errors.append(f"file not found: {file_arg}")
                 continue
@@ -733,7 +733,7 @@ def cmd_add(args):
             if set_tc(f"FILE_TC=$WORK_DIR${rel}"):
                 added_tc = rel
         elif ext == '.upc':
-            upc_path = os.path.abspath(file_arg) if os.path.isabs(file_arg) else os.path.abspath(file_arg)
+            upc_path = os.path.abspath(file_arg)
             if not os.path.isfile(upc_path):
                 errors.append(f"file not found: {file_arg}")
                 continue
@@ -912,21 +912,12 @@ def cmd_build_fpga(args):
     print("")
     started = time.time()
     proc = subprocess.Popen([version['hqfpga_path'], '-cmd', flow_tcl], cwd=work_dir)
-    try:
-        proc.wait()
-    except KeyboardInterrupt:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        raise
+    wait_process(proc)
     if proc.returncode != 0:
         print("")
         print(f"Warning: hqfpga exited with code {proc.returncode}")
         sys.exit(proc.returncode)
-    _check_bitstream(work_dir, started)
+    _check_bitstream(work_dir, started, hqprj_path)
 
 
 def cmd_set_top(args):
@@ -1595,7 +1586,10 @@ def cmd_wave(args):
             return f.lower().endswith("_flat.vcd")
         cands = []
         for base, _dirs, files in os.walk('.'):
-            if 'hqins_run' in base and 'hq_import' in base:
+            # exact path segments: 'hqins_run' in base would also match
+            # look-alike directories (hqins_run_backup etc.)
+            segs = os.path.normpath(base).split(os.sep)
+            if 'hqins_run' in segs and 'hq_import' in segs:
                 for f in files:
                     if f.endswith('.vcd') and not _is_flat(f):
                         cands.append(os.path.join(base, f))

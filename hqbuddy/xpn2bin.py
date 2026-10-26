@@ -3,28 +3,31 @@
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 
 from . import launcher
+from .utils import wait_process
 
 
-def _generate_xpn2bin_tcl(work_dir: str, xpn_name: str, bin_name: str) -> str:
+def _generate_xpn2bin_tcl(work_dir: str, xpn_name: str, bin_tcl: str) -> str:
     """
     Generate a temporary TCL script for xpn2bin conversion.
 
     Args:
         work_dir: The directory where the .xpn file resides.
-        xpn_name: The input .xpn file name.
-        bin_name: The output .bin file name.
+        xpn_name: The input .xpn file name (bare; cwd is work_dir).
+        bin_tcl: The output .bin path for TCL (forward slashes; an absolute
+            path keeps the output where the caller asked for it).
 
     Returns:
         Path to the generated temporary TCL file.
     """
-    temp_tcl = os.path.join(work_dir, "_hqbuddy_xpn2bin.tcl")
+    temp_tcl = os.path.join(work_dir, f"_hqbuddy_xpn2bin_{os.getpid()}.tcl")
 
     tcl_content = f"""xpn.read {xpn_name}
-design.bitgen -bin {bin_name} -compress
+design.bitgen -bin {bin_tcl} -compress
 """
 
     with open(temp_tcl, "w", encoding="utf-8") as f:
@@ -37,7 +40,9 @@ def _download_bin(version: dict, bin_abs: str) -> int:
     """
     Download a .bin file to the connected board via cable.exe.
 
-    Detects the board model first, then downloads with --Burst.
+    Detects the board model first, then downloads with --Burst. Output is
+    streamed live (a large bitstream takes a while; silence looks like a
+    hang) while being captured for the error scan.
 
     Returns:
         0 on success, 1 on failure.
@@ -66,12 +71,17 @@ def _download_bin(version: dict, bin_abs: str) -> int:
 
     cmd = [cable, '--sealion', bin_abs, '--model', model, '--Burst']
     print(f"Downloading: {bin_abs}")
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          text=True, errors='replace')
-    print(proc.stdout)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, errors='replace')
+    output = []
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        sys.stdout.flush()
+        output.append(line)
+    wait_process(proc)
     # cable.exe prints errors like "Error : The file ID is unmatched"
     # but may still exit 0 — scan the output, don't trust the exit code
-    has_error = re.search(r'^\s*(error|fail)', proc.stdout or '', re.M | re.I)
+    has_error = re.search(r'^\s*(error|fail)', "".join(output), re.M | re.I)
     if proc.returncode != 0 or has_error:
         print(f"Error: download failed (exit {proc.returncode})")
         return 1
@@ -87,8 +97,9 @@ def _convert_one(version: dict, xpn_abs: str, bin_path: str | None,
     Args:
         version: Resolved HqFpga version info dict.
         xpn_abs: Absolute path to the input .xpn file.
-        bin_path: Optional output .bin path (only the basename is used;
-            bitgen always writes next to the .xpn).
+        bin_path: Optional output .bin path — directory included; a bin next
+            to the .xpn is only produced when bitgen ignores the given
+            directory, in which case it is moved into place.
         download: Download the bin to the board after conversion.
 
     Returns:
@@ -97,14 +108,15 @@ def _convert_one(version: dict, xpn_abs: str, bin_path: str | None,
     """
     work_dir = os.path.dirname(xpn_abs)
     xpn_name = os.path.basename(xpn_abs)
-    bin_name = os.path.basename(bin_path) if bin_path \
-        else os.path.splitext(xpn_name)[0] + ".bin"
+    if bin_path:
+        bin_abs = os.path.abspath(bin_path)
+        os.makedirs(os.path.dirname(bin_abs) or ".", exist_ok=True)
+    else:
+        bin_abs = os.path.splitext(xpn_abs)[0] + ".bin"
 
-    temp_tcl = _generate_xpn2bin_tcl(work_dir, xpn_name, bin_name)
+    temp_tcl = _generate_xpn2bin_tcl(work_dir, xpn_name,
+                                     bin_abs.replace("\\", "/"))
     try:
-        # bitgen runs with cwd=work_dir and a bare -bin name, so the output
-        # always lands next to the .xpn regardless of the caller's cwd
-        bin_abs = os.path.join(work_dir, bin_name)
         print(f"Input:  {xpn_abs}")
         print(f"Output: {bin_abs}")
 
@@ -113,22 +125,19 @@ def _convert_one(version: dict, xpn_abs: str, bin_path: str | None,
         print("")
 
         proc = subprocess.Popen(cmd, cwd=work_dir)
-        try:
-            proc.wait()
-        except KeyboardInterrupt:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-            raise
+        wait_process(proc)
 
         if proc.returncode != 0:
             return False, None, f"hqfpga exited with code {proc.returncode}"
 
         if not os.path.isfile(bin_abs):
-            return False, None, f"expected output not found: {bin_abs}"
+            # some bitgen builds write next to the .xpn no matter what the
+            # -bin path says; honor the requested directory by moving it
+            stray = os.path.join(work_dir, os.path.basename(bin_abs))
+            if os.path.isfile(stray):
+                shutil.move(stray, bin_abs)
+            else:
+                return False, None, f"expected output not found: {bin_abs}"
 
         if download and _download_bin(version, bin_abs) != 0:
             return False, bin_abs, "download failed"

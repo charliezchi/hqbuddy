@@ -38,12 +38,3 @@ def list_ip_files(hqprj_path: str) -> list[str]:
                 ip_files.append(hqip_abs)
 
     return ip_files
-
-
-def print_ip_files(hqprj_path: str) -> None:
-    """Print the list of .hqip files for a project."""
-    ip_files = list_ip_files(hqprj_path)
-    print(f"Project: {os.path.abspath(hqprj_path)}")
-    print(f"Total {len(ip_files)} IP file(s):")
-    for i, f in enumerate(ip_files, 1):
-        print(f"  {i}. {f}")

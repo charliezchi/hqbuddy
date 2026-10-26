@@ -232,7 +232,7 @@ def report_digest(work: str, top: Optional[str]) -> dict:
             "wns": wns, "util": util, "bits": bins}
 
 
-def report_diff(dir_a: str, dir_b: str, n_paths: int) -> None:
+def report_diff(dir_a: str, dir_b: str) -> None:
     """Side-by-side compare of two projects' implementation reports."""
     da = report_digest(os.path.abspath(dir_a), _top_name(os.path.abspath(dir_a)))
     db = report_digest(os.path.abspath(dir_b), _top_name(os.path.abspath(dir_b)))
@@ -315,10 +315,10 @@ def run_report(args: list) -> None:
         print("Error: --diff requires two project dirs: -report --diff <dirA> <dirB>")
         sys.exit(1)
     if diff_mode:
-        report_diff(targets[0], targets[1], n_paths)
+        report_diff(targets[0], targets[1])
         return
     if target is None:
-        matches = glob.glob("*.hqprj")
+        matches = sorted(glob.glob("*.hqprj"))
         if not matches:
             print("Error: no .hqprj in current directory; pass a project or directory.")
             sys.exit(1)
@@ -332,9 +332,6 @@ def run_report(args: list) -> None:
 
     print(f"Project dir : {work}")
     top = _top_name(work)
-
-    def locate(names: list) -> Optional[str]:
-        return _find_report(work, names)
 
     if as_json:
         import json as _json

@@ -14,7 +14,6 @@ rules as IP Creator's main window) and an interactive IP picker.
 
 import configparser
 import math
-import msvcrt
 import os
 import re
 import sys
@@ -408,109 +407,22 @@ def scan_supported_ips(ipdepot_dir: str, device: str) -> list:
 # ---------------------------------------------------------------
 # interactive IP picker (same UX as -build_sel / -set_device)
 # ---------------------------------------------------------------
-def _clear_lines(n: int):
-    """Move cursor up n lines and clear them (no-op without VT support)."""
-    from .term import ansi_ok
-    if not ansi_ok():
-        return
-    for _ in range(n):
-        sys.stdout.write('\033[F\033[K')
-    sys.stdout.flush()
+def _matches(info: dict, needle: str) -> bool:
+    return (needle in info['name'].upper()
+            or needle in info['variant'].upper()
+            or needle in info['desc'].upper())
 
 
-def _matches(info: dict, search: str) -> bool:
-    s = search.upper()
-    return (s in info['name'].upper()
-            or s in info['variant'].upper()
-            or s in info['desc'].upper())
-
-
-def _draw_ip_menu(items: list, selected_idx: int, search: str) -> int:
-    lines = 0
-    print(f"Type to search: {search}")
-    lines += 1
-
-    total = len(items)
-    start = max(0, selected_idx - 10)
-    end = min(total, start + 20)
-    if end - start < 20 and start > 0:
-        start = max(0, end - 20)
-
-    for i in range(start, end):
-        cursor = " ▶" if selected_idx == i else "  "
-        info = items[i]
-        desc = f"  {info['desc']}" if info['desc'] else ""
-        print(f"{cursor} {info['name']}  ({info['variant']}){desc}")
-        lines += 1
-
-    if total > end:
-        print(f"  ... and {total - end} more")
-        lines += 1
-    if total == 0:
-        print("  (no matches)")
-        lines += 1
-
-    sys.stdout.flush()
-    return lines
-
-
-def pick_ip_interactive(items: list) -> dict | None:
+def pick_ip_interactive(items: list) -> "dict | None":
     """Interactive IP selection with fuzzy search over name/variant/desc."""
-    filtered = list(items)
-    search = ""
-    selected_idx = 0
+    from .term import interactive_pick
 
-    lines_printed = _draw_ip_menu(filtered, selected_idx, search)
+    def row(info):
+        desc = f"  {info['desc']}" if info['desc'] else ""
+        return f"{info['name']}  ({info['variant']}){desc}"
 
-    while True:
-        key = msvcrt.getch()
-
-        if key == b'\xe0':  # Arrow keys
-            key = msvcrt.getch()
-            if key == b'H':  # Up
-                selected_idx = max(0, selected_idx - 1)
-            elif key == b'P':  # Down
-                selected_idx = min(len(filtered) - 1, selected_idx + 1)
-            _clear_lines(lines_printed)
-            lines_printed = _draw_ip_menu(filtered, selected_idx, search)
-
-        elif key == b'\r':  # Enter
-            _clear_lines(lines_printed)
-            if 0 <= selected_idx < len(filtered):
-                return filtered[selected_idx]
-            return None
-
-        elif key == b'\x08':  # Backspace
-            if search:
-                search = search[:-1]
-                filtered = [it for it in items if _matches(it, search)]
-                selected_idx = min(selected_idx, len(filtered) - 1)
-                if selected_idx < 0:
-                    selected_idx = 0
-            _clear_lines(lines_printed)
-            lines_printed = _draw_ip_menu(filtered, selected_idx, search)
-
-        elif key == b'\x1b':  # Esc
-            _clear_lines(lines_printed)
-            return None
-
-        elif key == b'\x03':  # Ctrl+C
-            print("")
-            return None
-
-        else:  # Regular character (for search)
-            try:
-                ch = key.decode('utf-8')
-                if ch.isprintable():
-                    search += ch
-                    filtered = [it for it in items if _matches(it, search)]
-                    selected_idx = min(selected_idx, len(filtered) - 1)
-                    if selected_idx < 0:
-                        selected_idx = 0
-                _clear_lines(lines_printed)
-                lines_printed = _draw_ip_menu(filtered, selected_idx, search)
-            except UnicodeDecodeError:
-                pass
+    idx = interactive_pick(items, row, _matches)
+    return items[idx] if idx is not None else None
 
 
 # ---------------------------------------------------------------

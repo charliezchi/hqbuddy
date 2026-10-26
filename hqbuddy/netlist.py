@@ -19,6 +19,7 @@ import sys
 import tempfile
 
 from . import launcher
+from .utils import wait_process
 
 # Family is fixed to SEAL for the third-party netlist flow; -device only
 # selects the part within the SEAL family.
@@ -55,19 +56,10 @@ def _run_tcl_streamed(hqfpga_path: str, cmds: list, work_dir: str) -> list:
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, errors="replace",
         )
-        try:
-            for raw in proc.stdout:
-                sys.stdout.write(raw)
-                lines.append(raw.rstrip("\n"))
-            proc.wait()
-        except KeyboardInterrupt:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-            raise
+        for raw in proc.stdout:
+            sys.stdout.write(raw)
+            lines.append(raw.rstrip("\n"))
+        wait_process(proc)
     finally:
         try:
             os.remove(tcl_path)
@@ -108,6 +100,7 @@ def run_edf2v(edif_path: str | None, output_v: str | None = None,
     edif_abs = os.path.abspath(edif_path)
     work_dir = os.path.dirname(edif_abs)
     v_abs = os.path.abspath(output_v) if output_v else os.path.splitext(edif_abs)[0] + ".v"
+    os.makedirs(os.path.dirname(v_abs) or ".", exist_ok=True)
     dev = device or DEFAULT_DEVICE
     hqfpga_path = _resolve_hqfpga()
 
@@ -176,6 +169,10 @@ def run_netlist_build(edif_path: str | None, upc_path: str | None = None,
     # bitgen silently fakes success when the output directory does not exist
     bin_dir = os.path.dirname(bin_abs) or "."
     os.makedirs(bin_dir, exist_ok=True)
+    # P&R runs with cwd=netlist_run so its reports (res_*.rpt, fmax.rpt,
+    # final_ta.rpt, aft_place.xpn, hqfpga.log) stay out of the EDIF directory
+    run_dir = os.path.join(work_dir, "netlist_run")
+    os.makedirs(run_dir, exist_ok=True)
 
     dev = device or DEFAULT_DEVICE
     hqfpga_path = _resolve_hqfpga()
@@ -209,9 +206,10 @@ def run_netlist_build(edif_path: str | None, upc_path: str | None = None,
     print(f"UPC: {os.path.abspath(upc_path)}")
     print(f"SDC: {os.path.abspath(sdc_path)}")
     print(f"Output: {bin_abs}")
+    print(f"Run dir (reports/log): {run_dir}")
     print("")
 
-    lines = _run_tcl_streamed(hqfpga_path, cmds, work_dir)
+    lines = _run_tcl_streamed(hqfpga_path, cmds, run_dir)
     _fail_on_tcl_errors(lines)
 
     if not os.path.isfile(bin_abs) or os.path.getsize(bin_abs) == 0:
@@ -221,6 +219,7 @@ def run_netlist_build(edif_path: str | None, upc_path: str | None = None,
 
     size = os.path.getsize(bin_abs)
     print(f"[OK] Netlist bitstream written: {bin_abs} ({size} bytes)")
+    print(f"     reports & log: {run_dir}")
 
 
 def run_vla_gen(args: list) -> None:

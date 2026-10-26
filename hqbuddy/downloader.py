@@ -92,6 +92,7 @@ class DownloaderGUI(tk.Tk):
         self.downloading = False
         self.log_queue = queue.Queue()
         self.done_queue = queue.Queue()
+        self.current_proc = None  # running cable.exe, killed on window close
 
         self.title(f"hqbuddy 下载器 - {self.root_dir}")
         self.geometry("900x560")
@@ -132,6 +133,17 @@ class DownloaderGUI(tk.Tk):
         self.rescan()
         self.after(100, self._poll_log)
         self.after(100, self._poll_done)
+        # closing the window must not orphan a running cable.exe
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        proc = self.current_proc
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+        self.destroy()
 
     # ---------- bin scan & notes ----------
 
@@ -261,11 +273,13 @@ class DownloaderGUI(tk.Tk):
                                     stderr=subprocess.STDOUT, text=True,
                                     errors='replace',
                                     creationflags=_no_window_flags())
+            self.current_proc = proc
             output = []
             for line in proc.stdout:
                 output.append(line)
                 self._log(line.rstrip())
             proc.wait()
+            self.current_proc = None
             # cable.exe prints errors like "Error : The file ID is unmatched"
             # but still exits 0 — scan the output, don't trust the exit code
             has_error = any(re.search(r'\b(error|fail(?:ed)?)\b\s*[:：]', ln, re.I)

@@ -97,5 +97,11 @@ def get_selected_version(versions: list, selected_build: str | None) -> dict | N
         for v in versions:
             if v['build'] == selected_build:
                 return v
-        # Selected build not found, fall through to latest
+        # Selected build not found (uninstalled/renamed?): tell the user
+        # instead of silently switching to latest
+        latest = versions[0] if versions else None
+        if latest:
+            print(f"Warning: configured build '{selected_build}' not found; "
+                  f"falling back to latest ({latest['semver']} / {latest['build']}).")
+            print("         Run 'hqbuddy -build_sel' to re-select or clear it.")
     return versions[0] if versions else None
