@@ -22,7 +22,7 @@ SAMPLE_TYPES = {2: "sample", 3: "trigger", 4: "sample+trigger"}
 def _read_hqprj_fields(hqprj_path: str, keys: tuple) -> dict:
     """Read selected KEY=VALUE fields from a .hqprj file."""
     result = {}
-    with open(hqprj_path, "r", encoding="utf-8") as f:
+    with open(hqprj_path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if "=" not in line:
@@ -277,6 +277,9 @@ def parse_trig_expr(tokens: list) -> dict:
     if len(groups) >= 2 and not combine:
         print("Error: 多条件之间需要 AND 或 OR 连接")
         sys.exit(1)
+    if not groups:
+        print("Error: 触发表达式为空——需要至少一个条件（如 'cnt EQ 5'）。")
+        sys.exit(1)
 
     conds = []
     for g in groups:
@@ -336,6 +339,32 @@ def _check_trigger_signals(proj: dict, parsed: dict) -> list:
         if cond["kind"] == "edge" and sig["msb"] != sig["lsb"]:
             print(f"Error: 边沿触发要求 1 位信号: {cond['signal']}（多位总线请改用算术/范围条件，或登记 1 位片选信号）")
             sys.exit(1)
+        # LA 比较单元按无符号位串比较：负数/超宽值会被静默写成垃圾位串
+        width = sig["msb"] - sig["lsb"] + 1
+        if cond["kind"] == "arith":
+            v, wild = cond["value"], cond.get("wild", 0)
+            if v < 0:
+                two = v & ((1 << width) - 1)
+                print(f"Error: 触发值 {v} 为负——请改用其二补码值 {two}（{width} 位）。")
+                sys.exit(1)
+            if v >= (1 << width) or (wild and wild >= (1 << width)):
+                print(f"Error: 触发值超出信号 {cond['signal']} 位宽"
+                      f"（{width} 位，最大 {(1 << width) - 1}）。")
+                sys.exit(1)
+        elif cond["kind"] == "range":
+            lo, hi = cond["lo"], cond["hi"]
+            for label, v in (("下界", lo), ("上界", hi)):
+                if v < 0:
+                    two = v & ((1 << width) - 1)
+                    print(f"Error: 范围{label} {v} 为负——请改用其二补码值 {two}（{width} 位）。")
+                    sys.exit(1)
+                if v >= (1 << width):
+                    print(f"Error: 范围{label} {v} 超出信号 {cond['signal']} 位宽"
+                          f"（{width} 位，最大 {(1 << width) - 1}）。")
+                    sys.exit(1)
+            if lo > hi:
+                print(f"Error: 范围下界 {lo} 大于上界 {hi}。")
+                sys.exit(1)
         result.append(sig)
     return result
 
@@ -953,6 +982,12 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         print(f"Error: 多窗口 (.hqins windows={hqins_win}) 的布防/轮询/dump 尚未实现"
               f"（ddf window_num={m_ddf_win.group(1)}）——继续抓取会按单窗口静默错读。")
         sys.exit(1)
+    if hqins_win > 1:
+        # 数量一致也拒绝：布防/轮询/dump 全链路硬编码单窗口，抓了必错读
+        print(f"Error: 多窗口 (windows={hqins_win}) 的布防/轮询/dump 尚未实现"
+              "——继续抓取会按单窗口静默错读。")
+        print("       先 `hqbuddy -insight -windows 1`（随后 -run 重建并重新下载）再抓取。")
+        sys.exit(1)
     status_bits = depth.bit_length() - 1 + 2
     offset = int(_section_value(sections.get("TRIGGER POSITION", [])) or 0)
     expr_op = _capture_expr_op(cond_path)
@@ -991,14 +1026,14 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
 
     if is_ct:
         trig_args = (f"-is_continuous False -is_ct True -expr_op {expr_op} "
-                     f"-ct_no C0 -cond_path {_tcl_path(cond_path)}")
+                     f"-ct_no C0 -cond_path {{{_tcl_path(cond_path)}}}")
     else:
         trig_args = f"-is_continuous False -is_ct False -expr_op {expr_op}"
 
     # 1. Arm the trigger
     _run_hqfpga_cmds(hqfpga_exe, [
-        f"{gen}.start -svf_file_path {_tcl_path(svf('arm.svf'))} "
-        f"-device_die {proj['die']} -ddf_file {_tcl_path(ddf)}",
+        f"{gen}.start -svf_file_path {{{_tcl_path(svf('arm.svf'))}}} "
+        f"-device_die {proj['die']} -ddf_file {{{_tcl_path(ddf)}}}",
         f"{gen}.jtag_detect",
         f"{gen}.la_reset {common}",
         f"{gen}.la_offset {common} -offset {offset}",
@@ -1011,8 +1046,8 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
 
     # 2. Wait for the trigger (status done bit), unless -force
     _run_hqfpga_cmds(hqfpga_exe, [
-        f"{gen}.start -svf_file_path {_tcl_path(svf('status.svf'))} "
-        f"-device_die {proj['die']} -ddf_file {_tcl_path(ddf)}",
+        f"{gen}.start -svf_file_path {{{_tcl_path(svf('status.svf'))}}} "
+        f"-device_die {proj['die']} -ddf_file {{{_tcl_path(ddf)}}}",
         f"{gen}.la_status {common}",
         f"{gen}.write",
     ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
@@ -1038,8 +1073,8 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
     # 3. Read status + waveform (only 'pointer' words if the buffer never wrapped)
     limit = depth if (force or overflow) else max(pointer, 1)
     _run_hqfpga_cmds(hqfpga_exe, [
-        f"{gen}.start -svf_file_path {_tcl_path(svf('dump.svf'))} "
-        f"-device_die {proj['die']} -ddf_file {_tcl_path(ddf)}",
+        f"{gen}.start -svf_file_path {{{_tcl_path(svf('dump.svf'))}}} "
+        f"-device_die {proj['die']} -ddf_file {{{_tcl_path(ddf)}}}",
         f"{gen}.la_status {common}",
         f"{gen}.write",
         f"{gen}.la_waveform {common} -limit {limit}",
@@ -1067,10 +1102,10 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
 
     # 4. Convert to VCD
     _run_hqfpga_cmds(hqfpga_exe, [
-        f"{gen}.start -svf_file_path {_tcl_path(svf('vcd.svf'))} "
-        f"-device_die {proj['die']} -ddf_file {_tcl_path(proj['ddf'])}",
-        f"{gen}.dump_vcd {common} -tdo_path {_tcl_path(tdo_path)} -window_num 1 "
-        f"-is_hier True -out_path_prefix {_tcl_path(prefix)} "
+        f"{gen}.start -svf_file_path {{{_tcl_path(svf('vcd.svf'))}}} "
+        f"-device_die {proj['die']} -ddf_file {{{_tcl_path(proj['ddf'])}}}",
+        f"{gen}.dump_vcd {common} -tdo_path {{{_tcl_path(tdo_path)}}} -window_num 1 "
+        f"-is_hier True -out_path_prefix {{{_tcl_path(prefix)}}} "
         f"-diff_info {overflow}|{pointer}",
     ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
 
@@ -1188,7 +1223,7 @@ def run_flow(proj: dict, require_bin: bool = True) -> None:
 
     # insight 流程必须产出 .bin（下载验收用）。GUI 新建工程 BGEN_1/2 常为
     # false（只出 .bit），这里自动打开并写回 .hqprj。
-    _hqprj_lines = open(proj["hqprj"], encoding="utf-8").read().splitlines()
+    _hqprj_lines = open(proj["hqprj"], encoding="utf-8", errors="replace").read().splitlines()
     _changed = False
     _out_lines = []
     for _ln in _hqprj_lines:
@@ -1423,8 +1458,8 @@ HqInsight
 def _write_import_tcls(proj: dict, vfiles: list) -> None:
     """Write hq_impor_t.tcl / hq_impor_new_rtl.tcl into hqins_run/ (GUI equivalents)."""
     wdir = proj["work_dir"].replace(os.sep, "/")
-    lines = "\n".join(f"lappend vfiles {f}" for f in vfiles)
-    base = f"""set WORK_DIR {wdir}
+    lines = "\n".join(f"lappend vfiles {{{f}}}" for f in vfiles)
+    base = f"""set WORK_DIR {{{wdir}}}
 set vfiles {{}}
 {lines}
 dv.setup -synlib_only {proj['family']}
@@ -1700,12 +1735,13 @@ def set_sample_params(proj: dict, args: list) -> None:
     0 <= offset <= depth/windows - 5; with default offset 128 that requires
     depth/windows >= 133."""
     if not args:
-        print("Usage: -insight -depth N [-windows W] [-level L]")
+        print("Usage: -insight -depth N [-windows W] [-level L] [-position P]")
         print(f"       N: {'/'.join(str(d) for d in sorted(_VALID_DEPTHS))}")
         print("       W: power of 2 >= 1 (multi-window storage split)")
         print("       L: trigger level >= 1")
+        print("       P: trigger position, 0 <= P <= depth/windows - 5")
         sys.exit(1)
-    depth, windows, level = None, None, None
+    depth, windows, level, position = None, None, None, None
     i = 0
     while i < len(args):
         if args[i] == "-depth" and i + 1 < len(args):
@@ -1729,11 +1765,18 @@ def set_sample_params(proj: dict, args: list) -> None:
                 print(f"Error: -level expects an integer, got: {args[i + 1]}")
                 sys.exit(1)
             i += 2
+        elif args[i] == '-position' and i + 1 < len(args):
+            try:
+                position = int(args[i + 1])
+            except ValueError:
+                print(f"Error: -position expects an integer, got: {args[i + 1]}")
+                sys.exit(1)
+            i += 2
         else:
             print(f"Error: unknown -depth option: {args[i]}")
             sys.exit(1)
-    if depth is None and windows is None and level is None:
-        print("Error: nothing to set (use -depth / -windows / -level)")
+    if depth is None and windows is None and level is None and position is None:
+        print("Error: nothing to set (use -depth / -windows / -level / -position)")
         sys.exit(1)
 
     sections = read_hqins(proj["hqins"])
@@ -1759,9 +1802,13 @@ def set_sample_params(proj: dict, args: list) -> None:
         sys.exit(1)
     offset = section_value("TRIGGER POSITION", "128")
     max_pos = new_depth // new_windows - 5
-    if offset > max_pos:
-        print(f"Error: 触发位置 {offset} 对 depth={new_depth}/windows={new_windows} "
-              f"非法（要求 0 <= pos <= {max_pos}）。先用 -trig 调整触发位置或减小窗口数。")
+    if position is not None and not (0 <= position <= max_pos):
+        print(f"Error: -position {position} 对 depth={new_depth}/windows={new_windows} "
+              f"非法（要求 0 <= pos <= {max_pos}）。")
+        sys.exit(1)
+    if position is None and offset > max_pos:
+        print(f"Error: 当前触发位置 {offset} 对 depth={new_depth}/windows={new_windows} "
+              f"非法（要求 0 <= pos <= {max_pos}）。先用 -position 调整触发位置或减小窗口数。")
         sys.exit(1)
 
     changes = []
@@ -1769,13 +1816,17 @@ def set_sample_params(proj: dict, args: list) -> None:
 
     # DDF is what the flow actually consumes (R43); read its current values so
     # the "already at requested values" check covers both files.
-    ddf_depth = ddf_windows = None
+    ddf_depth = ddf_windows = ddf_level = ddf_offset = None
     if os.path.isfile(proj["ddf"]):
         ddf_txt = open(proj["ddf"], encoding="utf-8", errors="replace").read()
         m = re.search(r"<depth>(\d+)</depth>", ddf_txt)
         ddf_depth = int(m.group(1)) if m else None
         m = re.search(r"<window_num>(\d+)</window_num>", ddf_txt)
         ddf_windows = int(m.group(1)) if m else None
+        m = re.search(r"<level>(\d+)</level>", ddf_txt)
+        ddf_level = int(m.group(1)) if m else None
+        m = re.search(r"<offset>(\d+)</offset>", ddf_txt)
+        ddf_offset = int(m.group(1)) if m else None
 
     depth_pending = (depth is not None
                      and (depth != cur_depth or depth != ddf_depth))
@@ -1792,6 +1843,9 @@ def set_sample_params(proj: dict, args: list) -> None:
     if level is not None:
         sections["TRIGGER LEVEL"] = [f"0_LA:{level}"]
         changes.append(f"level={level}")
+    if position is not None:
+        sections["TRIGGER POSITION"] = [f"0_LA:{position}"]
+        changes.append(f"position={position}")
     if not changes and ddf_depth == cur_depth and ddf_windows == cur_windows:
         print("[OK] Sampling parameters already at requested values; nothing to do.")
         return
@@ -1815,6 +1869,14 @@ def set_sample_params(proj: dict, args: list) -> None:
         if windows is not None and ddf_windows != windows:
             ddf_txt = re.sub(r"<window_num>\d+</window_num>",
                              f"<window_num>{windows}</window_num>", ddf_txt, count=1)
+            ddf_changed = True
+        if level is not None and ddf_level != level:
+            ddf_txt = re.sub(r"<level>\d+</level>",
+                             f"<level>{level}</level>", ddf_txt, count=1)
+            ddf_changed = True
+        if position is not None and ddf_offset != position:
+            ddf_txt = re.sub(r"<offset>\d+</offset>",
+                             f"<offset>{position}</offset>", ddf_txt, count=1)
             ddf_changed = True
         if ddf_changed:
             with open(proj["ddf"], "w", encoding="utf-8", newline="") as f:
@@ -1970,10 +2032,15 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
         la_list.append(la)
     clk_sig = next((c for c in catalog if c["name"] == clk_name
                     and (c["module"] == sig["module"] or c["module"].split("[")[0] == sig["module"].split("[")[0])), None)
+    if clk_sig is None:
+        # 时钟常在顶层而首个信号在子模块：按名在任意模块解析（存在性校验只按名做过）。
+        # clk_list 必须记时钟自己所在模块，否则 ddf refclk 网名错误。clk_module_name
+        # （module_sample_list）保持 GUI 语义记首个信号模块，不受影响。
+        clk_sig = next((c for c in catalog if c["name"] == clk_name), None)
     if not la["clk_list"] and clk_sig:
         la["clk_list"].append({
-            "ip_signal_name": _ip_name(clk_name, sig["module"]), "lsb": 0, "msb": 0,
-            "module_name": sig["module"], "raw_signal_name": clk_name,
+            "ip_signal_name": _ip_name(clk_name, clk_sig["module"]), "lsb": 0, "msb": 0,
+            "module_name": clk_sig["module"], "raw_signal_name": clk_name,
             "show_hier_name": clk_name, "show_name": clk_name})
     entry = {"ip_signal_name": _ip_name(name, sig["module"]), "lsb": sig["lsb"],
              "msb": sig["msb"], "module_name": sig["module"], "raw_signal_name": name,
@@ -2070,6 +2137,17 @@ def _write_ddf_from_la(proj: dict, la_info: dict) -> None:
     offset = _section_value(sections.get("TRIGGER POSITION", [])) or "128"
     freq = float(_section_value(sections.get("CLOCK FREQUENCY", []), la="") or 100)
     period = f"{int(1000 / freq)}ns"
+    level = _section_value(sections.get("TRIGGER LEVEL", [])) or "1"
+    win = "1"
+    if os.path.isfile(proj["ddf"]):
+        m_win = re.search(r"<window_num>(\d+)</window_num>",
+                          open(proj["ddf"], encoding="utf-8", errors="replace").read())
+        if m_win:
+            win = m_win.group(1)
+    if not la.get("clk_list"):
+        print("Error: LA 缺少采样时钟条目（clk_list 为空）——多为旧版登记跨模块时钟时的")
+        print("       遗留状态。请 -del 相关信号后重新 -add（首个信号需带 -clk）。")
+        sys.exit(1)
     clk_net = la["clk_list"][0]["ip_signal_name"]
 
     def signal_xml(e, nbits, indent):
@@ -2085,7 +2163,7 @@ def _write_ddf_from_la(proj: dict, la_info: dict) -> None:
            f"<design>{proj['top']}</design>", "<edif></edif>", f"<family>{proj['family']}</family>",
            "\t<la_core>", "\t\t<refclk>", f"\t\t\t<net>{clk_net}</net>",
            f"\t\t\t<period>{period}</period>", "\t\t</refclk>",
-           "\t\t<trigger>", "\t\t\t<level>1</level>"]
+           "\t\t<trigger>", f"\t\t\t<level>{level}</level>"]
     for e in la["t_list"] + la["st_list"]:
         width = e["msb"] - e["lsb"] + 1
         for ctype, op, operand in (("EDGE", "RISE", None),
@@ -2102,7 +2180,7 @@ def _write_ddf_from_la(proj: dict, la_info: dict) -> None:
             out.append("\t\t\t\t<ignore>yes</ignore>")
             out.append("\t\t\t</condition>")
     out += ["\t\t</trigger>", "\t\t<storage>", f"\t\t\t<depth>{depth}</depth>",
-            f"\t\t\t<offset>{offset}</offset>", "\t\t\t<window_num>1</window_num>"]
+            f"\t\t\t<offset>{offset}</offset>", f"\t\t\t<window_num>{win}</window_num>"]
     for e in la["s_list"] + la["st_list"]:
         out.append(signal_xml(e, e["msb"] - e["lsb"] + 1, 3).rstrip("\n"))
     for e in la["clk_list"]:
@@ -2127,8 +2205,8 @@ def _rebuild_instrumented(proj: dict, sig_info: dict, la_info: dict) -> None:
     if not os.path.isfile(new_rtl_tcl):
         _write_import_tcls(proj, _vfiles_from_hqins(proj))
     _run_hqfpga_cmds(version["hqfpga_path"], [
-        f"insight.load {_tcl_path(proj['ddf'])}",
-        f"insight.debugip.create 1 False -f {_tcl_path(insight_ip)}",
+        f"insight.load {{{_tcl_path(proj['ddf'])}}}",
+        f"insight.debugip.create 1 False -f {{{_tcl_path(insight_ip)}}}",
     ], cwd=proj["work_dir"])
     if not os.path.isfile(insight_ip):
         print("Error: insight.debugip.create did not produce insight_ip.v")

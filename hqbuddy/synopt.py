@@ -62,35 +62,60 @@ _KEYMAP.update({k: "slo" for k in SLO_KEYS})
 
 
 def run_synopt(args: list) -> None:
-    """Entry for 'hqbuddy -synopt <src.hqprj> [-show | -set k=v ... | -clear]'."""
+    """Entry for 'hqbuddy -synopt [<src.hqprj>] [-show | -set k=v ... | -clear]'."""
     if not args:
-        print("Usage: hqbuddy -synopt <src.hqprj> [-show | -set k=on|off ... | -clear]")
+        print("Usage: hqbuddy -synopt [<src.hqprj>] [-show | -set k=on|off ... | -clear]")
+        print("       (.hqprj 可省略：当前目录唯一工程自动探测)")
         print(f"       keys: {', '.join(RTL_KEYS)} (rtl.set); "
               f"{', '.join(SLO_KEYS)} (lo.slo.set)")
         sys.exit(1)
-    hqprj_path = os.path.abspath(args[0])
-    if not os.path.isfile(hqprj_path):
-        print(f"Error: file not found: {hqprj_path}")
-        sys.exit(1)
+    hqprj_arg = None
     mode = "-show"
     sets: dict = {}
     clear = False
-    i = 1
+    i = 0
     while i < len(args):
         a = args[i]
-        if a in ("-show", "-set", "-clear"):
+        if a in ("-show", "-clear"):
             mode = a
             i += 1
-            if mode == "-set":
-                while i < len(args):
-                    k, _, v = args[i].partition("=")
-                    if not k or not v:
-                        print(f"Error: -set 需要 key=on|off 形式: {args[i]}")
-                        sys.exit(1)
-                    sets[k] = v
-                    i += 1
-            break
-        print(f"Error: unknown -synopt option: {a}")
+        elif a == "-set":
+            mode = "-set"
+            i += 1
+            while i < len(args) and "=" in args[i] and not args[i].startswith("-"):
+                k, _, v = args[i].partition("=")
+                if not k or not v:
+                    print(f"Error: -set 需要 key=on|off 形式: {args[i]}")
+                    sys.exit(1)
+                sets[k] = v
+                i += 1
+        elif a.startswith("-"):
+            print(f"Error: unknown -synopt option: {a}")
+            sys.exit(1)
+        elif hqprj_arg is None:
+            hqprj_arg = a
+            i += 1
+        else:
+            print(f"Error: unexpected argument: {a}")
+            sys.exit(1)
+    if mode == "-set" and not sets:
+        print("Error: -set 需要至少一个 key=on|off 参数")
+        sys.exit(1)
+    if hqprj_arg is None:
+        import glob
+        cands = sorted(glob.glob("*.hqprj"))
+        if not cands:
+            print("Error: 未指定 .hqprj 且当前目录没有工程文件")
+            sys.exit(1)
+        if len(cands) > 1:
+            print("Error: 当前目录有多个 .hqprj，请显式指定一个:")
+            for cand in cands:
+                print(f"  {cand}")
+            sys.exit(1)
+        hqprj_arg = cands[0]
+    hqprj_path = os.path.abspath(hqprj_arg)
+    if not os.path.isfile(hqprj_path):
+        print(f"Error: file not found: {hqprj_path}")
         sys.exit(1)
 
     p = sidecar_path(hqprj_path)

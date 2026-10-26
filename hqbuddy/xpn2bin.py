@@ -49,9 +49,13 @@ def _download_bin(version: dict, bin_abs: str) -> int:
 
     print("")
     print("Detecting board model ...")
-    r = subprocess.run([cable, '--detect_model'],
-                       capture_output=True, text=True, errors='replace',
-                       timeout=60)
+    try:
+        r = subprocess.run([cable, '--detect_model'],
+                           capture_output=True, text=True, errors='replace',
+                           timeout=60)
+    except subprocess.TimeoutExpired:
+        print('Error: cable.exe --detect_model timed out (60s) — is the board/JTAG connected?')
+        return 1
     m = re.search(r'Device Model\s*:\s*(\S+)', r.stdout or '')
     if not m:
         print("Error: failed to detect board model, download aborted. cable output:")

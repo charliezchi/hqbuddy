@@ -6,12 +6,19 @@ Offline checks run without a board; online checks need the SA50K board
 with the r21a clean baseline bit.  Exit 1 on any FAIL.
 """
 import os
+import shutil
+import glob
 import sys
 import subprocess
 
 BASE = r"C:\Users\XiST\Desktop\hqbuddy_test"
 
+_HQ_EXE = shutil.which("hqbuddy")
+
+
 def _run(cmd, cwd=None, timeout=300):
+    if cmd and cmd[0] == "hqbuddy" and _HQ_EXE is None:
+        cmd = [sys.executable, "-m", "hqbuddy"] + cmd[1:]
     r = subprocess.run(cmd, capture_output=True, timeout=timeout, cwd=cwd)
     out = (r.stdout or b"").decode("utf-8", errors="replace")
     err = (r.stderr or b"").decode("utf-8", errors="replace")
@@ -27,13 +34,25 @@ def run_regression(args):
     """Entry for 'hqbuddy -regression [--offline] [base_dir]'."""
     offline = '--offline' in args
     args = [a for a in args if a != '--offline']
-    base = os.path.abspath(args[0]) if args else os.path.join(BASE, "r21a")
-    hqprj = os.path.join(base, "r21a.hqprj")
+    if args:
+        base = os.path.abspath(args[0])
+        cands = sorted(glob.glob(os.path.join(base, "*.hqprj")))
+        hqprj = next((p for p in cands
+                      if os.path.basename(p) == "r21a.hqprj"),
+                     cands[0] if len(cands) == 1 else None)
+        if hqprj is None:
+            print(f"Error: pass the r21a baseline dir (found {len(cands)} .hqprj in {base})")
+            sys.exit(1)
+    else:
+        base = os.path.join(BASE, "r21a")
+        hqprj = os.path.join(base, "r21a.hqprj")
     if not os.path.isfile(hqprj):
         print(f"Error: baseline project not found: {hqprj}")
+        print("       Usage: hqbuddy -regression [--offline] <base_dir>")
         sys.exit(1)
 
     results = []
+    skipped = []
     print(f"hqbuddy regression suite (base: {base})" + ("  [--offline]" if offline else ""))
     print()
 
@@ -41,7 +60,7 @@ def run_regression(args):
     if offline:
         print("1. Baseline capture (board)")
         print("  [SKIP] board required (--offline)")
-        results.append(True)
+        skipped.append("board capture")
     else:
         print("1. Baseline capture (board)")
         print("  setting trigger...")
@@ -70,14 +89,16 @@ def run_regression(args):
     results.append(_check("filelist generated", ok, out.strip()[:60]))
 
     # 5. -edf2v smoke
-    edif = os.path.join(BASE, "r30syn", "a.edif")
+    sib = os.path.dirname(base)
+    edif = os.path.join(sib, "r30syn", "a.edif")
     if os.path.isfile(edif):
-        outv = os.path.join(BASE, "r30syn", "reg_smoke.v")
+        outv = os.path.join(sib, "r30syn", "reg_smoke.v")
         rc, out = _run(["hqbuddy", "-edf2v", edif, "-o", outv])
         ok = rc == 0 and os.path.isfile(outv) and os.path.getsize(outv) > 1000
         results.append(_check("edf2v conversion", ok, outv if ok else out[-100:]))
     else:
-        results.append(_check("edf2v (skipped)", True))
+        print("  [SKIP] r30syn/a.edif not found")
+        skipped.append("edf2v")
 
     # 6. -report smoke
     rc, out = _run(["hqbuddy", "-report", base])
@@ -86,6 +107,7 @@ def run_regression(args):
 
     n_pass = sum(1 for r in results if r)
     n_fail = len(results) - n_pass
-    print(f"\nRegression: {n_pass}/{len(results)} PASS, {n_fail} FAIL")
+    print(f"\nRegression: {n_pass}/{len(results)} PASS, {n_fail} FAIL"
+          + (f", {len(skipped)} SKIP" if skipped else ""))
     if n_fail:
         sys.exit(1)

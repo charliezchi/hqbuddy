@@ -120,7 +120,7 @@ def get_device(hqprj_path: str) -> str:
     package = None
     condition = None
 
-    with open(hqprj_path, "r", encoding="utf-8") as f:
+    with open(hqprj_path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             parsed = _parse_key_value(line)
@@ -148,7 +148,7 @@ def get_device(hqprj_path: str) -> str:
 
 def _update_hqprj_device(hqprj_path: str, part: str, die: str, speed: str, package: str, condition: str, family: str | None = None) -> None:
     """Update device fields in the .hqprj file."""
-    with open(hqprj_path, "r", encoding="utf-8") as f:
+    with open(hqprj_path, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
 
     updated = False
@@ -205,7 +205,7 @@ def _update_hqip_device(hqip_path: str, part: str) -> bool:
     if not os.path.isfile(hqip_path):
         return False
 
-    with open(hqip_path, "r", encoding="utf-8") as f:
+    with open(hqip_path, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
 
     # Find [IP] section and update device= under it

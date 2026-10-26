@@ -48,13 +48,22 @@ def run_autosdc(args: list) -> None:
             top = ln.split("=", 1)[1]
         elif ln.startswith("FILE_SRC=") and ln != "FILE_SRC=NONE":
             srcs.append(ln.split("=", 1)[1].replace("$WORK_DIR$", work.replace(os.sep, "/") + "/"))
+    if not top or top == "NONE":
+        print("Error: .hqprj 未设置 TOP_MODULE，无法 elaborate。")
+        sys.exit(1)
+    if period is not None:
+        try:
+            float(period)
+        except ValueError:
+            print(f"Error: -period 需为数值（ns），得到: {period}")
+            sys.exit(1)
 
     version = launcher.require_hqfpga_version()
     hqfpga_path = version["hqfpga_path"]
 
-    vlines = "\n".join(f"lappend vfiles {s}" for s in srcs)
+    vlines = "\n".join(f"lappend vfiles {{{s}}}" for s in srcs)
     auto_line = f"tc.autogen -period {period}" if period else "tc.autogen -print"
-    tcl = (f"set WORK_DIR {work.replace(os.sep, '/')}\n"
+    tcl = (f"set WORK_DIR {{{work.replace(os.sep, '/')}}}\n"
            f"set vfiles {{}}\n{vlines}\n"
            f"dv.setup -synlib_only SEAL\n"
            f"rtl.analyze $vfiles\n"
@@ -66,10 +75,18 @@ def run_autosdc(args: list) -> None:
     tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8")
     tf.write(tcl)
     tf.close()
-    proc = subprocess.run([hqfpga_path, "-cmd", tf.name], cwd=work,
-                          capture_output=True, text=True,
-                          errors="replace", timeout=600)
-    os.unlink(tf.name)
+    try:
+        proc = subprocess.run([hqfpga_path, "-cmd", tf.name], cwd=work,
+                              capture_output=True, text=True,
+                              errors="replace", timeout=600)
+    except subprocess.TimeoutExpired:
+        print("Error: hqfpga elaborate 超时（600s）——设计可能过大或工具挂起。")
+        sys.exit(1)
+    finally:
+        try:
+            os.unlink(tf.name)
+        except OSError:
+            pass
     out_txt = proc.stdout or ""
 
     if "===SDC-BEgin===" not in out_txt or "===SDC-End===" not in out_txt:

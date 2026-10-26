@@ -277,11 +277,15 @@ def run_vla_gen(args: list) -> None:
     subprocess.Popen(cmd, cwd=out_dir)
 
     target = os.path.join(out_dir, f"xsIP_{name}.v")
-    deadline = time.time() + 600
+    started = time.time()
+    deadline = started + 600
     print("[i] Waiting for generation (up to 600s; close the dialog to abort)...")
     while time.time() < deadline:
         time.sleep(2)
-        if os.path.isfile(target) and os.path.getsize(target) > 0:
+        # mtime guard: a leftover xsIP_<name>.v from an earlier run must
+        # not read as instant success
+        if (os.path.isfile(target) and os.path.getsize(target) > 0
+                and os.path.getmtime(target) >= started):
             hqip = target[:-2] + ".hqip"
             print(f"[OK] VLA IP generated: {target} "
                   f"({os.path.getsize(target)} bytes)")

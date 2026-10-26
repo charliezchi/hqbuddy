@@ -20,12 +20,17 @@ def _find_hqip(arg: str | None) -> str:
     if not matches:
         print("Error: no .hqip file specified and none found in current directory.")
         sys.exit(1)
+    if len(matches) > 1:
+        print("Error: multiple .hqip files in cwd, pass one explicitly:")
+        for m in matches:
+            print(f"  {m}")
+        sys.exit(1)
     return os.path.abspath(matches[0])
 
 
 def _parse_meta_file(hqip_path: str) -> str:
     """Extract meta_file path from .hqip file."""
-    with open(hqip_path, "r", encoding="utf-8") as f:
+    with open(hqip_path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             stripped = line.strip()
             if stripped.startswith("meta_file="):
@@ -71,7 +76,7 @@ def _parse_ipgen_desc(xml_dir: str) -> tuple[str, bool]:
     exe_line = None
     hqfpga_required = False
 
-    with open(desc_path, "r", encoding="utf-8") as f:
+    with open(desc_path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             stripped = line.strip()
             if stripped.startswith("EXE="):
@@ -143,10 +148,11 @@ def _run_ipgen_cmd(ipgen_exe: str, xml: str, hqip: str, hq_exe: str | None, lang
 
     if proc.returncode != 0:
         print(f"")
-        print(f"Warning: ipgen exited with code {proc.returncode}")
+        print(f"Error: ipgen exited with code {proc.returncode}")
+    return proc.returncode
 
 
-def run_ipgen(hqip_path: str | None = None, lang: str = "chs") -> None:
+def run_ipgen(hqip_path: str | None = None, lang: str = "chs") -> int:
     """
     Run the IP generator for a .hqip file.
 
@@ -178,4 +184,4 @@ def run_ipgen(hqip_path: str | None = None, lang: str = "chs") -> None:
     hq_exe = _resolve_hqfpga_exe(hqfpga_root) if hqfpga_required else None
 
     # Execute
-    _run_ipgen_cmd(ipgen_exe, xml_path, hqip_abs, hq_exe, lang, hqip_dir)
+    return _run_ipgen_cmd(ipgen_exe, xml_path, hqip_abs, hq_exe, lang, hqip_dir)

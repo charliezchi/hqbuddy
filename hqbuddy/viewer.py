@@ -89,7 +89,7 @@ def run_xpn_tcl(version: dict, xpn_abs: str, body: list[str],
     the foreground, then remove the TCL."""
     temp_tcl = os.path.join(workdir, f"_hqbuddy_{tag}.tcl")
     with open(temp_tcl, "w", encoding="utf-8") as f:
-        f.write(f"xpn.read {tcl_path(xpn_abs)}\n")
+        f.write(f"xpn.read {{{tcl_path(xpn_abs)}}}\n")
         for line in body:
             f.write(line + "\n")
         f.write("exit\n")
@@ -114,9 +114,12 @@ def run_xpn_tcl(version: dict, xpn_abs: str, body: list[str],
             print(f"Warning: hqfpga exited with code {proc.returncode}")
     finally:
         if os.path.exists(temp_tcl):
-            os.remove(temp_tcl)
-            print("")
-            print(f"Cleaned up temp TCL: {temp_tcl}")
+            try:
+                os.remove(temp_tcl)
+                print("")
+                print(f"Cleaned up temp TCL: {temp_tcl}")
+            except OSError as e:
+                print(f"Warning: could not remove temp TCL {temp_tcl}: {e}")
 
 
 def find_viewer_exe(version: dict, subdir: str, exe: str) -> str:
@@ -172,8 +175,8 @@ def run_floorplan(xpn_path: str | None, output_prefix: str | None = None,
     version = launcher.require_hqfpga_version()
 
     run_xpn_tcl(version, xpn_abs, [
-        f"dconv.dev2chipedit {tcl_path(cdev)}",
-        f"dconv.xpn2chipedit {tcl_path(cexpn)}",
+        f"dconv.dev2chipedit {{{tcl_path(cdev)}}}",
+        f"dconv.xpn2chipedit {{{tcl_path(cexpn)}}}",
     ], os.path.dirname(prefix), "floorplan")
 
     print("")
@@ -228,8 +231,8 @@ def run_routing(xpn_path: str | None, output_name: str | None = None,
     # write it to a sidecar we read and delete afterwards.
     devname_f = json_abs + ".devname"
     run_xpn_tcl(version, xpn_abs, [
-        f"rt.genRoutingResult -filename {tcl_path(json_abs)}",
-        f"set __f [open {tcl_path(devname_f)} w];"
+        f"rt.genRoutingResult -filename {{{tcl_path(json_abs)}}}",
+        f"set __f [open {{{tcl_path(devname_f)}}} w];"
         f" puts $__f [dv.info name]; close $__f",
     ], os.path.dirname(json_abs), "routing")
 

@@ -119,8 +119,10 @@ def run_ffloc(clk: str, xpn_path: str | None = None,
     print("")
     if not os.path.isfile(txt_abs):
         print(f"Error: FF location file was not generated: {txt_abs}")
-        print(f"  xpn.read likely failed — check the hqfpga output above")
-        print(f"  (input must be a text-format .xpn, not .cexpn/.edif).")
+        print(f"  Check the hqfpga output above — common causes:")
+        print(f"  - clock net '{clk}' not found in this XPN (verify with:")
+        print(f"      hqbuddy -xpn inspect {os.path.basename(xpn_abs)});")
+        print(f"  - xpn.read failed (input must be a text-format .xpn, not .cexpn/.edif).")
         sys.exit(1)
 
     print(f"FF location file ready: {txt_abs}")

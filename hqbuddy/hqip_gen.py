@@ -285,7 +285,7 @@ def load_internal_ini(xml_file):
         return []
     cp = configparser.ConfigParser()
     cp.optionxform = str
-    cp.read(ii_file)
+    cp.read(ii_file, encoding="utf-8")
     pairs = []
     for sec in cp.sections():
         for nm, val in cp.items(sec):
@@ -305,7 +305,7 @@ def gen_default_hqip(meta_file, hqip_file, device):
     module_name = os.path.splitext(os.path.basename(hqip_file))[0]
 
     os.makedirs(os.path.dirname(hqip_file), exist_ok=True)
-    with open(hqip_file, 'w') as f:
+    with open(hqip_file, 'w', encoding='utf-8') as f:
         # [General]
         print('[General]', file=f)
         if ii_pairs:

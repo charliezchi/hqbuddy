@@ -70,6 +70,7 @@ def run_doctor(args: list) -> None:
     # -- 2. source files -----------------------------------------------------
     resolved_src = []
     seen = {}
+    missing_src = 0
     for raw in file_src:
         if raw == "NONE":
             continue
@@ -78,10 +79,11 @@ def run_doctor(args: list) -> None:
         seen.setdefault(os.path.normcase(p), []).append(raw)
         if not os.path.isfile(p):
             fails.append(f"FILE_SRC 文件不存在: {p}")
+            missing_src += 1
     dups = {k: v for k, v in seen.items() if len(v) > 1}
     for k, v in dups.items():
         fails.append(f"FILE_SRC 重复登记 {len(v)} 次: {v[0]}")
-    if file_src and not dups:
+    if file_src and not dups and not missing_src:
         oks.append(f"FILE_SRC x{len(file_src)} 全部存在、无重复")
     for f in file_src + file_tc + file_pc:
         base = os.path.basename(f)
@@ -91,7 +93,7 @@ def run_doctor(args: list) -> None:
     # -- 3. module declarations (R6: duplicate/ANSI class) -------------------
     modules: dict = {}
     for p in resolved_src:
-        if not p.endswith(".v") or not os.path.isfile(p):
+        if not p.endswith((".v", ".sv")) or not os.path.isfile(p):
             continue
         try:
             txt = open(p, encoding="utf-8", errors="replace").read()

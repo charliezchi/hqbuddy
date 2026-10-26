@@ -96,17 +96,21 @@ def cmd_new_soc(args):
     parent = "."
     i = 1
     while i < len(args):
-        if args[i] == '-core' and i + 1 < len(args):
+        if args[i] == '-core' and i + 1 < len(args) and not args[i + 1].startswith('-'):
             core = args[i + 1].lower()
             i += 2
-        elif args[i] == '-preset' and i + 1 < len(args):
+        elif args[i] == '-preset' and i + 1 < len(args) and not args[i + 1].startswith('-'):
             preset = args[i + 1]
             i += 2
-        elif args[i] == '-dir' and i + 1 < len(args):
+        elif args[i] == '-dir' and i + 1 < len(args) and not args[i + 1].startswith('-'):
             parent = args[i + 1]
             i += 2
+        elif args[i] in ('-core', '-preset', '-dir'):
+            print(f"Error: {args[i]} requires a value")
+            sys.exit(1)
         else:
-            i += 1
+            print(f"Error: unknown -new_soc argument: {args[i]}")
+            sys.exit(1)
     if core not in ("cm3", "star"):
         print(f"Error: unknown core '{core}' (choose cm3 or star)")
         sys.exit(1)

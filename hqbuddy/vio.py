@@ -263,10 +263,14 @@ def cmd_write(work: str, assigns: list) -> None:
         if name not in values:
             print(f"Error: unknown output probe '{name}' (registered: {', '.join(values)})")
             sys.exit(1)
-        v = int(val, 2) if val.startswith("0b") else int(val, 0)
+        try:
+            v = int(val, 2) if val.startswith("0b") else int(val, 0)
+        except ValueError:
+            print(f"Error: invalid value for {name}: {val} (decimal or 0b binary)")
+            sys.exit(1)
         width = next(p["width"] for p in outs if p["name"] == name)
-        if v >= (1 << width):
-            print(f"Error: value {val} does not fit {name}[{width}b]")
+        if v < 0 or v >= (1 << width):
+            print(f"Error: value {val} does not fit {name}[{width}b] (unsigned)")
             sys.exit(1)
         values[name] = v
     assigned = {a.partition("=")[0] for a in assigns}
@@ -314,15 +318,26 @@ def run_vio(args: list) -> None:
                 module = rest[i + 1]
                 i += 1
             elif rest[i] == "-in" and i + 1 < len(rest):
-                in_w = int(rest[i + 1])
+                try:
+                    in_w = int(rest[i + 1])
+                except ValueError:
+                    print(f"Error: -in expects an integer, got: {rest[i + 1]}")
+                    sys.exit(1)
                 i += 1
             elif rest[i] == "-out" and i + 1 < len(rest):
-                out_w = int(rest[i + 1])
+                try:
+                    out_w = int(rest[i + 1])
+                except ValueError:
+                    print(f"Error: -out expects an integer, got: {rest[i + 1]}")
+                    sys.exit(1)
                 i += 1
             else:
                 print(f"Error: unknown -gen option: {rest[i]}")
                 sys.exit(1)
             i += 1
+        if in_w < 0 or out_w < 0:
+            print("Error: -in/-out widths must be >= 0")
+            sys.exit(1)
         cmd_gen(work, module, in_w, out_w)
         return
 

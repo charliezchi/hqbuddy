@@ -41,7 +41,7 @@ from .hqip_gen import run_gen_hqip
 
 def show_help():
     """Print help message."""
-    print("""Usage: hqbuddy [options]
+    print("""Usage: hqbuddy [options]   (no args: launch HqFPGA GUI; <file>.hqprj: open in GUI)
 
 Global:
   -h                      Show this help message
@@ -64,6 +64,8 @@ Project:
                                         that flow when the route result is missing
                                         (source-to-XPN in one command; needs an existing
                                         HqInsight project with registered signals)
+  -xpn inspect <file.xpn>              Parse an XPN physical netlist: design/device/
+                                        component stats/IO list
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN, then auto-download to board
                                         (multiple .xpn in cwd: convert all + report,
                                          then open the GUI downloader)
@@ -106,7 +108,7 @@ Project:
   -mcu_build [MCU_Prj_dir...]          With "mcu_toolchain":"gcc" in config: build via
                                         arm-none-eabi-gcc + MCU_Prj/Makefile, then auto-merge
   -merge_bin <fpga.bin> <mcu.bin>      Merge FPGA+MCU bins for download (cable.exe)
-     [-o <file>] [-model SA30K] [-dl]    (-dl: download after merge)
+     [-o <file>] [-model SA30K] [-remap] [-dl]  (-dl: download; -remap: MCU remap)
   -vla -gen [-name VLA] [-dir <dir>] [-device <part>]
                                         Launch the VLA IP generator dialog (writes xsIP_VLA.v/hqip/cfg)
   -edf2v <a.edif> [-o <file>]          Convert a third-party EDIF netlist to Verilog
@@ -140,7 +142,7 @@ Project:
                                        launch (agent/script mode; bins under seed_sweep/
                                        seed<K>/ for direct -cable download).
   -set_top <name> [<.hqprj>]           Set top module name (project: arg or cwd)
-  -clean [-force]                       Clean files/dirs listed in templates/clean_list.json
+  -clean [-force|-f]                    Clean files/dirs listed in templates/clean_list.json
 
 Tools:
   -ipgen [<.hqip>] [-lang <lang>]       Generate IP netlist via ipgen
@@ -187,6 +189,7 @@ Debug:
   -vio -read [-loop N] [-interval s]    Read input probes (hex/dec per probe)
   -vio -write <name>=<val>[,...]        Drive output probes (val: dec/0x/0b)
   -report [<dir>|<.hqprj>] [-paths N]   Digest main-flow reports: Fmax/WNS/utilization/bit files
+                                        [--json] machine-readable; [--diff <dirB>] compare two
                                         (-paths N: extract N worst paths from slack report)
   -insight -selftest [-signal s] [-value N]
                                         Regression selftest: arm+capture, verify samples
@@ -226,30 +229,35 @@ def _parse_args_with_output(args: list[str]) -> tuple[str | None, str | None]:
     """
     Parse args to extract hqprj path and -o output option.
 
+    Flags and the project path may appear in any order (position-
+    independent since 3.21.1); unknown flags and a valueless -o are
+    rejected instead of being silently dropped.
+
     Returns:
         Tuple of (hqprj_path, output_name). Either may be None.
     """
     output_name = None
     hqprj_path = None
-
-    if not args:
-        hqprj_path = _resolve_hqprj(None)
-    elif args[0] == '-o':
-        if len(args) < 2:
-            print("Error: -o requires an output name")
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == '-o':
+            if i + 1 >= len(args) or args[i + 1].startswith('-'):
+                print("Error: -o requires an output name")
+                sys.exit(1)
+            output_name = args[i + 1]
+            i += 2
+        elif a.startswith('-'):
+            print(f"Error: unknown option: {a}")
             sys.exit(1)
-        output_name = args[1]
+        elif hqprj_path is None:
+            hqprj_path = a
+            i += 1
+        else:
+            print(f"Error: unexpected argument: {a}")
+            sys.exit(1)
+    if hqprj_path is None:
         hqprj_path = _resolve_hqprj(None)
-    elif args[0].startswith('-o'):
-        output_name = args[0][2:]
-        hqprj_path = _resolve_hqprj(None)
-    else:
-        hqprj_path = args[0]
-        if len(args) >= 3 and args[1] == '-o':
-            output_name = args[2]
-        elif len(args) >= 2 and args[1].startswith('-o'):
-            output_name = args[1][2:]
-
     return hqprj_path, output_name
 
 
@@ -273,29 +281,39 @@ def cmd_filelist(args):
     print(f"Filelist saved to: {os.path.abspath(output_file)} ({len(files)} files)")
 
 
-def cmd_flow(args):
-    """Run hqprj2tcl flow via hqfpga."""
-    # Scan for mode flags (recognized anywhere after -flow)
-    looptdo = False
-    bin_only_mode = False
-    bin_only_name = None
+def _scan_flow_mode(args: list) -> tuple:
+    """Shared -flow/-build mode scan: -looptdo / -bin_only [name].
+
+    The optional bin name is consumed only when it cannot be confused with
+    a flag or the project path (flags-first convention: the .hqprj may
+    follow the flags, so a .hqprj after -bin_only is the project, not the
+    bitstream name)."""
+    looptdo = bin_only = False
+    bin_name = None
     filtered = []
     i = 0
     while i < len(args):
-        if args[i] == '-looptdo':
+        a = args[i]
+        if a == '-looptdo':
             looptdo = True
             i += 1
-        elif args[i] == '-bin_only':
-            bin_only_mode = True
-            # Optional bin name: only consume if next arg does not look like a flag
-            if i + 1 < len(args) and not args[i + 1].startswith('-'):
-                bin_only_name = args[i + 1]
+        elif a == '-bin_only':
+            bin_only = True
+            nxt = args[i + 1] if i + 1 < len(args) else None
+            if nxt and not nxt.startswith('-') and not nxt.lower().endswith('.hqprj'):
+                bin_name = nxt
                 i += 2
             else:
                 i += 1
         else:
-            filtered.append(args[i])
+            filtered.append(a)
             i += 1
+    return looptdo, bin_only, bin_name, filtered
+
+
+def cmd_flow(args):
+    """Run hqprj2tcl flow via hqfpga."""
+    looptdo, bin_only_mode, bin_only_name, filtered = _scan_flow_mode(args)
 
     if looptdo and bin_only_mode:
         print("Error: -looptdo and -bin_only cannot be used together")
@@ -443,7 +461,8 @@ def cmd_update_ip(args):
         print(f"[{i}/{len(ip_files)}] {os.path.abspath(hqip_path)}")
         sys.stdout.flush()
         try:
-            run_ipgen(hqip_path)
+            if run_ipgen(hqip_path) != 0:
+                failed += 1
         except SystemExit as e:
             # run_ipgen exits on fatal errors; count it and continue
             if e.code != 0:
@@ -477,11 +496,15 @@ def cmd_new_prj(args):
     device = None
     i = 1
     while i < len(args):
-        if args[i] == '-device' and i + 1 < len(args):
+        if args[i] == '-device' and i + 1 < len(args) and not args[i + 1].startswith('-'):
             device = args[i + 1]
             i += 2
+        elif args[i] == '-device':
+            print("Error: -device requires a part name")
+            sys.exit(1)
         else:
-            i += 1
+            print(f"Error: unknown -new_prj argument: {args[i]}")
+            sys.exit(1)
 
     # If no device specified, launch interactive picker
     if not device:
@@ -577,7 +600,7 @@ def cmd_add(args):
     added_pc = None
 
     # Read existing file
-    with open(hqprj_abs, "r", encoding="utf-8") as f:
+    with open(hqprj_abs, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
 
     existing_src = set()
@@ -857,9 +880,7 @@ def cmd_refresh_time(args):
 
 def cmd_build_fpga(args):
     """Run the full FPGA implementation flow (generate run_hqprj.tcl, execute)."""
-    looptdo = '-looptdo' in args
-    bin_only = '-bin_only' in args
-    filtered = [a for a in args if a not in ('-looptdo', '-bin_only')]
+    looptdo, bin_only, bin_name, filtered = _scan_flow_mode(args)
     if looptdo and bin_only:
         print("Error: -looptdo and -bin_only cannot be used together")
         sys.exit(1)
@@ -871,7 +892,7 @@ def cmd_build_fpga(args):
     if looptdo:
         run_flow_looptdo(hqprj_path, output_tcl)
     elif bin_only:
-        run_flow_bin_only(hqprj_path, None, output_tcl)
+        run_flow_bin_only(hqprj_path, bin_name, output_tcl)
     else:
         run_flow(hqprj_path, output_tcl)
 
@@ -925,7 +946,7 @@ def cmd_set_top(args):
         sys.exit(1)
     hqprj_abs = os.path.abspath(hqprj_path)
 
-    with open(hqprj_abs, "r", encoding="utf-8") as f:
+    with open(hqprj_abs, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
 
     found = False
@@ -1235,17 +1256,21 @@ def cmd_edf2v(args):
     device = None
     i = 0
     while i < len(args):
-        if args[i] == '-o' and i + 1 < len(args):
+        if args[i] == '-o' and i + 1 < len(args) and not args[i + 1].startswith('-'):
             output_v = args[i + 1]
             i += 2
-        elif args[i] == '-device' and i + 1 < len(args):
+        elif args[i] == '-device' and i + 1 < len(args) and not args[i + 1].startswith('-'):
             device = args[i + 1]
             i += 2
+        elif args[i] in ('-o', '-device'):
+            print(f"Error: {args[i]} requires a value")
+            sys.exit(1)
         elif not args[i].startswith('-') and edif_path is None:
             edif_path = args[i]
             i += 1
         else:
-            i += 1
+            print(f"Error: unknown -edf2v argument: {args[i]}")
+            sys.exit(1)
     run_edf2v(edif_path, output_v, device)
 
 
@@ -1258,23 +1283,27 @@ def cmd_netlist_build(args):
     device = None
     i = 0
     while i < len(args):
-        if args[i] == '--upc' and i + 1 < len(args):
+        if args[i] in ('--upc', '-upc') and i + 1 < len(args) and not args[i + 1].startswith('-'):
             upc_path = args[i + 1]
             i += 2
-        elif args[i] == '--sdc' and i + 1 < len(args):
+        elif args[i] in ('--sdc', '-sdc') and i + 1 < len(args) and not args[i + 1].startswith('-'):
             sdc_path = args[i + 1]
             i += 2
-        elif args[i] == '-o' and i + 1 < len(args):
+        elif args[i] == '-o' and i + 1 < len(args) and not args[i + 1].startswith('-'):
             output_bin = args[i + 1]
             i += 2
-        elif args[i] == '-device' and i + 1 < len(args):
+        elif args[i] == '-device' and i + 1 < len(args) and not args[i + 1].startswith('-'):
             device = args[i + 1]
             i += 2
+        elif args[i] in ('--upc', '-upc', '--sdc', '-sdc', '-o', '-device'):
+            print(f"Error: {args[i]} requires a value")
+            sys.exit(1)
         elif not args[i].startswith('-') and edif_path is None:
             edif_path = args[i]
             i += 1
         else:
-            i += 1
+            print(f"Error: unknown -netlist_build argument: {args[i]}")
+            sys.exit(1)
     run_netlist_build(edif_path, upc_path, sdc_path, output_bin, device)
 
 
@@ -1333,6 +1362,9 @@ def cmd_get_pin_bank(args):
         print("Usage: hqbuddy -get_pin_bank <pin> [-device <part>]")
         sys.exit(1)
     pin = args[0]
+    if pin.startswith('-'):
+        print("Error: pin name cannot start with '-'")
+        sys.exit(1)
     device_part = None
     i = 1
     while i < len(args):
@@ -1340,7 +1372,8 @@ def cmd_get_pin_bank(args):
             device_part = args[i + 1]
             i += 2
         else:
-            i += 1
+            print(f"Error: unknown -get_pin_bank argument: {args[i]}")
+            sys.exit(1)
     if not device_part:
         hqprj_path = _resolve_hqprj(None)
         device_part = get_device(hqprj_path)
@@ -1816,18 +1849,38 @@ def main():
         no_dl = False
         i = 1
         while i < len(args):
-            if args[i] == '-n' and i + 1 < len(args):
-                n = int(args[i + 1]); i += 2
-            elif args[i] == '-j' and i + 1 < len(args):
-                j = int(args[i + 1]); i += 2
+            if args[i] == '-n':
+                if i + 1 >= len(args):
+                    print("Error: -n requires a value")
+                    sys.exit(1)
+                try:
+                    n = int(args[i + 1])
+                except ValueError:
+                    print(f"Error: -n expects an integer, got: {args[i + 1]}")
+                    sys.exit(1)
+                i += 2
+            elif args[i] == '-j':
+                if i + 1 >= len(args):
+                    print("Error: -j requires a value")
+                    sys.exit(1)
+                try:
+                    j = int(args[i + 1])
+                except ValueError:
+                    print(f"Error: -j expects an integer, got: {args[i + 1]}")
+                    sys.exit(1)
+                i += 2
             elif args[i] == '-ins':
                 ins = True; i += 1
             elif args[i] == '-no_dl':
                 no_dl = True; i += 1
+            elif args[i].startswith('-'):
+                print(f"Error: unknown -seed_sweep option: {args[i]}")
+                sys.exit(1)
             elif src is None:
                 src = args[i]; i += 1
             else:
-                i += 1
+                print(f"Error: unexpected argument: {args[i]}")
+                sys.exit(1)
         if n < 1 or j < 1:
             print("Error: -n and -j must be >= 1")
             sys.exit(1)
@@ -1920,13 +1973,16 @@ def main():
             if args[i] == '-lang' and i + 1 < len(args):
                 lang = args[i + 1]
                 i += 2
+            elif args[i] == '-lang':
+                print("Error: -lang requires a value")
+                sys.exit(1)
             elif not args[i].startswith('-') and hqip_arg is None:
                 hqip_arg = args[i]
                 i += 1
             else:
-                i += 1
-        run_ipgen(hqip_arg, lang)
-        return
+                print(f"Error: unknown -ipgen argument: {args[i]}")
+                sys.exit(1)
+        sys.exit(run_ipgen(hqip_arg, lang))
 
     # Update all IP netlists for project
     if first == '-update_ip':
