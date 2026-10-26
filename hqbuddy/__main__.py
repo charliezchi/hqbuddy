@@ -18,7 +18,9 @@ from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstrea
 from .flow import run_seed_sweep
 from .xpn import run_xpn, run_xpn_inspect
 from .xpn2bin import run_xpn2bin
+from .ffloc import run_ffloc
 from .heatmap import run_heatmap
+from .viewer import run_floorplan, run_routing
 from .udev import run_udev
 from .netlist import run_edf2v, run_netlist_build, run_vla_gen
 from .doctor import run_doctor
@@ -71,6 +73,16 @@ Project:
                                         (a single .xpn in cwd is used automatically;
                                          -no_open skips the viewer launch, agent use;
                                          -lang chs|eng, default chs)
+  -floorplan [<.xpn>] [-o <prefix>]    Floorplan viewer: generate ChipEditor inputs
+                                        (cdev/cexpn) from an XPN and open the layout
+                                        GUI (options as -heatmap; -o sets the output
+                                         prefix, placed-only XPN is fine)
+  -routing [<.xpn>] [-o <file>]        Routing viewer: generate the rtviewer routing
+                                        JSON from a routed XPN and open the routing
+                                        GUI (options as -heatmap)
+  -ffloc <clk_net> [<.xpn>] [-o <f>]   Extract SLICE FF physical locations of one
+                                        clock domain to a text file (sloc + FF slot
+                                        + net name; placement is enough)
   -get_device [<.hqprj>]                Show device part
   -set_device [<part>] [<.hqprj>]       Set device part (interactive if no part)
   -get_pin_bank <pin> [-device <part>]  Show the IO bank of a pin
@@ -1048,6 +1060,116 @@ def cmd_heatmap(args):
     run_heatmap(xpn_path, output_name, open_viewer=open_viewer, lang=lang)
 
 
+def _parse_viewer_args(args, cmd):
+    """Shared flag parsing for -floorplan/-routing (same surface as -heatmap).
+
+    Position-independent flags: -no_open, -lang <chs|eng>, -o <out>;
+    one positional .xpn (single .xpn in cwd auto-detected).
+    Returns (xpn_path, output, open_viewer, lang)."""
+    open_viewer = '-no_open' not in args
+    lang = "chs"
+    xpn_path = None
+    output = None
+
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == '-no_open':
+            i += 1
+        elif a == '-lang':
+            if i + 1 >= len(args):
+                print(f"Error: -lang requires a value (chs|eng)")
+                sys.exit(1)
+            lang = args[i + 1].lower()
+            i += 2
+        elif a == '-o':
+            if i + 1 >= len(args):
+                print(f"Error: -o requires an output name")
+                sys.exit(1)
+            output = args[i + 1]
+            i += 2
+        elif a.startswith('-o'):
+            output = a[2:]
+            i += 1
+        elif a.startswith('-'):
+            print(f"Error: unknown {cmd} option(s): {a}")
+            print(f"  (supported: -no_open -lang <chs|eng> -o <out> [<.xpn>])")
+            sys.exit(1)
+        elif xpn_path is None:
+            xpn_path = a
+            i += 1
+        else:
+            print(f"Error: unexpected argument: {a}")
+            sys.exit(1)
+
+    if lang not in ('chs', 'eng'):
+        print(f"Error: unsupported -lang value '{lang}' (chs|eng)")
+        sys.exit(1)
+
+    return xpn_path, output, open_viewer, lang
+
+
+def cmd_floorplan(args):
+    """Generate ChipEditor inputs from an XPN and open the floorplan viewer.
+
+    Position-independent flags like -heatmap: -no_open, -lang <chs|eng>;
+    one positional .xpn; -o <prefix> for the cdev/cexpn output prefix."""
+    xpn_path, output, open_viewer, lang = _parse_viewer_args(args, '-floorplan')
+    run_floorplan(xpn_path, output, open_viewer=open_viewer, lang=lang)
+
+
+def cmd_routing(args):
+    """Generate the rtviewer routing JSON from a routed XPN and open it.
+
+    Position-independent flags like -heatmap: -no_open, -lang <chs|eng>;
+    one positional .xpn; -o <file>."""
+    xpn_path, output, open_viewer, lang = _parse_viewer_args(args, '-routing')
+    run_routing(xpn_path, output, open_viewer=open_viewer, lang=lang)
+
+
+def cmd_ffloc(args):
+    """Extract SLICE FF locations of a clock domain from an XPN.
+
+    Positional: <clk_net> then optional .xpn (single .xpn in cwd
+    auto-detected); -o <file>."""
+    clk = None
+    xpn_path = None
+    output_name = None
+
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == '-o':
+            if i + 1 >= len(args):
+                print(f"Error: -o requires an output name")
+                sys.exit(1)
+            output_name = args[i + 1]
+            i += 2
+        elif a.startswith('-o'):
+            output_name = a[2:]
+            i += 1
+        elif a.startswith('-'):
+            print(f"Error: unknown -ffloc option(s): {a}")
+            print(f"  (supported: -o <file> <clk_net> [<.xpn>])")
+            sys.exit(1)
+        elif clk is None:
+            clk = a
+            i += 1
+        elif xpn_path is None:
+            xpn_path = a
+            i += 1
+        else:
+            print(f"Error: unexpected argument: {a}")
+            sys.exit(1)
+
+    if clk is None:
+        print("Error: -ffloc requires a clock net name")
+        print("  usage: hqbuddy -ffloc <clk_net> [<.xpn>] [-o <file>]")
+        sys.exit(1)
+
+    run_ffloc(clk, xpn_path, output_name)
+
+
 def cmd_udev(args):
     """Native device reports ('udev.*), no design netlist needed.
 
@@ -1754,6 +1876,21 @@ def main():
     # Routing heatmap viewer JSON from routed XPN
     if first == '-heatmap':
         cmd_heatmap(args[1:])
+        return
+
+    # ChipEditor floorplan viewer from XPN
+    if first == '-floorplan':
+        cmd_floorplan(args[1:])
+        return
+
+    # rtviewer routing viewer from routed XPN
+    if first == '-routing':
+        cmd_routing(args[1:])
+        return
+
+    # Clock-domain SLICE FF location extraction
+    if first == '-ffloc':
+        cmd_ffloc(args[1:])
         return
 
     # Native device reports ('udev.*), no design needed

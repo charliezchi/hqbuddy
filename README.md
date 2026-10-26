@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.23.0
+3.24.0
 
 ## 功能特点
 
@@ -17,6 +17,8 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；改 RTL/IP 后 `-refresh` 原地重建插桩产物（总是重插桩刷新信号库，RTL 逻辑/属性改动可靠带入；保留信号选择与触发条件，等价 GUI 保存）；`-capture` 支持自定义超时与输出前缀
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`，`-no_dl` 只生成不下载）；不指定 xpn 时批量转换当前目录所有 `.xpn` 并输出结果报告，多个 xpn 时不逐个下载，而是转换完后唤起 `-dl` GUI 下载器
 - **布线热力图**：从布线后的 XPN 生成 rtheatmap 查看器的输入 JSON 并自动打开 GUI 热力图（`-heatmap`），等价 GUI 的 Routing Heatmap Viewer（布线资源使用率按 tile/线型展示）；`-no_open` 静默生成（agent 用），`-o` 自定义输出，`-lang chs|eng` 查看器语言
+- **布局图/布线图**：从 XPN 生成官方查看器输入并自动打开 GUI——`-floorplan` 走 `dconv.dev2chipedit`/`dconv.xpn2chipedit` + ChipEditor 布局查看器（读布局信息，无需等布线），`-routing` 走 `rt.genRoutingResult` + rtviewer 布线查看器（逐 net 走线路径，需布线后 XPN）；选项与 `-heatmap` 一致；均为 hqfpga 官方用法（xpn_util.tcl）
+- **时钟域 FF 位置提取**：`-ffloc <clk_net>` 移植官方 `extr_slice_ff_loc`——导出某时钟域全部 SLICE FF 的物理位置清单（`R行C列.FF槽位  驱动信号名`），用于时钟区域/拥塞分析；只读布局数据，与布线无关
 - **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
 - **新建工程**：从模板创建 `.hqprj` 工程（`-new_prj`）
 - **添加源文件**：向工程添加 `.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件并维护对应时间戳（`-add`；可带 `.hqprj` 显式指定目标工程，缺省自动探测当前目录）
@@ -186,7 +188,36 @@ hqbuddy -heatmap -no_open t2.xpn           # 静默生成 JSON，不拉起查看
 hqbuddy -heatmap -lang eng t2.xpn          # 查看器英文界面（缺省 chs）
 ```
 
-典型工作流：`hqbuddy -build` 完成布局布线 → `hqbuddy -xpn` 导出布线后 XPN → `hqbuddy -heatmap hq.xpn` 查看布线资源热力图。
+典型工作流：`hqbuddy -build` 完成布局布线 → `hqbuddy -xpn` 导出布线后 XPN → `hqbuddy -heatmap hq.xpn`（热力图）/ `-routing hq.xpn`（逐 net 布线图）/ `-floorplan hq.xpn`（布局图）。
+
+### 布局图 / 布线图查看器
+
+与 `-heatmap` 同族的官方查看器流程（hqfpga 官方脚本 xpn_util.tcl 的 `gui_show_floorplan`/`gui_show_routing`），输入同样从**布线后** `.xpn` 生成，产物持久保留在 XPN 旁（官方脚本用完即删，hqbuddy 保留以便随时重开）：
+
+- `hqbuddy -floorplan`：`xpn.read` → `dconv.dev2chipedit`/`dconv.xpn2chipedit` 生成 `<stem>_floorplan.cdev/.cexpn`（另有转换器自动生成的 `.cexpn.json` 辅助文件），拉起 `build/chipeditor/ChipEditor.exe -d <cdev> -x <cexpn> -lang <lang>` 打开布局图。**只需布局信息**——只有布局没有布线的 XPN 也能看。
+- `hqbuddy -routing`：`xpn.read` → `rt.genRoutingResult` 生成 `<stem>_routing.json`（逐 net 的 pips/sink 走线详情，体积大，SA5Z-30 级设计约 30MB），拉起 `build/rtviewer/rtviewer.exe -d <part> -r <json> -l <lang>` 打开布线图。器件全名（如 `SA5Z-30-D2-8U256`）由 TCL 侧 `dv.info name` 自动获取。需要布线信息（命令会预检 route 段并警告）。
+
+```bat
+hqbuddy -floorplan t2.xpn                  # 生成 t2_floorplan.cdev/.cexpn 并打开布局图
+hqbuddy -floorplan -o out/fp t2.xpn        # 自定义输出前缀（生成 out/fp.cdev/.cexpn）
+hqbuddy -routing t2.xpn                    # 生成 t2_routing.json 并打开布线图
+hqbuddy -routing -no_open t2.xpn           # 静默生成 JSON，不拉起查看器（agent 用）
+hqbuddy -floorplan -lang eng t2.xpn        # 查看器英文界面（缺省 chs）
+```
+
+`-floorplan`/`-routing` 的 `-no_open`/`-lang`/`-o`/XPN 自动探测语义与 `-heatmap` 完全一致。生成命令需要 FT101726 及以上版本（更老版本未验证，失败时会透传 hqfpga 报错）。
+
+### 时钟域 FF 位置提取
+
+`hqbuddy -ffloc <clk_net>` 移植官方 `extr_slice_ff_loc` 工具：遍历时钟 net 的负载，取 SLICEL/SLICEM 中全部 FF 原语，输出 `物理位置  驱动信号名` 清单（如 `R22C32.A5FF    u_xx/reg[0]`，按位置排序）——做时钟区域约束、拥塞定位时的原始数据。只需布局信息，无需布线。
+
+```bat
+hqbuddy -ffloc wscanclk t2.xpn             # 提取 wscanclk 域 → t2_wscanclk_ffloc.txt
+hqbuddy -ffloc wscanclk                    # 当前目录只有一个 .xpn 时自动使用
+hqbuddy -ffloc wscanclk t2.xpn -o ff1.txt  # 自定义输出路径
+```
+
+完成后打印摘要（FF 数、slice 数、行列跨度）；时钟 net 名不存在或域内无 SLICE FF 时明确告警（net 名可用 `hqbuddy -xpn inspect` 核对）。多个时钟域就多条命令各跑一次。
 
 ### HqInsight 在线逻辑分析仪
 
@@ -508,6 +539,9 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN 并自动下载到开发板；不指定 file 时批量转换当前目录所有 `.xpn` 并输出报告（多个 xpn 时转换完唤起 `-dl` GUI 下载器，不逐个下载） |
 | `-xpn2bin [<file>] -no_dl`          | 只生成 BIN 不下载                                                  |
 | `-heatmap [<.xpn>] [-o <file>]`     | 从布线后 XPN 生成 rtheatmap 查看器 JSON 并自动打开热力图（当前目录唯一 `.xpn` 时可省略；`-no_open` 静默、`-lang chs\|eng`） |
+| `-floorplan [<.xpn>] [-o <prefix>]` | 生成 ChipEditor 输入（cdev/cexpn）并自动打开布局图；只需布局无需布线；选项同 `-heatmap`（`-o` 为输出前缀） |
+| `-routing [<.xpn>] [-o <file>]`     | 生成 rtviewer 布线 JSON（逐 net 走线）并自动打开布线图；需布线后 XPN；选项同 `-heatmap` |
+| `-ffloc <clk_net> [<.xpn>] [-o <f>]` | 提取某时钟域全部 SLICE FF 物理位置到文本清单（官方 extr_slice_ff_loc 移植；只需布局） |
 | `-get_device [<file>]`              | 查看`.hqprj` 使用的器件型号                                          |
 | `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
 | `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
