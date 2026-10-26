@@ -57,17 +57,16 @@ def _elab_ports(hqfpga_path: str, work: str, hqprj: str, top: str) -> list:
         if "=" in line:
             k, v = line.split("=", 1)
             fields.setdefault(k.strip(), v.strip())
-    srcs = [f for f in (fields.get("FILE_SRC", "")).split()
-            ] if False else []
+    family = fields.get("FAMILY") or "SEAL"
     srcs = []
     for ln in open(hqprj, encoding="utf-8", errors="replace"):
         ln = ln.strip()
         if ln.startswith("FILE_SRC=") and ln != "FILE_SRC=NONE":
             srcs.append(ln.split("=", 1)[1].replace("$WORK_DIR$", work.replace(os.sep, "/") + "/"))
-    vlines = "\n".join(f'lappend vfiles {s}' for s in srcs)
-    tcl = (f'set WORK_DIR {work.replace(os.sep, "/")}\n'
+    vlines = "\n".join(f'lappend vfiles {{{s}}}' for s in srcs)
+    tcl = (f'set WORK_DIR {{{work.replace(os.sep, "/")}}}\n'
            f'set vfiles {{}}\n{vlines}\n'
-           f'dv.setup -synlib_only SEAL\n'
+           f'dv.setup -synlib_only {family}\n'
            f'rtl.analyze $vfiles\n'
            f'rtl.elaborate -top {top}\n'
            f'puts "===PORTS-O==="\n'
@@ -75,10 +74,18 @@ def _elab_ports(hqfpga_path: str, work: str, hqprj: str, top: str) -> list:
     tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8")
     tf.write(tcl)
     tf.close()
-    proc = subprocess.run([hqfpga_path, "-cmd", tf.name], cwd=work,
-                          capture_output=True, text=True,
-                          errors="replace", timeout=600)
-    os.unlink(tf.name)
+    try:
+        proc = subprocess.run([hqfpga_path, "-cmd", tf.name], cwd=work,
+                              capture_output=True, text=True,
+                              errors="replace", timeout=600)
+    except subprocess.TimeoutExpired:
+        print("Error: hqfpga elaborate 超时（600s）——设计可能过大或工具挂起。")
+        sys.exit(1)
+    finally:
+        try:
+            os.unlink(tf.name)
+        except OSError:
+            pass
     out = proc.stdout or ""
     if "===PORTS-O===" not in out:
         tail = "\n".join((proc.stdout or "").splitlines()[-6:])

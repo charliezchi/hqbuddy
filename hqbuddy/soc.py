@@ -223,6 +223,10 @@ def cmd_merge_bin(args):
     if len(pos) < 2:
         print(usage)
         sys.exit(1)
+    if len(pos) > 2:
+        print(f"Error: unexpected extra argument: {pos[2]}")
+        print(usage)
+        sys.exit(1)
     fpga_bin, mcu_bin = pos[0], pos[1]
     for p in (fpga_bin, mcu_bin):
         if not os.path.isfile(p):

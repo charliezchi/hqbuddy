@@ -7,7 +7,10 @@ from . import config, scanner
 
 
 def _clear_lines(n: int):
-    """Move cursor up n lines and clear them."""
+    """Move cursor up n lines and clear them (no-op without VT support)."""
+    from .term import ansi_ok
+    if not ansi_ok():
+        return
     for _ in range(n):
         sys.stdout.write('\033[F\033[K')
     sys.stdout.flush()

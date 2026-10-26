@@ -67,17 +67,26 @@ def _get_models_root(vsim_path: str) -> str:
 
 
 def _ensure_writable(path: str) -> bool:
-    """Ensure the file is writable. On Windows, try to clear the read-only attribute."""
-    if os.access(path, os.W_OK):
+    """Ensure the file is writable. os.access on Windows only reflects the
+    read-only attribute (not ACLs), so probe by opening for append."""
+
+    def _probe() -> bool:
+        try:
+            with open(path, "a"):
+                return True
+        except OSError:
+            return False
+
+    if _probe():
         return True
 
     if sys.platform == "win32":
         # Use attrib command to remove read-only attribute
         try:
             subprocess.run(["attrib", "-R", path], check=True, capture_output=True, text=True)
-            return os.access(path, os.W_OK)
         except Exception:
             return False
+        return _probe()
 
     return False
 
@@ -95,7 +104,8 @@ def _update_modelsim_ini(models_root: str) -> None:
     # Ensure modelsim.ini is writable
     if not _ensure_writable(ini_path):
         print(f"Error: cannot write to modelsim.ini: {ini_path}")
-        print("Please remove the read-only attribute manually and re-run.")
+        print("Please remove the read-only attribute manually and re-run "
+              "(installs under Program Files need an administrator terminal).")
         print("Or add the following line manually:")
         print("  XiST = $MODEL_TECH/../XiST")
         return
@@ -180,7 +190,8 @@ def run_simlib(hqfpga_root: str | None = None) -> None:
     if os.path.isfile(ini_path):
         if not _ensure_writable(ini_path):
             print(f"Error: cannot write to modelsim.ini: {ini_path}")
-            print("Please remove the read-only attribute manually and re-run.")
+            print("Please remove the read-only attribute manually and re-run "
+                  "(installs under Program Files need an administrator terminal).")
             sys.exit(1)
         print(f"Ensured modelsim.ini is writable: {ini_path}")
 

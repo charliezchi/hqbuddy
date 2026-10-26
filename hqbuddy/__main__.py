@@ -514,8 +514,9 @@ def cmd_new_prj(args):
             return
 
     # Validate and parse device part
-    from .device import _DEVICE_PART_RE, get_family_for_device
+    from .device import _DEVICE_PART_RE, get_family_for_device, normalize_part
     from .device import set_device as validate_device
+    device = normalize_part(device)
     match = _DEVICE_PART_RE.match(device)
     if not match:
         print(f"Error: invalid device part: {device}")
@@ -801,7 +802,12 @@ def cmd_copy_prj(args):
         if not os.path.isfile(path):
             print(f"Warning: referenced file missing, skipped: {raw}")
             return raw
-        inside = os.path.commonpath([os.path.normcase(path), os.path.normcase(src_work)])                  == os.path.normcase(src_work)
+        try:
+            inside = os.path.commonpath(
+                [os.path.normcase(path), os.path.normcase(src_work)]) == \
+                os.path.normcase(src_work)
+        except ValueError:
+            inside = False  # different drives: can never be inside src_work
         rel = (os.path.relpath(path, src_work) if inside
                else os.path.join("_external", os.path.basename(path)))
         dst_file = os.path.join(dst_dir, rel)
@@ -1377,6 +1383,9 @@ def cmd_get_pin_bank(args):
     if not device_part:
         hqprj_path = _resolve_hqprj(None)
         device_part = get_device(hqprj_path)
+    if device_part:
+        from .device import normalize_part
+        device_part = normalize_part(device_part)
     get_pin_bank(device_part, pin)
 
 
@@ -1539,13 +1548,20 @@ def cmd_cable(args):
                 model = args[i + 1]
                 break
         if model:
-            import re as _re
-            import tempfile
-            log = os.path.join(tempfile.gettempdir(), 'hqbuddy_detect.log')
-            r = subprocess.run([version['cable_path'], '--detect_model'],
-                               capture_output=True, text=True, errors='replace',
-                               timeout=60)
-            m = _re.search(r'Device Model\s*:\s*(\S+)', r.stdout or '')
+            import re
+            cable = version.get('cable_path')
+            if not cable or not os.path.isfile(cable):
+                print("Error: cable.exe not found in this HqFpga installation.")
+                sys.exit(1)
+            try:
+                r = subprocess.run([cable, '--detect_model'],
+                                   capture_output=True, text=True, errors='replace',
+                                   timeout=60)
+            except subprocess.TimeoutExpired:
+                print("Error: cable.exe --detect_model timed out (60s) - "
+                      "is the board/JTAG connected?")
+                sys.exit(1)
+            m = re.search(r'Device Model\s*:\s*(\S+)', r.stdout or '')
             detected = m.group(1) if m else None
             if detected and detected != model:
                 print(f"Error: --model {model} 与板上实际型号 {detected} 不符！")
@@ -1726,8 +1742,9 @@ def main():
         cmd_gui([first])
         return
 
-    # Help
-    if first == '-h':
+    # Help (anywhere: 'hqbuddy -build -h' shows help instead of
+    # treating -h as a project path)
+    if '-h' in args or '--help' in args:
         show_help()
         return
 

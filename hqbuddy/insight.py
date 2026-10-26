@@ -10,7 +10,7 @@ import tempfile
 import threading
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+
 
 from . import launcher
 from .hqprj_parser import extract_filelist
@@ -820,35 +820,86 @@ def _tcl_path(path: str) -> str:
     return os.path.abspath(path).replace(os.sep, "/")
 
 
-def _run_hqfpga_cmds(hqfpga_exe: str, cmds: list, cwd: str) -> None:
-    """Run hqfpga.exe -cmd with a temporary tcl; abort on abnormal exit."""
+def _print_tail(out, n: int = 15) -> None:
+    """Print the last n non-empty lines of captured subprocess output."""
+    if isinstance(out, bytes):
+        out = out.decode("utf-8", errors="replace")
+    lines = [l for l in (out or "").splitlines() if l.strip()]
+    if not lines:
+        return
+    print("  --- tool output tail ---")
+    for l in lines[-n:]:
+        print("  " + l)
+
+
+def _run_hqfpga_cmds(hqfpga_exe: str, cmds: list, cwd: str,
+                     timeout: int = 600) -> None:
+    """Run hqfpga.exe -cmd with a temporary tcl; abort on abnormal exit.
+
+    Output is captured instead of echoed: the tail is printed on failure,
+    a hung tool times out, and TCL-level errors that still exit 0 (e.g.
+    'invalid command name') abort instead of failing silently."""
 
     tcl = "\n".join(cmds) + "\nexit\n"
     with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
         f.write(tcl)
         tcl_path = f.name
     try:
-        proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path], cwd=cwd,
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path], cwd=cwd,
+                                  capture_output=True, text=True,
+                                  errors="replace", timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            print(f"Error: hqfpga.exe 超时（{timeout}s）——工具挂起或设计过大。")
+            _print_tail(e.stdout)
+            sys.exit(1)
     finally:
-        os.unlink(tcl_path)
+        try:
+            os.unlink(tcl_path)
+        except OSError:
+            pass
+    out = (proc.stdout or "") + (proc.stderr or "")
     if proc.returncode != 0:
         print(f"Error: hqfpga.exe 异常退出（code {proc.returncode}）。")
+        _print_tail(out)
+        sys.exit(1)
+    if re.search(r"(?im)^\s*(error\s*[:：]|invalid command name)", out):
+        print("Error: hqfpga TCL 层报错（输出尾部见下）。")
+        _print_tail(out)
         sys.exit(1)
 
 
-def _play_svf(cable_exe: str, svf_path: str) -> list:
+def _play_svf(cable_exe: str, svf_path: str, timeout: int = 120) -> list:
     """Play an SVF via cable.exe; return the Received:TDO values from svf.log.
 
-    cable.exe rewrites svf.log (next to itself) on every run.
+    cable.exe rewrites svf.log (next to itself) on every run. The log is
+    shared global state: if it was not refreshed by THIS play (read-only
+    install dir, or a concurrent cable user) the TDO would be stale/empty
+    and the capture would spin to a misleading timeout — abort instead.
     """
 
     log_path = os.path.join(os.path.dirname(cable_exe), "svf.log")
-    proc = subprocess.run([cable_exe, "--svf", _tcl_path(svf_path),
-                           "--outTDO", CAPTURE_OUT_TDO, "--debug"],
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    started = time.time()
+    try:
+        proc = subprocess.run([cable_exe, "--svf", _tcl_path(svf_path),
+                               "--outTDO", CAPTURE_OUT_TDO, "--debug"],
+                              capture_output=True, text=True,
+                              errors="replace", timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print(f"Error: cable.exe 播放 SVF 超时（{timeout}s）——JTAG 连接或板卡状态异常。")
+        sys.exit(1)
     if proc.returncode != 0:
         print(f"Error: cable.exe 播放 SVF 失败（code {proc.returncode}）。")
+        _print_tail((proc.stdout or "") + (proc.stderr or ""))
+        sys.exit(1)
+    try:
+        log_mtime = os.path.getmtime(log_path)
+    except OSError:
+        log_mtime = 0
+    if log_mtime < started - 1:
+        print(f"Error: {log_path} 未随本次播放更新——")
+        print("       cable 安装目录只读，或有另一个 hqbuddy/GUI 正在并发使用 cable。")
+        print("       TDO 读数不可信，中止（排查占用后重试）。")
         sys.exit(1)
     values = []
     try:
@@ -1245,13 +1296,20 @@ def run_flow(proj: dict, require_bin: bool = True) -> None:
 
     # The flow spawns the hqdnload GUI at the very end (it pre-fills the WRONG,
     # non-instrumented bin and blocks hqfpga.exe until dismissed). Auto-close
-    # only instances started after this flow began, then let hqfpga finish.
-    cutoff = (datetime.now() - timedelta(seconds=2)).strftime("%Y-%m-%d %H:%M:%S")
-    ps = (f"Get-Process hqdnload -ErrorAction SilentlyContinue | "
-          f"Where-Object {{ $_.StartTime -gt [datetime]'{cutoff}' }} | "
-          f"Select-Object -ExpandProperty Id")
+    # only OUR instances: hqdnload whose parent is this flow's hqfpga.exe,
+    # or one already orphaned (parent exited). A user-started downloader's
+    # parent (explorer/terminal) is still alive and is never touched.
+    flow_start = time.time()
+    proc = subprocess.Popen([hqfpga_exe, "-cmd", tcl_path], cwd=proj["work_dir"])
 
-    def reap_downloader():
+    def reap_downloader(hq_pid: int):
+        ps = ("$dn = Get-CimInstance Win32_Process -Filter \"Name='hqdnload.exe'\";"
+              "$alive = @(Get-Process -ErrorAction SilentlyContinue | "
+              "Select-Object -ExpandProperty Id);"
+              "foreach ($p in $dn) {"
+              f"  if ($p.ParentProcessId -eq {hq_pid} "
+              "  -or -not ($alive -contains $p.ParentProcessId)) "
+              "  { Write-Output $p.ProcessId } }")
         while os.path.isfile(tcl_path):
             try:
                 r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
@@ -1266,13 +1324,16 @@ def run_flow(proj: dict, require_bin: bool = True) -> None:
                 pass
             time.sleep(2)
 
-    watcher = threading.Thread(target=reap_downloader, daemon=True)
+    watcher = threading.Thread(target=reap_downloader, args=(proc.pid,),
+                               daemon=True)
     watcher.start()
-    flow_start = time.time()
     try:
-        proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path], cwd=proj["work_dir"])
+        proc.wait()
     finally:
-        os.unlink(tcl_path)
+        try:
+            os.unlink(tcl_path)
+        except OSError:
+            pass
     if proc.returncode != 0:
         print(f"Error: hqfpga.exe 流程失败（code {proc.returncode}）。")
         sys.exit(1)
@@ -1306,7 +1367,8 @@ def run_flow(proj: dict, require_bin: bool = True) -> None:
     # 常量探针预警：扫描实现目录的 log，报告被综合器常量折叠的探针信号
     impl_dir = os.path.join(proj["hqins_dir"], "hq_import", "hqins_impl")
     const_probes: set = set()
-    for log_name in os.listdir(impl_dir):
+    # -xpn -ins -from_src path: the flow may exit 0 without creating hqins_impl
+    for log_name in (os.listdir(impl_dir) if os.path.isdir(impl_dir) else []):
         if not log_name.endswith(".log"):
             continue
         log_path = os.path.join(impl_dir, log_name)
@@ -2096,7 +2158,8 @@ def del_signal(proj: dict, name: str) -> None:
         sys.exit(1)
     # 空 probe 集会让 insight.debugip.create 段错误（R47：删除最后一个触发信号
     # 后的 ddf 触发集为空；红线同源）。拒绝并给出指引。
-    remaining_trig = (len(la["t_list"]) + len(la["st_list"]))
+    remaining_trig = sum(len(l.get("t_list", [])) + len(l.get("st_list", []))
+                         for l in la_info.get("la_list", []))
     if remaining_trig == 0:
         print("Error: 删除该信号后触发信号集为空——insight.debugip.create 会在空"
               "触发集上段错误（R47 实测）。请先 -add 另一个触发信号（-type both/"

@@ -91,6 +91,7 @@ class DownloaderGUI(tk.Tk):
         self.model = None
         self.downloading = False
         self.log_queue = queue.Queue()
+        self.done_queue = queue.Queue()
 
         self.title(f"hqbuddy 下载器 - {self.root_dir}")
         self.geometry("900x560")
@@ -130,6 +131,7 @@ class DownloaderGUI(tk.Tk):
 
         self.rescan()
         self.after(100, self._poll_log)
+        self.after(100, self._poll_done)
 
     # ---------- bin scan & notes ----------
 
@@ -266,7 +268,8 @@ class DownloaderGUI(tk.Tk):
             proc.wait()
             # cable.exe prints errors like "Error : The file ID is unmatched"
             # but still exits 0 — scan the output, don't trust the exit code
-            has_error = any(re.match(r'\s*(error|fail)', ln, re.I) for ln in output)
+            has_error = any(re.search(r'\b(error|fail(?:ed)?)\b\s*[:：]', ln, re.I)
+                            for ln in output)
             ok = proc.returncode == 0 and not has_error
             self._log(f"[{'OK' if ok else 'FAIL'}] {rel} 下载{'成功' if ok else '失败'}"
                       f" (exit {proc.returncode})")
@@ -276,13 +279,9 @@ class DownloaderGUI(tk.Tk):
             self._finish(rel, False)
 
     def _finish(self, rel, ok):
-        def apply():
-            # Row may be gone if the user rescanned mid-download
-            if self.tree.exists(rel):
-                self.tree.set(rel, "status", "成功" if ok else "失败")
-                self.tree.item(rel, tags=("ok" if ok else "fail",))
-            self.downloading = False
-        self.after(0, apply)
+        # worker thread: route through the queue instead of calling
+        # after() cross-thread
+        self.done_queue.put((rel, ok))
 
     # ---------- log ----------
 
@@ -315,6 +314,19 @@ class DownloaderGUI(tk.Tk):
         except queue.Empty:
             pass
         self.after(100, self._poll_log)
+
+    def _poll_done(self):
+        try:
+            while True:
+                rel, ok = self.done_queue.get_nowait()
+                # Row may be gone if the user rescanned mid-download
+                if self.tree.exists(rel):
+                    self.tree.set(rel, "status", "成功" if ok else "失败")
+                    self.tree.item(rel, tags=("ok" if ok else "fail",))
+                self.downloading = False
+        except queue.Empty:
+            pass
+        self.after(100, self._poll_done)
 
 
 def run_gui(cable_path):

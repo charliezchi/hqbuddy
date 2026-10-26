@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.25.0
+3.25.1
 
 ## 功能特点
 
@@ -284,6 +284,8 @@ hqbuddy -set_device SA5T-100-D0-7F676CI
 hqbuddy -set_device SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
 hqbuddy -set_device example/ddrc_native_demo.hqprj    # 指定工程 + 交互式选择
 ```
+
+带尾杠的条件段写法（如 `SA5Z-50-D0-7F484-C`，SoC 例程/数据手册常见）会被自动归一化为 dv_list 的规范形式（`...7F484C`），`-new_prj -device` / `-get_pin_bank -device` 同样接受。
 
 不指定 `part` 时进入交互式器件列表：上下键选择、输入关键字模糊查找，选中项带箭头标记。
 
@@ -580,7 +582,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-wave [<file>]`                    | 用 GTKWave 打开 VCD 波形（缺省自动检测最新 insight 波形）              |
 | `-insight [<file>]`                 | 查看 HqInsight 在线逻辑分析仪工程状态                                  |
 | `-insight -trig [<expr>]`           | 设置触发条件（缺省进入交互向导）                                       |
-| `-insight -capture [-force] [-timeout N]` | 布防并抓取波形为 VCD，`-force` 立即抓取                          |
+| `-insight -capture [-force] [-timeout N]` | 布防并抓取波形为 VCD，`-force` 立即抓取（cable/hqfpga 子调用带超时与失败输出回显，svf.log 未刷新时明确报错而非误报触发超时） |
 | `-insight -run`                     | 重跑插桩实现流程（源文件比插桩网表新则警告）                                                       |
 | `-insight -init`                    | 初始化 HqInsight 工程（无需 GUI）                                      |
 | `-insight -refresh`                 | 原地重建插桩产物（`insight_ip.v` + `hq_import_with_bscan.v` + `signal.inf`），保留信号选择与触发条件（GUI 保存等价）；总是先重新插桩刷新信号库，RTL 逻辑/属性改动都可靠带入（3.19.0 起移除可选快路径） |

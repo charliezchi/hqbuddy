@@ -409,6 +409,10 @@ def scan_supported_ips(ipdepot_dir: str, device: str) -> list:
 # interactive IP picker (same UX as -build_sel / -set_device)
 # ---------------------------------------------------------------
 def _clear_lines(n: int):
+    """Move cursor up n lines and clear them (no-op without VT support)."""
+    from .term import ansi_ok
+    if not ansi_ok():
+        return
     for _ in range(n):
         sys.stdout.write('\033[F\033[K')
     sys.stdout.flush()
@@ -514,7 +518,12 @@ def pick_ip_interactive(items: list) -> dict | None:
 # ---------------------------------------------------------------
 def _find_hqprj() -> str | None:
     import glob
-    matches = glob.glob("*.hqprj")
+    matches = sorted(glob.glob("*.hqprj"))
+    if len(matches) > 1:
+        print("Error: multiple .hqprj files in cwd, pass one explicitly:")
+        for m in matches:
+            print(f"  {m}")
+        sys.exit(1)
     return matches[0] if matches else None
 
 

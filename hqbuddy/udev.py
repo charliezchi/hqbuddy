@@ -74,8 +74,9 @@ def _run_hqfpga_sections(family: str, part: str, sections: list,
         try:
             proc = subprocess.run([version["hqfpga_path"], "-cmd", tcl_path],
                                   capture_output=True)
-            out = proc.stdout.decode("utf-8", errors="replace")
-            if not out.strip():
+            try:
+                out = proc.stdout.decode("utf-8")  # strict: detect GBK output
+            except UnicodeDecodeError:
                 out = proc.stdout.decode("gbk", errors="replace")
         finally:
             if os.path.exists(tcl_path):

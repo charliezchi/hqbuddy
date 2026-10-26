@@ -41,11 +41,14 @@ def run_autosdc(args: list) -> None:
     work = os.path.dirname(hqprj)
 
     top = None
+    family = None
     srcs = []
     for ln in open(hqprj, encoding="utf-8", errors="replace"):
         ln = ln.strip()
         if ln.startswith("TOP_MODULE="):
             top = ln.split("=", 1)[1]
+        elif ln.startswith("FAMILY="):
+            family = ln.split("=", 1)[1]
         elif ln.startswith("FILE_SRC=") and ln != "FILE_SRC=NONE":
             srcs.append(ln.split("=", 1)[1].replace("$WORK_DIR$", work.replace(os.sep, "/") + "/"))
     if not top or top == "NONE":
@@ -65,7 +68,7 @@ def run_autosdc(args: list) -> None:
     auto_line = f"tc.autogen -period {period}" if period else "tc.autogen -print"
     tcl = (f"set WORK_DIR {{{work.replace(os.sep, '/')}}}\n"
            f"set vfiles {{}}\n{vlines}\n"
-           f"dv.setup -synlib_only SEAL\n"
+           f"dv.setup -synlib_only {family or 'SEAL'}\n"
            f"rtl.analyze $vfiles\n"
            f"rtl.elaborate -top {top}\n"
            f'puts "===SDC-BEgin==="\n'

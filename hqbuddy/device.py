@@ -17,6 +17,14 @@ _DEVICE_PART_RE = re.compile(
 )
 
 
+def normalize_part(part: str) -> str:
+    """Canonicalize a device part string: drop an optional hyphen before the
+    final condition letters (SoC manifests/datasheets write SA5Z-50-D0-7F484-C;
+    dv_list.xml uses ...7F484C). The final segment always starts with a digit,
+    so a trailing '-<letters>' can only be that separator."""
+    return re.sub(r"-([A-Za-z]+)$", r"\1", part.strip())
+
+
 def _parse_key_value(line: str) -> tuple[str, str] | None:
     """
     Parse a key=value line from .hqprj.
@@ -253,6 +261,7 @@ def set_device(hqprj_path: str, part: str, update_ip: bool = True) -> None:
         sys.exit(1)
 
     # Validate part format: DIE-SPEEDPACKAGE-CONDITION
+    part = normalize_part(part)
     match = _DEVICE_PART_RE.match(part)
     if not match:
         print("Error: device part must be in format DIE-SPEEDPACKAGE-CONDITION")
@@ -291,7 +300,10 @@ def set_device(hqprj_path: str, part: str, update_ip: bool = True) -> None:
 
 
 def _clear_lines(n: int):
-    """Move cursor up n lines and clear them."""
+    """Move cursor up n lines and clear them (no-op without VT support)."""
+    from .term import ansi_ok
+    if not ansi_ok():
+        return
     for _ in range(n):
         sys.stdout.write('\033[F\033[K')
     sys.stdout.flush()

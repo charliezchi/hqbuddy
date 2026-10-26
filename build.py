@@ -201,7 +201,12 @@ def register():
              "       Please run 'python build.py' first.")
 
     os.makedirs(PROXY_DIR, exist_ok=True)
-    shutil.copyfile(exe, os.path.join(PROXY_DIR, "hqbuddy.exe"))
+    try:
+        shutil.copyfile(exe, os.path.join(PROXY_DIR, "hqbuddy.exe"))
+    except PermissionError:
+        fail("[FAIL] Cannot overwrite " + os.path.join(PROXY_DIR, "hqbuddy.exe") + "\n"
+             "       hqbuddy.exe is running (a terminal or session is using it).\n"
+             "       Close it and re-run 'python build.py register'.")
     ok("[OK] Copied hqbuddy.exe to proxy directory.")
 
     if os.name != "nt":
@@ -211,8 +216,15 @@ def register():
         return
 
     user_path = _get_user_path()
-    path_parts = [p for p in user_path.split(";") if p]
-    if PROXY_DIR.lower() in [p.lower() for p in path_parts]:
+    path_parts = [p for p in user_path.split(";") if p.strip()]
+
+    def _same_dir(entry: str) -> bool:
+        # REG_EXPAND_SZ values come back unexpanded; tolerate %VAR%,
+        # quotes and trailing slashes so duplicates are not appended
+        p = os.path.normpath(os.path.expandvars(entry.strip().strip('"').rstrip('\\/')))
+        return os.path.normcase(p) == os.path.normcase(os.path.normpath(PROXY_DIR))
+
+    if any(_same_dir(p) for p in path_parts):
         ok("[OK] Already in user PATH.")
         return
 
