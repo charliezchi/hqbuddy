@@ -1,0 +1,22 @@
+#!/bin/sh
+# Enforce: README.md "## 当前版本" == hqbuddy/__init__.py __version__
+#
+# Rejects the commit when the hand-maintained copy in README drifts from
+# the single source of truth in __init__.py (checked against the STAGED
+# content, not the working tree). Escape hatch: git commit --no-verify.
+# Enable after a fresh clone: git config core.hooksPath hooks
+
+v_init=$(git show :hqbuddy/__init__.py 2>/dev/null |
+    sed -n 's/^__version__[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' |
+    head -n 1)
+v_readme=$(git show :README.md 2>/dev/null |
+    awk '/^## 当前版本/{found=1; next} found && NF {gsub(/\r/,""); print; exit}')
+
+if [ -n "$v_init" ] && [ "$v_init" != "$v_readme" ]; then
+    echo "" >&2
+    echo "commit rejected: README.md 当前版本($v_readme) != hqbuddy/__init__.py __version__($v_init)" >&2
+    echo "  fix: 把 README.md『## 当前版本』下的版本行改成 $v_init 后重新提交" >&2
+    echo "  (escape hatch: git commit --no-verify)" >&2
+    exit 1
+fi
+exit 0
