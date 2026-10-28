@@ -17,6 +17,7 @@ from .utils import wait_process
 from .hqprj_parser import extract_filelist
 from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstream
 from .flow import run_seed_sweep
+from .syncprj import run_sync_prj, prj_from_header
 from .xpn import run_xpn, run_xpn_inspect
 from .xpn2bin import run_xpn2bin
 from .ffloc import run_ffloc
@@ -56,6 +57,9 @@ Project:
   -flow [<.hqprj>] [-o <file>]         Generate TCL via hqprj2tcl
     -looptdo                            Looptdo mode (synthesis + looptdo)
     -bin_only [<name>]                  Bin-only mode (synthesis -> bitgen, no intermediate files)
+  -sync_prj [<tcl>] [<.hqprj>]         Reverse-update .hqprj from a -flow TCL (edits in the TCL are
+                                        written back to the project; .hqprj defaults to the path in
+                                        the TCL header comment, .tcl to <prj_dir>/run_hqprj.tcl)
   -xpn [<.hqprj>] [-o <file>] [-no_open]
                                         Generate XPN from the PRODUCT flow route result
                                         (hq_run; run -build first).  -no_open skips
@@ -328,6 +332,32 @@ def cmd_flow(args):
         run_flow_bin_only(hqprj_path, bin_only_name, output_tcl)
     else:
         run_flow(hqprj_path, output_tcl)
+
+
+def cmd_sync_prj(args):
+    """Reverse-update .hqprj from a hqprj2tcl-generated flow TCL."""
+    tcl_arg = next((a for a in args if a.lower().endswith(".tcl")), None)
+    prj_arg = next((a for a in args if a.lower().endswith(".hqprj")), None)
+    unknown = [a for a in args if a not in (tcl_arg, prj_arg)]
+    if unknown:
+        print(f"Error: unexpected argument(s): {' '.join(unknown)}")
+        print("Usage: hqbuddy -sync_prj [<tcl>] [<.hqprj>]")
+        sys.exit(1)
+    if prj_arg is None:
+        prj_arg = _find_hqprj()
+    if tcl_arg is None:
+        base_dir = (os.path.dirname(os.path.abspath(prj_arg))
+                    if prj_arg else os.getcwd())
+        tcl_arg = os.path.join(base_dir, "run_hqprj.tcl")
+    if prj_arg is None:
+        prj_arg = prj_from_header(tcl_arg)
+        if prj_arg:
+            print(f"Project from TCL header: {prj_arg}")
+    if prj_arg is None:
+        print("Error: no .hqprj specified, none in cwd, and the TCL header "
+              "carries no source path.")
+        sys.exit(1)
+    run_sync_prj(tcl_arg, prj_arg)
 
 
 def _get_resource_path(relative_path):
@@ -1922,6 +1952,11 @@ def main():
     # Flow
     if first == '-flow':
         cmd_flow(args[1:])
+        return
+
+    # Reverse-update .hqprj from a -flow TCL
+    if first == '-sync_prj':
+        cmd_sync_prj(args[1:])
         return
 
     # XPN (normal and hqinsight modes)

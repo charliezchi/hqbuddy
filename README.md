@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.26.0
+3.27.0
 
 ## 功能特点
 
@@ -138,6 +138,18 @@ hqbuddy -flow -bin_only                    # 自动检测，默认 bin 名称
 hqbuddy -flow -bin_only my_bitstream.bin   # 自动检测工程 + 自定义 bin 名
 hqbuddy -flow example/ddrc_native_demo.hqprj -bin_only my_bitstream.bin
 ```
+
+### 反向同步 TCL → 工程（-sync_prj）
+
+> `-sync_prj` 把 `-flow` 生成的 `run_hqprj.tcl`（hqprj2tcl 输出）**反向写回 `.hqprj`**：手改 TCL（effort、综合/时序选项、源文件清单、器件、top、bitgen 选项……）后一键同步回工程，GUI 打开即为 TCL 所描述的状态。
+
+```bat
+hqbuddy -sync_prj                                        # TCL 缺省 <prj_dir>/run_hqprj.tcl；.hqprj 缺省取 TCL 头注释里的源工程路径（其次自动检测 cwd）
+hqbuddy -sync_prj script/run_hqprj.tcl prj/selftest.hqprj
+hqbuddy -sync_prj prj/selftest.hqprj                     # 只给工程：TCL 取同目录 run_hqprj.tcl
+```
+
+**语义**：只更新 TCL 实际表达的设置，逐键输出 `[SET]` 变更报告，其余键原样保留；结尾重建 FILE_TIME/FILE_TIME_CST。器件名按 `DIE-速度+封装+温度` 拆回 DIE/SPEEDS/PACKAGES/CONDITION，多条 SDC/UPC 按 `{...}` 列表展开。RTL_11、MAP_1..4、PLACE_2..6、ROUTE_2..4、BGEN_13 等 hqprj2tcl 从不导出的键不在同步范围。已验证 round-trip：`hqprj2tcl` → `-sync_prj` → 再 `hqprj2tcl` 与原 TCL 逐行一致。
 
 ### 生成 XPN（普通模式）
 
@@ -544,6 +556,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-flow [<file>] -o <out>`           | 指定生成的 TCL 文件名                                                  |
 | `-flow [<file>] -looptdo`           | looptdo 模式：合成后运行`design.looptdo` 搜索优化参数                |
 | `-flow [<file>] -bin_only [<name>]` | bin-only 模式：仅生成`.bin`，不产生中间文件                          |
+| `-sync_prj [<tcl>] [<.hqprj>]`      | 把 `-flow` 生成的 TCL 反向写回 `.hqprj`（tcl 缺省 `<prj_dir>/run_hqprj.tcl`；prj 缺省取 TCL 头注释源路径，其次 cwd 自动检测） |
 | `-xpn [<file>] [-o <file>]`         | 生成 XPN（普通模式），省略时自动检测，默认生成`hq.xpn`               |
 | `-xpn -ins [<file>] [-o <file>]`    | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成`hq_ins.xpn`     |
 | `-xpn inspect <file.xpn>`           | 解析 XPN 物理网表：设计/器件/comp 统计/IO 列表 |
