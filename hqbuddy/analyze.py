@@ -255,6 +255,9 @@ def _digest(out_dir: str, secs: dict, opt: dict) -> None:
     if doms:
         print(f"[时钟域] {len(doms)} 个域; 跨域(MULTIPLE)资源组 {multi} 处"
               f"{'  <-- CDC 排查线索, 详见 clkdom.rpt' if multi else ''}")
+        if multi:
+            print("[提示] 修复跨域: 优先 RTL 手写同步链（-synopt -set cdc_sync=on 依赖的厂商 "
+                  "命令在 FT110126 批处理会话静默无效果）")
     elif "SECTION-ERROR" in cd:
         print("[时钟域] nl.clkdom.report 报错，详见 clkdom.rpt")
 

@@ -19,6 +19,7 @@ RTL_KEYS = ("infer_ram", "infer_rom", "infer_srl", "fsm_opt", "expr_opt",
 SLO_KEYS = ("sweep", "clk_conv", "data_opt", "merge", "cut_merge")
 FSM_KEYS = ("fsm_encoding",)
 AREA_KEYS = ("postsyn_areaopt",)
+CDC_KEYS = ("cdc_sync",)
 FSM_ENCODINGS = ("auto", "onehot", "binary", "gray", "johnson")
 AREA_EFFORTS = ("tiny", "low", "std", "high", "extra", "extreme", "none", "auto")
 
@@ -50,6 +51,8 @@ def inject_synopt(tcl_lines: list, hqprj_path: str) -> list:
         return tcl_lines
     pre: list = []
     post: list = []
+    post_cdc: list = []  # cdc lines always go AFTER the areaopt pair: areaopt
+    # must not be allowed to merge away a freshly inserted sync chain
     for key in sorted(ov):
         fam = _KEYMAP.get(key, "rtl")
         v = ov[key]
@@ -62,6 +65,13 @@ def inject_synopt(tcl_lines: list, hqprj_path: str) -> list:
         elif fam == "postsyn":
             post.append(f"postsyn.areaopt.set -effort {v}")
             post.append("postsyn.areaopt")
+        elif fam == "cdc":
+            # CDC sync-chain insertion (post-synthesis netlist surgery, before
+            # design.tdomap so the new FFs get mapped normally)
+            if v == "on":
+                post_cdc.append("lo.cdc_sync_reg.insert")
+            elif v.isdigit() and int(v) >= 1:
+                post_cdc.append(f"lo.cdc_sync_reg.insert -regcnt {v}")
     if pre:
         last_set = -1
         for i, ln in enumerate(tcl_lines):
@@ -76,7 +86,8 @@ def inject_synopt(tcl_lines: list, hqprj_path: str) -> list:
                         if ln.strip().startswith("design.analyze")), None)
             pos = idx if idx is not None else len(tcl_lines)
             tcl_lines[pos:pos] = pre
-    if post:
+    if post or post_cdc:
+        post = post + post_cdc
         anchor = next((i for i, ln in enumerate(tcl_lines)
                        if ln.strip().startswith("design.rtlsyn")), None)
         if anchor is None:
@@ -98,6 +109,7 @@ _KEYMAP = {k: "rtl" for k in RTL_KEYS}
 _KEYMAP.update({k: "slo" for k in SLO_KEYS})
 _KEYMAP.update({k: "fsm" for k in FSM_KEYS})
 _KEYMAP.update({k: "postsyn" for k in AREA_KEYS})
+_KEYMAP.update({k: "cdc" for k in CDC_KEYS})
 
 
 def _value_help(key: str) -> str:
@@ -106,13 +118,16 @@ def _value_help(key: str) -> str:
         return "on|off"
     if fam == "fsm":
         return "|".join(FSM_ENCODINGS)
+    if fam == "cdc":
+        return "on|off|<N>"
     return "|".join(AREA_EFFORTS)
 
 
 def _keys_help() -> str:
     return (f"{', '.join(RTL_KEYS)} (rtl.set); {', '.join(SLO_KEYS)} (lo.slo.set); "
             f"fsm_encoding={ '|'.join(FSM_ENCODINGS) } (fsm.set); "
-            f"postsyn_areaopt={ '|'.join(AREA_EFFORTS) } (postsyn.areaopt)")
+            f"postsyn_areaopt={ '|'.join(AREA_EFFORTS) } (postsyn.areaopt); "
+            f"cdc_sync=on|off|<N> (lo.cdc_sync_reg.insert, N=级数缺省2)")
 
 
 def run_synopt(args: list) -> None:
@@ -193,7 +208,20 @@ def run_synopt(args: list) -> None:
                 print(f"Error: 未知综合选项: {k}（可选：{', '.join(sorted(_KEYMAP))}）")
                 sys.exit(1)
             allowed = _value_help(k)
-            if v not in allowed.split("|"):
+            if k == "cdc_sync":
+                if v != "on" and v != "off" and not (v.isdigit() and int(v) >= 1):
+                    print(f"Error: {k} 的值只能是 {allowed}，得到: {v}")
+                    sys.exit(1)
+                if v.isdigit() and int(v) >= 3:
+                    print("Warning: cdc_sync>=3 级的同步链在用户 RTL 会被推断为 SRL16 "
+                          "(open_issues V9: LA tap 读恒 0)；本功能插入的链在综合后网表上、"
+                          "不受影响。规避手段：-set infer_srl=off。")
+            if k == "cdc_sync" and v != "off":
+                print("Warning: FT110126 实测 lo.cdc_sync_reg.insert 在批处理会话"
+                      "（-cmd 脚本）静默无效果（6 种参数变体验证，疑似仅厂商 GUI "
+                      "流程可用）——本键当前版本不会真正插链，勿依赖；改用 RTL 手写"
+                      "同步链。")
+            elif v not in allowed.split("|"):
                 print(f"Error: {k} 的值只能是 {allowed}，得到: {v}")
                 sys.exit(1)
         cur.update(sets)

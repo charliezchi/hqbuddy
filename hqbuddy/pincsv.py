@@ -368,6 +368,85 @@ def _validate_balls(balls: list, family: str, part: str) -> list:
     return [b for b in balls if b not in ok]
 
 
+def run_ucf2upc(args: list) -> None:
+    """Entry for 'hqbuddy -ucf2upc <in.ucf> [-o <out.upc>]'.
+
+    Thin wrapper around the vendor `ucf2upc <ucf> <upc>` TCL command
+    (Xilinx UCF -> UPC migration).  Unlike pin2csv/csv2upc, the vendor
+    command WORKS on FT110126 (probed: proper phycst.pin.set lines with
+    attrs, UCF bus syntax led[0] -> led<0>).  Needs no design and no
+    dv.setup — a bare session does it."""
+    ucf_arg = None
+    out = None
+    consumed = set()
+    if "-o" in args:
+        i = args.index("-o")
+        if i + 1 >= len(args):
+            print("Error: -o requires a value")
+            sys.exit(1)
+        out = args[i + 1]
+        consumed.update({i, i + 1})
+    for i, a in enumerate(args):
+        if i in consumed:
+            continue
+        if a.startswith("-"):
+            print(f"Error: unknown -ucf2upc option: {a}")
+            print("Usage: hqbuddy -ucf2upc <in.ucf> [-o <out.upc>]")
+            sys.exit(1)
+        if ucf_arg is None:
+            ucf_arg = a
+        else:
+            print(f"Error: unexpected argument: {a}")
+            sys.exit(1)
+    if not ucf_arg:
+        print("Usage: hqbuddy -ucf2upc <in.ucf> [-o <out.upc>]")
+        print("       Xilinx UCF 管脚约束转 UPC（厂商 ucf2upc 命令封装，无需设计）。")
+        sys.exit(1)
+    if not os.path.isfile(ucf_arg):
+        print(f"Error: file not found: {ucf_arg}")
+        sys.exit(1)
+
+    out_path = _resolve_out(out, os.path.splitext(os.path.abspath(ucf_arg))[0] + ".upc",
+                            "UPC")
+    version = launcher.require_hqfpga_version()
+    ucf_tcl = os.path.abspath(ucf_arg).replace("\\", "/")
+    out_tcl = out_path.replace("\\", "/")
+    tcl = (f'if {{[catch {{ucf2upc {{{ucf_tcl}}} {{{out_tcl}}}}} e]}} '
+           f'{{ puts "U2U-FAIL: $e" }}\n')
+    import tempfile
+    tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
+                                     encoding="utf-8")
+    tf.write(tcl)
+    tf.close()
+    try:
+        proc = subprocess.run(launcher.side_session_cmd(version["hqfpga_path"],
+                                                        tf.name),
+                              capture_output=True, timeout=300)
+    finally:
+        try:
+            os.unlink(tf.name)
+        except OSError:
+            pass
+    out_txt = (proc.stdout or b"").decode("gbk", errors="replace")
+    if "U2U-FAIL" in out_txt:
+        tail = "\n".join(out_txt.splitlines()[-6:])
+        print(f"Error: ucf2upc 转换失败：\n{tail}")
+        sys.exit(1)
+    if not os.path.isfile(out_path) or os.path.getsize(out_path) == 0:
+        print(f"Error: ucf2upc 未产出 UPC（厂商命令静默失败?）：{out_path}")
+        print("       检查 UCF 语法（NET \"信号\" LOC = \"球\" | IOSTANDARD = ...;）")
+        sys.exit(1)
+    n_pins = sum(1 for ln in open(out_path, encoding="utf-8", errors="replace")
+                 if ln.strip().startswith("phycst.pin.set"))
+    if n_pins == 0:
+        print(f"Error: {out_path} 中没有 phycst.pin.set 条目（UCF 里没有可转换的 NET LOC?）。")
+        sys.exit(1)
+    print(f"[OK] UPC written: {out_path}  ({n_pins} 条 phycst.pin.set)")
+    print("Note: UCF 总线位被厂商命令转成 名称<位> 形式（led[0] -> led<0>）；")
+    print("      若与设计内 Verilog 命名（led[0]）不符，请人工核对后再挂工程。")
+    print("Next: hqbuddy -add <out.upc> [<.hqprj>] 挂到工程。")
+
+
 def run_csv2upc(args: list) -> None:
     """Entry for 'hqbuddy -csv2upc <in.csv> [-o <out.upc>] [-device <part>|<.hqprj>]'."""
     csv_arg = None

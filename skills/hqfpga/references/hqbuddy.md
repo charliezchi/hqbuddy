@@ -50,7 +50,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -flow [<file>] [-o <out.tcl>]` — **只生成 TCL 不执行**（退出码 0 仅代表生成成功）。要自定义流程时：先生成再改，用 `hqbuddy -cmd run_hqprj.tcl` 执行。
   - `-looptdo`：保留综合段，替换为 `design.looptdo`（自动搜索优化参数）
   - `-bin_only [<name>]`：精简为只产 .bin
-- `hqbuddy -synopt [<src.hqprj>] [-set k=<value> ...] [-show] [-clear]` — 工程级综合选项覆盖（sidecar `<proj>.synopt.json`，-flow/-build 全模式自动注入 hqprj2tcl 默认值之后）。键：infer_ram/infer_rom/infer_srl/fsm_opt/expr_opt/mux_opt/dsp_map/share_opt/macro_rebuild（rtl.set，on|off）、sweep/clk_conv/data_opt/merge/cut_merge（lo.slo.set，on|off）、`fsm_encoding`=auto|onehot|binary|gray|johnson（fsm.set -encoding，综合前）、`postsyn_areaopt`=tiny|low|std|high|extra|extreme|none|auto（postsyn.areaopt，注入 design.rtlsyn 之后；effort=high 在中大设计上要 15-20 分钟）
+- `hqbuddy -synopt [<src.hqprj>] [-set k=<value> ...] [-show] [-clear]` — 工程级综合选项覆盖（sidecar `<proj>.synopt.json`，-flow/-build 全模式自动注入 hqprj2tcl 默认值之后）。键：infer_ram/infer_rom/infer_srl/fsm_opt/expr_opt/mux_opt/dsp_map/share_opt/macro_rebuild（rtl.set，on|off）、sweep/clk_conv/data_opt/merge/cut_merge（lo.slo.set，on|off）、`fsm_encoding`=auto|onehot|binary|gray|johnson（fsm.set -encoding，综合前）、`postsyn_areaopt`=tiny|low|std|high|extra|extreme|none|auto（postsyn.areaopt，注入 design.rtlsyn 之后；effort=high 在中大设计上要 15-20 分钟）；`cdc_sync`=on|off|<N>（综合后 lo.cdc_sync_reg.insert，N=级数缺省 2；⚠️ FT110126 批处理会话实测静默无效果勿依赖，RTL 手写同步链）
 - `hqbuddy -seed_sweep [-ins] [-no_dl] [-n N] [-j J] [<src.hqprj>]` — 多种子 P&R 扫描：综合一次存共享 UDB，每 seed 独立进程并行重跑 P&R（默认 J=4），产物按 seed 分放 `seed_sweep/seed<N>/` + 汇总 `seed_sweep_summary.csv`（seed/WNS/fmax/耗时/status）；`-ins` 扫 HqInsight 插桩设计（先强制 -refresh 再跑官方 insight 流程，各 seed 位流带 VLA，产物在 `seed_sweep_ins/`）；完成后清下载备注并在 sweep 目录拉起 `-dl`（`-no_dl` 跳过，agent 用；bin 在 `seed_sweep[_ins]/seed<K>/` 直接 `-cable`）
 - **insight 流程约束路径坑**：`.hqprj` 的 FILE_TC/FILE_PC 被 insight 流程使用时必须是 `$WORK_DIR$` 前缀（其 cwd 是 hqins_impl/），相对路径会"成功"却无 bin
 - **bitgen 需要引脚约束**：工程无 `.upc` 时 bitgen 必停 `ERROR(BIT-11): pads have no location constraint`——route 成功后停这是预期，补 .upc 即可
@@ -68,6 +68,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 ## 管脚工作流
 
 - `hqbuddy -pinplan <src.hqprj> -board <板卡名> [-o <upc>]` — 引脚规划骨架：ioh.get_ports 取端口，按 boards/<板>.md 的 net→pin 表生成 phycst.pin.set 骨架（未匹配标 TODO）
+- `hqbuddy -ucf2upc <in.ucf> [-o <out.upc>]` — Xilinx UCF 管脚约束转 UPC（厂商 ucf2upc 封装，FT110126 实测**可用**；无需设计；总线位输出为 名称<位> 形式需人工核对）
 - `hqbuddy -pin2csv [<.hqprj>] [-o <out.csv>]` / `-csv2upc <in.csv> [-o <out.upc>] [-device <part>|<.hqprj>]` — UPC↔CSV 管脚表互转（Excel 工作流，两者配对）。**本地实现，勿用厂商 TCL 原生命令**（FT110126 实测 pin2csv 对已分配信号不填 Pad Location、csv2upc 静默产空 UPC）。pin2csv 先按 TCL 求值 UPC（板卡变体 set/if 条件分支取实际值）再与 'udev.pkg.report 封装表 join；csv2upc 消费其表头格式，器件可解析时先校验球名；vccio/ioh 约束不进 CSV 往返
 
 ## hqfpga CLI 驱动

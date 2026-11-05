@@ -29,7 +29,7 @@ from .analyze import run_analyze
 from .doctor import run_doctor
 from .synopt import run_synopt
 from .pinplan import run_pinplan
-from .pincsv import run_pin2csv, run_csv2upc
+from .pincsv import run_pin2csv, run_csv2upc, run_ucf2upc
 from .autosdc import run_autosdc
 from .bitinfo import run_bitinfo
 from .regression import run_regression
@@ -145,6 +145,8 @@ Project:
   -csv2upc <in.csv> [-o <out.upc>]     CSV back to a phycst.pin.set UPC: consumes the
                                         [-device <part>]  -pin2csv format; balls validated against
                                         the device when resolvable (pair of -pin2csv)
+  -ucf2upc <in.ucf> [-o <out.upc>]     Xilinx UCF pin constraints -> UPC (vendor ucf2upc;
+                                        bus bits come out as name<bit>; no design needed)
   -autosdc <src.hqprj> [-period ns] [-o out.sdc]
                                         Auto-generate clock constraints SDC (tc.autogen).
                                         BROKEN on FT110126: tc.* is silently empty —
@@ -977,8 +979,9 @@ def cmd_build_fpga(args):
     wait_process(proc)
     if proc.returncode != 0:
         print("")
-        print(f"Warning: hqfpga exited with code {proc.returncode}")
-        sys.exit(proc.returncode)
+        print(f"Error: hqfpga exited with code {proc.returncode}")
+        # normalize: crash codes like 0xFFFFFFFF are meaningless to shells
+        sys.exit(proc.returncode if 0 < proc.returncode < 256 else 1)
     _check_bitstream(work_dir, started, hqprj_path)
 
 
@@ -1915,6 +1918,11 @@ def main():
 
     if first == '-csv2upc':
         run_csv2upc(args[1:])
+        return
+
+    # Xilinx UCF -> UPC migration (vendor ucf2upc wrapper)
+    if first == '-ucf2upc':
+        run_ucf2upc(args[1:])
         return
 
     # Auto-generate SDC from elaborated design
