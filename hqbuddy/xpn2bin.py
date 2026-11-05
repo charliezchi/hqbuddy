@@ -145,9 +145,12 @@ def _convert_one(version: dict, xpn_abs: str, bin_path: str | None,
         return True, bin_abs, None
     finally:
         if os.path.exists(temp_tcl):
-            os.remove(temp_tcl)
-            print(f"")
-            print(f"Cleaned up temp TCL: {temp_tcl}")
+            try:
+                os.remove(temp_tcl)
+                print(f"")
+                print(f"Cleaned up temp TCL: {temp_tcl}")
+            except OSError as e:
+                print(f"Warning: could not remove temp TCL {temp_tcl}: {e}")
 
 
 def run_xpn2bin(xpn_path: str | None = None, bin_path: str | None = None,

@@ -246,8 +246,12 @@ def cmd_merge_bin(args):
 
     cmd = [cable, '--merge', fpga_abs, '--cm3file', mcu_abs, '--remap', remap]
     print(f"Merge: {os.path.basename(fpga_abs)} + {os.path.basename(mcu_abs)}")
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          text=True, errors='replace')
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, errors='replace', timeout=120)
+    except subprocess.TimeoutExpired:
+        print('Error: cable.exe merge timed out (120s).')
+        sys.exit(1)
     print(proc.stdout)
     if proc.returncode != 0:
         print(f"Error: cable.exe merge failed (exit {proc.returncode})")
@@ -269,8 +273,12 @@ def cmd_merge_bin(args):
     if download:
         print(f"Downloading with model {model} ...")
         dcmd = [cable, '--sealion', merged, '--model', model, '--Burst']
-        proc = subprocess.run(dcmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                              text=True, errors='replace')
+        try:
+            proc = subprocess.run(dcmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  text=True, errors='replace', timeout=1800)
+        except subprocess.TimeoutExpired:
+            print('Error: download timed out (1800s) — JTAG connection stuck?')
+            sys.exit(1)
         print(proc.stdout)
         # cable.exe prints errors like "Error : The file ID is unmatched"
         # but may still exit 0 — scan the output, don't trust the exit code

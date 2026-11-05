@@ -173,6 +173,3 @@ def run_pinplan(args: list) -> None:
           f"未匹配 {len(unmatched)}）")
     if unmatched:
         print(f"     未匹配: {', '.join(unmatched)}")
-
-
-from . import launcher  # noqa: E402

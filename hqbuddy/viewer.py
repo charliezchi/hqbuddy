@@ -25,8 +25,17 @@ def tcl_path(path: str) -> str:
 def count_route_sections(xpn_path: str) -> int:
     """Count per-signal route sections — 0 means the XPN was never routed."""
     try:
+        # streamed scan: XPNs reach tens of MB, no need to hold one in memory
+        n = 0
+        tail = ""
         with open(xpn_path, encoding="utf-8", errors="replace") as f:
-            return len(re.findall(r"^\s*route\s*$", f.read(), re.MULTILINE))
+            while True:
+                chunk = f.read(1 << 20)
+                if not chunk:
+                    break
+                n += len(re.findall(r"^\s*route\s*$", tail + chunk, re.MULTILINE))
+                tail = chunk[-16:]  # carry a boundary window across chunks
+        return n
     except OSError:
         return -1
 
@@ -87,7 +96,7 @@ def run_xpn_tcl(version: dict, xpn_abs: str, body: list[str],
                 workdir: str, tag: str) -> None:
     """Write a temp TCL (xpn.read + body + exit), run it via hqfpga -cmd in
     the foreground, then remove the TCL."""
-    temp_tcl = os.path.join(workdir, f"_hqbuddy_{tag}.tcl")
+    temp_tcl = os.path.join(workdir, f"_hqbuddy_{tag}_{os.getpid()}.tcl")
     with open(temp_tcl, "w", encoding="utf-8") as f:
         f.write(f"xpn.read {{{tcl_path(xpn_abs)}}}\n")
         for line in body:
@@ -247,7 +256,10 @@ def run_routing(xpn_path: str | None, output_name: str | None = None,
     if os.path.isfile(devname_f):
         with open(devname_f, encoding="utf-8", errors="replace") as f:
             dev = f.read().strip()
-        os.remove(devname_f)
+        try:
+            os.remove(devname_f)
+        except OSError as e:
+            print(f"Warning: could not remove sidecar {devname_f}: {e}")
     print(f"Routing JSON ready: {json_abs}")
     if not dev:
         print("Warning: device name unavailable (dv.info name) — "

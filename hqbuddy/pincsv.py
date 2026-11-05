@@ -163,12 +163,13 @@ def _load_pkg_table(family: str, part: str) -> dict:
     (PIO) — returns {ball: (pad_location, bank, function)}."""
     import tempfile
     from . import udev
-    base = os.path.join(tempfile.mkdtemp(prefix="hqbuddy_pincsv_"), part)
-    sections = udev._run_hqfpga_sections(family, part, ["pkg"], base)
     table = {}
-    for row in udev._pkg_csv(sections["pkg"]).splitlines()[1:]:
-        io, _site, tile, bank, desc = (row.split(",") + [""] * 5)[:5]
-        table[io] = (tile, bank, desc)
+    with tempfile.TemporaryDirectory(prefix="hqbuddy_pincsv_") as td:
+        base = os.path.join(td, part)
+        sections = udev._run_hqfpga_sections(family, part, ["pkg"], base)
+        for row in udev._pkg_csv(sections["pkg"]).splitlines()[1:]:
+            io, _site, tile, bank, desc = (row.split(",") + [""] * 5)[:5]
+            table[io] = (tile, bank, desc)
     return table
 
 

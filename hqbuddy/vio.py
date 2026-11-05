@@ -20,6 +20,7 @@ import sys
 import time
 
 from . import insight
+from .utils import wait_process
 
 
 DEFAULT_MODULE = "hq_vio_ins"
@@ -119,12 +120,13 @@ def cmd_gen(work: str, module: str, in_width: int, out_width: int) -> None:
     with open(tcl_path, "w", encoding="utf-8") as f:
         f.write(f"vio.ip.create -O {scratch} -output_module {module}\nexit\n")
     import subprocess
+    proc = subprocess.Popen([version["hqfpga_path"], "-cmd", tcl_path], cwd=work,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        subprocess.run([version["hqfpga_path"], "-cmd", tcl_path], cwd=work,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-    except subprocess.CalledProcessError:
-        print("Error: vio.ip.create failed.")
-        sys.exit(1)
+        wait_process(proc)
+        if proc.returncode != 0:
+            print("Error: vio.ip.create failed.")
+            sys.exit(1)
     finally:
         if os.path.isfile(tcl_path):
             os.unlink(tcl_path)
@@ -284,6 +286,8 @@ def cmd_write(work: str, assigns: list) -> None:
     if not assigns:
         print("Error: -write needs assignments like -write led=0b10 or led=3.")
         sys.exit(1)
+    # comma-separated assignments in one -write (parity with -reg): led=1,btn=0
+    assigns = [t for a in assigns for t in a.split(",") if t]
     values = {p["name"]: 0 for p in outs}
     for a in assigns:
         name, _, val = a.partition("=")
@@ -362,8 +366,9 @@ def run_vio(args: list) -> None:
                 print(f"Error: unknown -gen option: {rest[i]}")
                 sys.exit(1)
             i += 1
-        if in_w < 0 or out_w < 0:
-            print("Error: -in/-out widths must be >= 0")
+        if in_w < 1 or out_w < 1:
+            print("Error: -in/-out widths must be >= 1 (a 0-width probe port "
+                  "would generate illegal Verilog)")
             sys.exit(1)
         cmd_gen(work, module, in_w, out_w)
         return

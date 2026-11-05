@@ -51,7 +51,7 @@ def _generate_xpn_tcl(work_dir: str, dump_path: str, output_xpn: str) -> str:
     Returns:
         Path to the generated temporary TCL file.
     """
-    temp_tcl = os.path.join(work_dir, "_hqbuddy_genxpn.tcl")
+    temp_tcl = os.path.join(work_dir, f"_hqbuddy_genxpn_{os.getpid()}.tcl")
 
     tcl_content = f"""design.load {dump_path}
 xpn.write {output_xpn}
@@ -188,20 +188,27 @@ def run_xpn(hqprj_path: str, output_name: str | None = None, hqinsight: bool = F
 
         if proc.returncode != 0:
             print(f"")
-            print(f"Warning: hqfpga exited with code {proc.returncode}")
+            print(f"Error: hqfpga exited with code {proc.returncode} "
+                  f"— XPN generation failed.")
+            sys.exit(1)
 
     finally:
-        # Clean up temporary TCL file
+        # Clean up temporary TCL file (AV/indexer locks are routine on Windows)
         if os.path.exists(temp_tcl):
-            os.remove(temp_tcl)
-            print(f"")
-            print(f"Cleaned up temp TCL: {temp_tcl}")
+            try:
+                os.remove(temp_tcl)
+                print(f"")
+                print(f"Cleaned up temp TCL: {temp_tcl}")
+            except OSError as e:
+                print(f"Warning: could not remove temp TCL {temp_tcl}: {e}")
 
     # Auto-open the generated XPN file
     output_abs = os.path.join(work_dir, output_xpn)
     if not os.path.isfile(output_abs):
         print(f"")
-        print(f"Warning: XPN file was not generated: {output_abs}")
+        print(f"Error: XPN file was not generated: {output_abs} "
+              f"(check hqfpga.log in the project dir / output above).")
+        sys.exit(1)
     elif open_file:
         print(f"")
         print(f"Opening XPN file: {output_abs}")

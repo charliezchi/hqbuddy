@@ -190,7 +190,8 @@ def _run_hqfpga(hqfpga_path: str, temp_tcl: str, work_dir: str) -> None:
     if proc.returncode != 0:
         print(f"")
         print(f"Error: hqfpga exited with code {proc.returncode}")
-        sys.exit(proc.returncode)
+        # normalize: crash codes like 0xFFFFFFFF are meaningless to shells
+        sys.exit(proc.returncode if 0 < proc.returncode < 256 else 1)
 
 
 def _remove_stale_tcl(path: str) -> None:
@@ -304,6 +305,20 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
         _run_hqfpga(hqfpga_path, temp_tcl, work_dir)
     finally:
         _cleanup_temp_tcl(temp_tcl)
+
+    if not os.path.isfile(full_tcl):
+        print(f"Error: hqprj2tcl did not generate expected TCL: {full_tcl}")
+        sys.exit(1)
+    # a crashed hqprj2tcl can leave a header-only file behind — require the
+    # marker AND the device-variable block before trusting it
+    with open(full_tcl, encoding="utf-8", errors="replace") as f:
+        head = [f.readline() for _ in range(10)]
+    if not head[0].startswith("#[hqprj2tcl]") or \
+            not any(ln.startswith("set DEV_") for ln in head):
+        print(f"Error: {full_tcl} looks like a partial hqprj2tcl output "
+              f"(marker/device block missing; conversion likely crashed) "
+              f"— delete it and retry.")
+        sys.exit(1)
 
     # per-project synthesis option overrides (-synopt sidecar)
     _inject_synopt_if_present(full_tcl, hqprj_path)

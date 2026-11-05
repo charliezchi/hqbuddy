@@ -155,9 +155,16 @@ def run_doctor(args: list) -> None:
                 try:
                     with os.fdopen(fd, 'w', encoding='utf-8') as f:
                         f.write(tcl)
-                    r = _sp.run(launcher.side_session_cmd(version['hqfpga_path'],
-                                                          tmp),
-                                capture_output=True, timeout=120)
+                    try:
+                        r = _sp.run(launcher.side_session_cmd(version['hqfpga_path'],
+                                                              tmp),
+                                    capture_output=True, timeout=120)
+                    except _sp.TimeoutExpired:
+                        warns.append("UPC 引脚预检超时（120s）——按无结果跳过")
+                        class _R:  # empty result: falls into the no-result path
+                            stdout = b""
+                            stderr = b""
+                        r = _R()
                 finally:
                     try:
                         os.remove(tmp)
@@ -209,8 +216,15 @@ def run_doctor(args: list) -> None:
         try:
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 f.write('license.query\n')
-            r = _sp.run(launcher.side_session_cmd(version['hqfpga_path'], tmp),
-                        capture_output=True, timeout=120)
+            try:
+                r = _sp.run(launcher.side_session_cmd(version['hqfpga_path'], tmp),
+                            capture_output=True, timeout=120)
+            except _sp.TimeoutExpired:
+                warns.append("license.query 超时（120s）——授权检查跳过")
+                class _R:  # empty result: no keys -> unknown-license warn
+                    stdout = b""
+                    stderr = b""
+                r = _R()
         finally:
             try:
                 os.remove(tmp)

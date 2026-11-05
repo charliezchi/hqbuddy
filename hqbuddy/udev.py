@@ -57,7 +57,7 @@ def _run_hqfpga_sections(family: str, part: str, sections: list,
     for name in sections:
         out_path = f"{base}_{name}.txt"
         tcl_path = os.path.join(os.environ.get("TEMP", os.getcwd()),
-                                "_hqbuddy_udev.tcl")
+                                f"_hqbuddy_udev_{os.getpid()}.tcl")
         tcl_path = tcl_path.replace(os.sep, "/")
         if name == "pkg":
             out_tcl = out_path.replace(os.sep, "/")

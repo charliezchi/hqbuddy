@@ -19,7 +19,10 @@ _HQ_EXE = shutil.which("hqbuddy")
 def _run(cmd, cwd=None, timeout=300):
     if cmd and cmd[0] == "hqbuddy" and _HQ_EXE is None:
         cmd = [sys.executable, "-m", "hqbuddy"] + cmd[1:]
-    r = subprocess.run(cmd, capture_output=True, timeout=timeout, cwd=cwd)
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        return -1, f"TIMEOUT after {timeout}s: {' '.join(cmd)}"
     out = (r.stdout or b"").decode("utf-8", errors="replace")
     err = (r.stderr or b"").decode("utf-8", errors="replace")
     # merge stderr into stdout for unified matching

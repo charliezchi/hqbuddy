@@ -111,7 +111,11 @@ def run_encrypt(args: list) -> None:
         cmd = [exe, mode, target, '-pk', keys, '-m', method, '-d', outdir]
         if protect_only:
             cmd.append('-po')
-        proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, errors='replace',
+                                  timeout=300)
+        except subprocess.TimeoutExpired:
+            return False, f'{mode} timed out (300s)'
         return proc.returncode == 0, (proc.stdout or '').strip()
 
     # Filelists via the tool's -l branch (output names not knowable here,

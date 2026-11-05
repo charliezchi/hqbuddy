@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 
 from . import launcher
 from .hqprj_parser import extract_filelist, parse_hqprj
+from .utils import wait_process
 
 # sample_type encoding in .hqins [SIGNAL JSON INFO]
 SAMPLE_TYPES = {2: "sample", 3: "trigger", 4: "sample+trigger"}
@@ -319,7 +320,7 @@ def _check_trigger_signals(proj: dict, parsed: dict) -> list:
             sys.exit(1)
         sig = match[0]
         if sig["sample_type"] not in (3, 4):
-            print(f"Error: 信号 {cond['signal']} 是仅采样（sample-only），不能作为触发；补救：-del 后以 -type both 重新 -add，再 -run+下载")
+            print(f"Error: 信号 {cond['signal']} 是仅采样（sample-only），不能作为触发。")
             print(f"       补救：-del {cond['signal']} 后以 -type both 重新 -add，再 -run + 下载。")
             sys.exit(1)
         if cond["kind"] == "edge" and sig["msb"] != sig["lsb"]:
@@ -1422,7 +1423,7 @@ def run_flow(proj: dict, require_bin: bool = True) -> None:
                                daemon=True)
     watcher.start()
     try:
-        proc.wait()
+        wait_process(proc)
     finally:
         try:
             os.unlink(tcl_path)
@@ -1466,13 +1467,14 @@ def run_flow(proj: dict, require_bin: bool = True) -> None:
         if not log_name.endswith(".log"):
             continue
         log_path = os.path.join(impl_dir, log_name)
-        for enc in ("utf-8", "gbk", "latin-1"):
-            try:
-                log_txt = open(log_path, "r", encoding=enc, errors="replace").read()
-                break
-            except Exception:
-                continue
-        else:
+        # strict-utf8 then gbk: with errors="replace" the fallback loop below
+        # could never trigger and GBK logs decoded as mojibake (regex still
+        # matched by luck on ASCII anchors); strict makes the fallback real
+        try:
+            log_txt = open(log_path, "r", encoding="utf-8").read()
+        except UnicodeDecodeError:
+            log_txt = open(log_path, "r", encoding="gbk", errors="replace").read()
+        except OSError:
             continue
         for m in re.finditer(r"Convert\s+\S+\s+(\S+__INS_\S+)\s", log_txt):
             const_probes.add(m.group(1))
@@ -1512,7 +1514,9 @@ def run_refresh(proj: dict) -> None:
     if not os.path.isfile(tcl):
         _write_import_tcls(proj, _vfiles_from_hqins(proj))
     print("[1/2] Refreshing signal database (rtl.elaborate -insight) ...")
-    proc = subprocess.run([version["hqfpga_path"], "-cmd", tcl], cwd=proj["work_dir"])
+    proc = subprocess.Popen([version["hqfpga_path"], "-cmd", tcl],
+                            cwd=proj["work_dir"])
+    wait_process(proc)
     if proc.returncode != 0:
         print("Error: signal-database re-elaborate failed.")
         sys.exit(1)
@@ -1771,7 +1775,9 @@ def run_init(proj: dict) -> None:
         f.write(_initial_hqins(proj, vfiles))
 
     tcl_path = os.path.join(proj["hqins_dir"], "hq_impor_t.tcl")
-    proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path], cwd=proj["work_dir"])
+    proc = subprocess.Popen([hqfpga_exe, "-cmd", tcl_path],
+                            cwd=proj["work_dir"])
+    wait_process(proc)
     if proc.returncode != 0:
         print(f"Error: elaborate failed (code {proc.returncode}).")
         sys.exit(1)
@@ -2279,6 +2285,11 @@ def _write_ddf_from_la(proj: dict, la_info: dict) -> None:
     depth = _section_value(sections.get("MEMORY DEPTH INFO", [])) or "1024"
     offset = _section_value(sections.get("TRIGGER POSITION", [])) or "128"
     freq = float(_section_value(sections.get("CLOCK FREQUENCY", []), la="") or 100)
+    if freq <= 0:
+        # .hqins [CLOCK FREQUENCY] can be hand-edited to 0 in the GUI; keep the
+        # 100 MHz default instead of ZeroDivisionError at int(1000/freq)
+        print("Warning: .hqins CLOCK FREQUENCY 非法（<=0），按 100 MHz 处理。")
+        freq = 100.0
     period = f"{int(1000 / freq)}ns"
     level = _section_value(sections.get("TRIGGER LEVEL", [])) or "1"
     win = "1"
@@ -2355,9 +2366,10 @@ def _rebuild_instrumented(proj: dict, sig_info: dict, la_info: dict) -> None:
         print("Error: insight.debugip.create did not produce insight_ip.v")
         sys.exit(1)
     # regenerate the instrumented netlist (hq_import_with_bscan.v)
-    proc = subprocess.run([version["hqfpga_path"], "-cmd", new_rtl_tcl],
-                          cwd=proj["work_dir"], stdout=subprocess.DEVNULL,
-                          stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen([version["hqfpga_path"], "-cmd", new_rtl_tcl],
+                            cwd=proj["work_dir"], stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    wait_process(proc)
     if proc.returncode != 0:
         print("Error: rtl.elaborate -new_rtl failed.")
         print("Tip: 选中的信号若已不存在（RTL 层次变了），先 -insight -del 再重试。")
@@ -2488,7 +2500,7 @@ def run_insight(args: list) -> None:
         run_refresh(proj)
         return
 
-    if rest[0] in ("-depth", "-windows", "-level"):
+    if rest[0] in ("-depth", "-windows", "-level", "-position"):
         set_sample_params(proj, rest)
         return
 

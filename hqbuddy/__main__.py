@@ -73,7 +73,8 @@ Project:
                                         (source-to-XPN in one command; needs an existing
                                         HqInsight project with registered signals)
   -xpn inspect <file.xpn>              Parse an XPN physical netlist: design/device/
-                                        component stats/IO list
+                                        component stats/IO list (single .xpn in
+                                        cwd auto-detected when file omitted)
   -xpn2bin [<.xpn>] [-o <file>]        Convert XPN to BIN, then auto-download to board
                                         (multiple .xpn in cwd: convert all + report,
                                          then open the GUI downloader)
@@ -1999,7 +2000,16 @@ def main():
     # XPN (normal and hqinsight modes)
     if first == '-xpn':
         if args[1:] and args[1] == 'inspect':
-            run_xpn_inspect(args[2] if len(args) > 2 else None)
+            if len(args) < 3:
+                print("Usage: hqbuddy -xpn inspect <file.xpn>")
+                print("       (no file: works when exactly one .xpn is in cwd)")
+                cands = sorted(glob.glob("*.xpn"))
+                if len(cands) == 1:
+                    run_xpn_inspect(cands[0])
+                else:
+                    sys.exit(1)
+            else:
+                run_xpn_inspect(args[2])
             return
         cmd_xpn(args[1:])
         return

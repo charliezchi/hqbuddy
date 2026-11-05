@@ -342,10 +342,22 @@ def run_analyze(args: list) -> None:
     out = _run(version["hqfpga_path"], tcl, prj["work"])
     elapsed = time.time() - started
 
-    # clear-rebuild the report dir (stale sections must never survive)
-    import shutil
+    # report-dir refresh: only ever delete THIS tool's own .rpt files —
+    # never rmtree (a `-o` pointing at user content must not lose data;
+    # unknown files in the directory are kept and reported)
+    our_rpts = {f"{base}.rpt" for _, base in SECTIONS}
     if os.path.isdir(out_dir):
-        shutil.rmtree(out_dir)
+        stale = os.listdir(out_dir)
+        for f in stale:
+            if f in our_rpts:
+                try:
+                    os.remove(os.path.join(out_dir, f))
+                except OSError as e:
+                    print(f"Warning: could not remove stale report {f}: {e}")
+        unknown = [f for f in stale if f not in our_rpts]
+        if unknown:
+            print(f"Note: {len(unknown)} 个非本工具文件保留在报告目录: "
+                  f"{', '.join(sorted(unknown)[:5])}{' ...' if len(unknown) > 5 else ''}")
     os.makedirs(out_dir, exist_ok=True)
 
     secs = {}
