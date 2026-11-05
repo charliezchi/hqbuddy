@@ -334,6 +334,17 @@ def run_vio(args: list) -> None:
         else:
             rest.append(a)
 
+    # validate sub-command arguments before resolving the project: a missing
+    # assignment must not be masked by an unrelated "no .hqprj" error
+    if rest and rest[0] == "-write" and not any("=" in a for a in rest[1:]):
+        print("Error: -write needs assignments like -write led=3 "
+              "or led=1,btn=0.")
+        sys.exit(1)
+    if rest and rest[0] == "-reg" and not any(a in ("-in", "-out") for a in rest[1:]):
+        print("Error: -reg needs at least one -in name:w or -out name:w "
+              "(-clear clears the registry).")
+        sys.exit(1)
+
     work = _work_dir(hqprj_arg)
 
     if not rest:

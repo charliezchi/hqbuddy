@@ -17,7 +17,9 @@ from .ipmgr import list_ip_files
 
 
 def run_doctor(args: list) -> None:
-    """Entry for 'hqbuddy -doctor [<.hqprj>]'."""
+    """Entry for 'hqbuddy -doctor [<.hqprj>] [--json]'."""
+    as_json = "--json" in args
+    args = [a for a in args if a != "--json"]
     hqprj_path = os.path.abspath(args[0] if args else _detect_hqprj())
     if not os.path.isfile(hqprj_path):
         print(f"Error: file not found: {hqprj_path}")
@@ -319,17 +321,27 @@ def run_doctor(args: list) -> None:
                      "-insight -init")
 
     # -- report ---------------------------------------------------------------
-    print(f"Doctor: {hqprj_path}")
-    print(f"  PROJ_NAME={name or '?'}  TOP={top or '?'}  DIE={die or '?'}  "
-          f"FILE_SRC x{n_src}")
-    print()
-    for lvl, msgs in (("FAIL", fails), ("WARN", warns)):
-        for msg in msgs:
-            print(f"[{lvl}] {msg}")
-    for msg in oks:
-        print(f"[ ok ] {msg}")
-    print()
-    print(f"结果: {len(fails)} FAIL, {len(warns)} WARN, {len(oks)} ok")
+    if as_json:
+        import json
+        print(json.dumps({
+            "project": hqprj_path,
+            "pass": not fails,
+            "fail": fails,
+            "warn": warns,
+            "ok": oks,
+        }, ensure_ascii=False, indent=2))
+    else:
+        print(f"Doctor: {hqprj_path}")
+        print(f"  PROJ_NAME={name or '?'}  TOP={top or '?'}  DIE={die or '?'}  "
+              f"FILE_SRC x{n_src}")
+        print()
+        for lvl, msgs in (("FAIL", fails), ("WARN", warns)):
+            for msg in msgs:
+                print(f"[{lvl}] {msg}")
+        for msg in oks:
+            print(f"[ ok ] {msg}")
+        print()
+        print(f"结果: {len(fails)} FAIL, {len(warns)} WARN, {len(oks)} ok")
     if fails:
         sys.exit(1)
     sys.exit(0)

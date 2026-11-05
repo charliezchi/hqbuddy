@@ -129,8 +129,10 @@ Project:
                                         (explicit .hqprj target optional; else cwd)
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
   -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
-  -doctor [<.hqprj>]                   Project health check: files/modules/times/device/depth
-  -synopt <src.hqprj> [-set k=<value> ... | -show | -clear]
+  -doctor [<.hqprj>] [--json]          Project health check: files/modules/timestamps/
+                                        device+license/UPC-pin precheck/insight state
+                                        (exit 1 on any FAIL)
+  -synopt [<src.hqprj>] [-set k=<value> ... | -show | -clear]
                                        Per-project synthesis option overrides (injected
                                        into -flow/-build to match FILE_SRC/FILE_TC/FILE_PC);
                                        keys include rtl.set/lo.slo.set switches plus
@@ -140,14 +142,18 @@ Project:
   -pin2csv [<.hqprj>] [-o <out.csv>]   UPC pin assignments + device package table ->
                                         fully joined CSV (Excel pin sheet: bank /
                                         pad/function/signal/IO attrs per pin)
-  -csv2upc <in.csv> [-o <out.upc>]     CSV back to a phycst.pin.set UPC (consumes
-                                        [-device <part>]      the -pin2csv format; balls validated
-                                        against the device when resolvable)
-  -autosdc <src.hqprj> [-period ns]    Auto-generate clock constraints SDC (tc.autogen)
+  -csv2upc <in.csv> [-o <out.upc>]     CSV back to a phycst.pin.set UPC: consumes the
+                                        [-device <part>]  -pin2csv format; balls validated against
+                                        the device when resolvable (pair of -pin2csv)
+  -autosdc <src.hqprj> [-period ns] [-o out.sdc]
+                                        Auto-generate clock constraints SDC (tc.autogen).
+                                        BROKEN on FT110126: tc.* is silently empty —
+                                        use -analyze clocks.rpt and hand-write instead
   -analyze [<.hqprj>] [-n N] [-detail] Pre-implementation design analysis: synthesize once
-                                        [-toggle_rate X] [-o <dir>]      (no P&R) and write clock / fanout /
-                                                                        clock-domain / hierarchy / power / loop
-                                                                        reports to <prj_dir>/analysis/ + digest
+                                        [-toggle_rate X] [-o <dir>]      (no P&R), write clock / fanout /
+                                        clock-domain / hierarchy / power / loop reports
+                                        to <prj_dir>/analysis/ + digest (clocks.rpt is the
+                                        -autosdc alternative on FT110126)
   -regression [--offline] [base_dir]   One-command regression suite (--offline skips
                                         board-dependent checks)
   -seed_sweep [-ins] [-no_dl] [<src.hqprj>] [-n N] [-j J]
@@ -368,6 +374,10 @@ def cmd_sync_prj(args):
         base_dir = (os.path.dirname(os.path.abspath(prj_arg))
                     if prj_arg else os.getcwd())
         tcl_arg = os.path.join(base_dir, "run_hqprj.tcl")
+    if not os.path.isfile(tcl_arg):
+        print(f"Error: file not found: {tcl_arg}")
+        print("Usage: hqbuddy -sync_prj [<tcl>] [<.hqprj>]")
+        sys.exit(1)
     if prj_arg is None:
         prj_arg = prj_from_header(tcl_arg)
         if prj_arg:
@@ -375,6 +385,9 @@ def cmd_sync_prj(args):
     if prj_arg is None:
         print("Error: no .hqprj specified, none in cwd, and the TCL header "
               "carries no source path.")
+        sys.exit(1)
+    if not os.path.isfile(prj_arg):
+        print(f"Error: file not found: {prj_arg}")
         sys.exit(1)
     run_sync_prj(tcl_arg, prj_arg)
 
@@ -1421,6 +1434,11 @@ def cmd_get_pin_bank(args):
             print(f"Error: unknown -get_pin_bank argument: {args[i]}")
             sys.exit(1)
     if not device_part:
+        if not _find_hqprj():
+            print("Error: no .hqprj file found in current directory.")
+            print("Tip: pass -device <part> to query without a project "
+                  "(e.g. hqbuddy -get_pin_bank A4 -device SA5Z-30-D0-8U324C).")
+            sys.exit(1)
         hqprj_path = _resolve_hqprj(None)
         device_part = get_device(hqprj_path)
     if device_part:
