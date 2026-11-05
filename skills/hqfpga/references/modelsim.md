@@ -109,3 +109,14 @@ vsim -c -do sim.do
 | `vmap` 报错 / 找不到库 | `modelsim.ini` 缺 `XiST = ...` 映射 → 重跑 `hqbuddy -simlib` |
 | vsim 不是内部命令 | vsim 不在 PATH → 定位 vsim.exe 并加 PATH 或用全路径 |
 | 时序仿真需要 SDF | 流程网表配套的 `.sdf` 用 `-sdf` 选项加载（本参考未覆盖细节） |
+
+## 门级时序仿真：SDF 导出（FT110126 实测配方）
+
+布线后导出带位置的门级网表 + SDF（同一会话内完成，NL/TA 数据可用）：
+
+```tcl
+design.route
+nl.write aft_route.v -loc -sdf   ;# 同时产出 aft_route.v + aft_route.sdf（与 -phy/-lib 互斥）
+```
+- hqbuddy 侧探针实证（2026-11-06，cdc_top 迷你设计）：两文件均正常产出（"SDF written successfully"）。
+- 后续 vsim 注解（vlog 门级网表 + XiST 仿真库 + vsim -sdfmin/max）为 M-L 级实现，hqbuddy 尚未封装成命令；需要时以本节配方 + modelsim.md 其余章节（GSR/PWR 例化、-voptargs=+acc）组合手工执行。
