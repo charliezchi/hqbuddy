@@ -1714,7 +1714,10 @@ def _preflight_check(proj: dict) -> None:
         issues.append("TOP_MODULE 为空——请用 `hqbuddy -set_top <模块名>` 设置顶层")
     if fields.get("TOP_MODULE") and not re.search(r"^\d+$", fields.get("STEP_CURR", "0")):
         pass  # normal
-    if fields.get("IS_PC_AUTO_CONS", "false") == "false" and fields.get("FILE_PC", "NONE") == "NONE":
+    # FILE_TC/FILE_PC live in the dedicated parser lists, never in `fields` —
+    # a fields.get("FILE_PC") probe would misreport every project that HAS a
+    # UPC as FILE_PC=NONE
+    if fields.get("IS_PC_AUTO_CONS", "false") == "false" and not info["pc"]:
         warns.append("无管脚约束文件（FILE_PC=NONE）——bitgen 阶段会报 BIT-11")
 
     for f in file_src:

@@ -217,10 +217,10 @@ def run_synopt(args: list) -> None:
                           "(open_issues V9: LA tap 读恒 0)；本功能插入的链在综合后网表上、"
                           "不受影响。规避手段：-set infer_srl=off。")
             if k == "cdc_sync" and v != "off":
-                print("Warning: FT110126 实测 lo.cdc_sync_reg.insert 在批处理会话"
-                      "（-cmd 脚本）静默无效果（6 种参数变体验证，疑似仅厂商 GUI "
-                      "流程可用）——本键当前版本不会真正插链，勿依赖；改用 RTL 手写"
-                      "同步链。")
+                print("Warning: FT110126 实测 lo.cdc_sync_reg.insert 不可用："
+                      "无跨域目标时静默无效果，含真实跨域时使构建崩溃"
+                      "（CmdCcdRegFix/insertSyncReg 段错误）——本键仅供厂商修复后"
+                      "验证，当前请改用 RTL 手写同步链。")
             elif v not in allowed.split("|"):
                 print(f"Error: {k} 的值只能是 {allowed}，得到: {v}")
                 sys.exit(1)

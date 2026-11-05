@@ -340,7 +340,8 @@ def run_vio(args: list) -> None:
         print("Error: -write needs assignments like -write led=3 "
               "or led=1,btn=0.")
         sys.exit(1)
-    if rest and rest[0] == "-reg" and not any(a in ("-in", "-out") for a in rest[1:]):
+    if rest and rest[0] == "-reg" and not any(a in ("-in", "-out") for a in rest[1:]) \
+            and "-clear" not in rest[1:]:
         print("Error: -reg needs at least one -in name:w or -out name:w "
               "(-clear clears the registry).")
         sys.exit(1)

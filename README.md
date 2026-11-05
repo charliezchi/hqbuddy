@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.34.0
+3.35.0
 
 ## 功能特点
 
@@ -597,7 +597,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11；报告/日志统一落 `netlist_run/`，不散落在 .edif 目录） |
 | `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测） |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
-| `-synopt [<src.hqprj>] [-set k=<value>] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等开关；`fsm_encoding=auto\|onehot\|binary\|gray\|johnson` → `fsm.set -encoding`；`postsyn_areaopt=tiny..extreme\|none\|auto` → 综合后自动跑 `postsyn.areaopt`；cdc_sync=on\|off\|<N>` → 综合后自动 `lo.cdc_sync_reg.insert`（⚠️ FT110126 批处理会话实测静默无效果，勿依赖，RTL 手写同步链）；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL，postsyn 段注入 design.rtlsyn 之后） |
+| `-synopt [<src.hqprj>] [-set k=<value>] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等开关；`fsm_encoding=auto\|onehot\|binary\|gray\|johnson` → `fsm.set -encoding`；`postsyn_areaopt=tiny..extreme\|none\|auto` → 综合后自动跑 `postsyn.areaopt`；cdc_sync=on\|off\|<N>` → 综合后自动 `lo.cdc_sync_reg.insert`（⚠️ FT110126 实测：无跨域目标时静默无效果，含真实跨域时**使构建崩溃**——不可用，RTL 手写同步链）；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL，postsyn 段注入 design.rtlsyn 之后） |
 | `-analyze [<.hqprj>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]` | 设计分析（实现前体检）：综合一次（不 P&R），报告落 `<工程根>/analysis/`（clocks/fanout/clkdom/hier/power/loop.rpt，重跑清空重建）并打印摘要；`-n` 扇出排行条数（缺省 20），`-detail` 扇出与时钟域附逐 net 明细，`-o` 自定义报告目录（重跑只覆盖本工具的 .rpt，目录内其他文件保留）；功耗需布线后数据、层次报告在本版本无输出（均优雅降级并在摘要注明）；源文件缺失/综合失败提前明确报错 |
 | `-autosdc <src.hqprj> [-period ns]` | 自动生成时钟约束 SDC（tc.autogen -print）。⚠️ FT110126 实测 tc.* 族在批处理会话静默无输出，本命令在该版本不可用——用 `-analyze` 的 clocks.rpt 按时钟清单手写 SDC 替代 |
 | `-doctor [<.hqprj>] [--json]`       | 工程体检：源文件/模块重复/时间戳一致性/器件合法性/授权检查（license.query：类型/到期/器件授权，dv_list 合法不等于已授权）/UPC 引脚预检（球号合法性+时钟 P 侧，提前于 build 报错）/HqInsight 状态一次全查 |
