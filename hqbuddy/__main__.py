@@ -128,9 +128,12 @@ Project:
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
   -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
   -doctor [<.hqprj>]                   Project health check: files/modules/times/device/depth
-  -synopt <src.hqprj> [-set k=on|off ... | -show | -clear]
+  -synopt <src.hqprj> [-set k=<value> ... | -show | -clear]
                                        Per-project synthesis option overrides (injected
-                                       into -flow/-build to match FILE_SRC/FILE_TC/FILE_PC)
+                                       into -flow/-build to match FILE_SRC/FILE_TC/FILE_PC);
+                                       keys include rtl.set/lo.slo.set switches plus
+                                       fsm_encoding (fsm.set -encoding) and
+                                       postsyn_areaopt (postsyn.areaopt after synthesis)
   -pinplan <src.hqprj> -board <board>  Pin plan skeleton: match ports to board nets (boards/*.md)
   -pin2csv [<.hqprj>] [-o <out.csv>]   UPC pin assignments + device package table ->
                                         fully joined CSV (Excel pin sheet: bank /

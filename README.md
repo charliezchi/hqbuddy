@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.29.0
+3.30.0
 
 ## 功能特点
 
@@ -585,7 +585,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11；报告/日志统一落 `netlist_run/`，不散落在 .edif 目录） |
 | `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测） |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
-| `-synopt [<src.hqprj>] [-set k=on\|off] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等旋钮；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL） |
+| `-synopt [<src.hqprj>] [-set k=<value>] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等开关；`fsm_encoding=auto\|onehot\|binary\|gray\|johnson` → `fsm.set -encoding`；`postsyn_areaopt=tiny..extreme\|none\|auto` → 综合后自动跑 `postsyn.areaopt`；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL，postsyn 段注入 design.rtlsyn 之后） |
 | `-analyze [<.hqprj>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]` | 设计分析（实现前体检）：综合一次（不 P&R），报告落 `<工程根>/analysis/`（clocks/fanout/clkdom/hier/power/loop.rpt，重跑清空重建）并打印摘要；`-n` 扇出排行条数（缺省 20），`-detail` 扇出与时钟域附逐 net 明细，`-o` 自定义报告目录；功耗需布线后数据、层次报告在本版本无输出（均优雅降级并在摘要注明）；源文件缺失/综合失败提前明确报错 |
 | `-doctor [<.hqprj>]`                | 工程体检：源文件/模块重复/时间戳一致性/器件合法性/UPC 引脚预检（球号合法性+时钟 P 侧，提前于 build 报错）/HqInsight 状态一次全查 |
 | `-seed_sweep [-ins] [-no_dl] [-n N] [-j J] [<.hqprj>]` | 多种子布局布线扫描：综合一次存共享 UDB，逐 seed 并行重跑 P&R（effort 固定，仅 `-seed` 变化，默认 4 进程并行，`-j 1` 串行），产物按 seed 放在 `seed_sweep/seed<N>/`（bin、布线后 XPN、时序/fmax/布局报告），汇总表写入 `seed_sweep/seed_sweep_summary.csv`（`.hqprj` 缺省时自动探测当前目录/指定目录；工程必须已挂 FILE_TC，缺失时提前报错）；`-ins` 改为扫描 HqInsight 插桩设计（每次先强制重建插桩产物（refresh——覆盖 IP 内部 include 改动与产物缺失导致的 HQINS001）再跑官方 insight 流程刷新 `hqins_impl`，各 seed 位流带 VLA 探针），产物在 `seed_sweep_ins/`；完成后自动清除上一轮下载备注 `.hqbuddy_dl_notes.json` 并在 sweep 目录 detached 拉起 `-dl` 下载 GUI，方便直接挑选 seed 位流下载（`-no_dl` 跳过 GUI 拉起，适合 agent/脚本，各 seed bin 在 `seed_sweep[_ins]/seed<N>/` 直接 `-cable` 下载） |

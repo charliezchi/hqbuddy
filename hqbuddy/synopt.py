@@ -9,10 +9,18 @@ import json
 import os
 import sys
 
-# option key -> ("rtl"|"slo", kind)   kind: "onoff" boolean switches
+# option key -> ("rtl"|"slo"|"fsm"|"postsyn", ...)
+#   rtl/slo  : "onoff" boolean switches (rtl.set / lo.slo.set -key on|off)
+#   fsm      : FSM re-encoding choice -> fsm.set -encoding <v> (pre-synthesis)
+#   postsyn  : area effort choice -> postsyn.areaopt.set -effort <v> +
+#              postsyn.areaopt (injected right after design.rtlsyn)
 RTL_KEYS = ("infer_ram", "infer_rom", "infer_srl", "fsm_opt", "expr_opt",
             "mux_opt", "dsp_map", "share_opt", "macro_rebuild")
 SLO_KEYS = ("sweep", "clk_conv", "data_opt", "merge", "cut_merge")
+FSM_KEYS = ("fsm_encoding",)
+AREA_KEYS = ("postsyn_areaopt",)
+FSM_ENCODINGS = ("auto", "onehot", "binary", "gray", "johnson")
+AREA_EFFORTS = ("tiny", "low", "std", "high", "extra", "extreme", "none", "auto")
 
 
 def sidecar_path(hqprj_path: str) -> str:
@@ -31,43 +39,88 @@ def load_overrides(hqprj_path: str) -> dict:
 
 
 def inject_synopt(tcl_lines: list, hqprj_path: str) -> list:
-    """Insert override rtl.set/lo.slo.set lines after the last default set line."""
+    """Insert override lines into a freshly generated flow TCL.
+
+    Pre-synthesis keys (rtl.set / lo.slo.set / fsm.set) go after the last
+    default set line so later lines win; the post-synthesis area-optimization
+    pair goes right after design.rtlsyn (fallback anchors: design.flatten,
+    then just before design.pack)."""
     ov = load_overrides(hqprj_path)
     if not ov:
         return tcl_lines
-    inject: list = []
-    last_set = -1
-    for i, ln in enumerate(tcl_lines):
-        st = ln.strip()
-        if st.startswith("rtl.set") or st.startswith("lo.slo.set"):
-            last_set = i
+    pre: list = []
+    post: list = []
     for key in sorted(ov):
         fam = _KEYMAP.get(key, "rtl")
-        cmd = "rtl.set" if fam == "rtl" else "lo.slo.set"
-        inject.append(f"{cmd} -{key} {ov[key]}")
-    if last_set >= 0:
-        tcl_lines[last_set + 1:last_set + 1] = inject
-    else:
-        # no default sets: insert before synthesis entry if present, else append
-        idx = next((i for i, ln in enumerate(tcl_lines)
-                    if ln.strip().startswith("design.analyze")), None)
-        pos = idx if idx is not None else len(tcl_lines)
-        tcl_lines[pos:pos] = inject
+        v = ov[key]
+        if fam == "rtl":
+            pre.append(f"rtl.set -{key} {v}")
+        elif fam == "slo":
+            pre.append(f"lo.slo.set -{key} {v}")
+        elif fam == "fsm":
+            pre.append(f"fsm.set -encoding {v}")
+        elif fam == "postsyn":
+            post.append(f"postsyn.areaopt.set -effort {v}")
+            post.append("postsyn.areaopt")
+    if pre:
+        last_set = -1
+        for i, ln in enumerate(tcl_lines):
+            st = ln.strip()
+            if st.startswith(("rtl.set", "lo.slo.set", "fsm.set")):
+                last_set = i
+        if last_set >= 0:
+            tcl_lines[last_set + 1:last_set + 1] = pre
+        else:
+            # no default sets: insert before synthesis entry if present, else append
+            idx = next((i for i, ln in enumerate(tcl_lines)
+                        if ln.strip().startswith("design.analyze")), None)
+            pos = idx if idx is not None else len(tcl_lines)
+            tcl_lines[pos:pos] = pre
+    if post:
+        anchor = next((i for i, ln in enumerate(tcl_lines)
+                       if ln.strip().startswith("design.rtlsyn")), None)
+        if anchor is None:
+            anchor = next((i for i, ln in enumerate(tcl_lines)
+                           if ln.strip().startswith("design.flatten")), None)
+        if anchor is not None:
+            tcl_lines[anchor + 1:anchor + 1] = post
+        else:
+            pack = next((i for i, ln in enumerate(tcl_lines)
+                         if ln.strip().startswith(("design.pack", "impl.pack"))),
+                        None)
+            pos = pack if pack is not None else len(tcl_lines)
+            tcl_lines[pos:pos] = post
     print(f"[i] 已注入综合选项覆盖: {', '.join(sorted(ov))}")
     return tcl_lines
 
 
 _KEYMAP = {k: "rtl" for k in RTL_KEYS}
 _KEYMAP.update({k: "slo" for k in SLO_KEYS})
+_KEYMAP.update({k: "fsm" for k in FSM_KEYS})
+_KEYMAP.update({k: "postsyn" for k in AREA_KEYS})
+
+
+def _value_help(key: str) -> str:
+    fam = _KEYMAP[key]
+    if fam in ("rtl", "slo"):
+        return "on|off"
+    if fam == "fsm":
+        return "|".join(FSM_ENCODINGS)
+    return "|".join(AREA_EFFORTS)
+
+
+def _keys_help() -> str:
+    return (f"{', '.join(RTL_KEYS)} (rtl.set); {', '.join(SLO_KEYS)} (lo.slo.set); "
+            f"fsm_encoding={ '|'.join(FSM_ENCODINGS) } (fsm.set); "
+            f"postsyn_areaopt={ '|'.join(AREA_EFFORTS) } (postsyn.areaopt)")
 
 
 def run_synopt(args: list) -> None:
     """Entry for 'hqbuddy -synopt [<src.hqprj>] [-show | -set k=v ... | -clear]'."""
     if not args:
-        print("Usage: hqbuddy -synopt [<src.hqprj>] [-show | -set k=on|off ... | -clear]")
+        print("Usage: hqbuddy -synopt [<src.hqprj>] [-show | -set k=<value> ... | -clear]")
         print("       (.hqprj 可省略：当前目录唯一工程自动探测)")
-        print(f"       keys: {', '.join(RTL_KEYS)} (rtl.set); "
-              f"{', '.join(SLO_KEYS)} (lo.slo.set)")
+        print(f"       keys: {_keys_help()}")
         sys.exit(1)
     hqprj_arg = None
     mode = "-show"
@@ -85,7 +138,7 @@ def run_synopt(args: list) -> None:
             while i < len(args) and "=" in args[i] and not args[i].startswith("-"):
                 k, _, v = args[i].partition("=")
                 if not k or not v:
-                    print(f"Error: -set 需要 key=on|off 形式: {args[i]}")
+                    print(f"Error: -set 需要 key=<value> 形式: {args[i]}")
                     sys.exit(1)
                 sets[k] = v
                 i += 1
@@ -99,7 +152,7 @@ def run_synopt(args: list) -> None:
             print(f"Error: unexpected argument: {a}")
             sys.exit(1)
     if mode == "-set" and not sets:
-        print("Error: -set 需要至少一个 key=on|off 参数")
+        print("Error: -set 需要至少一个 key=<value> 参数")
         sys.exit(1)
     if hqprj_arg is None:
         import glob
@@ -139,8 +192,9 @@ def run_synopt(args: list) -> None:
             if k not in _KEYMAP:
                 print(f"Error: 未知综合选项: {k}（可选：{', '.join(sorted(_KEYMAP))}）")
                 sys.exit(1)
-            if v not in ("on", "off"):
-                print(f"Error: {k} 的值只能是 on|off，得到: {v}")
+            allowed = _value_help(k)
+            if v not in allowed.split("|"):
+                print(f"Error: {k} 的值只能是 {allowed}，得到: {v}")
                 sys.exit(1)
         cur.update(sets)
         with open(p, "w", encoding="utf-8") as f:
