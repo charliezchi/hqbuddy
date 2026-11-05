@@ -155,7 +155,8 @@ def run_doctor(args: list) -> None:
                 try:
                     with os.fdopen(fd, 'w', encoding='utf-8') as f:
                         f.write(tcl)
-                    r = _sp.run([version['hqfpga_path'], '-cmd', tmp],
+                    r = _sp.run(launcher.side_session_cmd(version['hqfpga_path'],
+                                                          tmp),
                                 capture_output=True, timeout=120)
                 finally:
                     try:
@@ -195,6 +196,72 @@ def run_doctor(args: list) -> None:
                     oks.append("时钟脚均在 P 侧球")
             except SystemExit:
                 warns.append("HqFPGA 版本未配置，跳过引脚预检（hqbuddy -cfg）")
+
+    # -- 5c. license (license.query) ------------------------------------------
+    # Explains a failure class -set_device/-build can only hint at: device is
+    # legal in dv_list but not covered by any license key.  license.query must
+    # run bare (no dv.setup) — after device setup it prints nothing (FT110126).
+    try:
+        from . import launcher
+        version = launcher.require_hqfpga_version()
+        import subprocess as _sp
+        fd, tmp = tempfile.mkstemp(suffix='.tcl', prefix='hqbuddy_lic_')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write('license.query\n')
+            r = _sp.run(launcher.side_session_cmd(version['hqfpga_path'], tmp),
+                        capture_output=True, timeout=120)
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        lic_out = ((r.stdout or b'') + (r.stderr or b'')).decode('gbk',
+                                                                 errors='replace')
+        m_type = re.search(r'#\s*Type\s*:\s*(\S+)', lic_out)
+        keys = re.findall(r'#\s*\[KEY\s*\]\s*(\S+)', lic_out)
+        expiries = re.findall(r'#\s*\[Expire\s*\]\s*([0-9.]+)', lic_out)
+        devices = []
+        in_devices = False
+        for ln in lic_out.splitlines():
+            s = ln.strip()
+            if s.startswith('# [KEY'):
+                in_devices = False
+            elif s.startswith('# [Devices'):
+                in_devices = True
+            elif in_devices and s.startswith('#'):
+                tok = s.lstrip('#').strip()
+                if tok and not tok.startswith(('-', '[')):
+                    devices.append(tok)
+        if not keys:
+            warns.append("license.query 无 key 输出——授权状态未知")
+        else:
+            oks.append(f"授权: {m_type.group(1) if m_type else '?'} 类型, "
+                       f"{len(keys)} key（最早到期 {min(expiries) if expiries else '?'}），"
+                       f"授权器件 {len(devices)} 个")
+            import datetime as _dt
+            today = _dt.date.today()
+            for e in expiries:
+                try:
+                    d = _dt.date(*map(int, e.split('.')))
+                except ValueError:
+                    continue
+                if d < today:
+                    warns.append(f"授权 key 已过期（{e}）——实现/下载可能失败")
+                elif (d - today).days <= 30:
+                    warns.append(f"授权 key 将在 {(d - today).days} 天内到期（{e}）")
+            # authorized entries are DIE-PACKAGE (no speed/condition suffix);
+            # match the same composition
+            pkg = fields.get("PACKAGES", "")
+            if die and pkg and devices:
+                short = f"{die}-{pkg}"
+                if short not in devices:
+                    warns.append(f"器件 {short} 不在授权清单（dv_list 合法 ≠ 已授权）"
+                                 f"——实现可能失败，license.query Devices 节可查")
+                else:
+                    oks.append(f"器件 {short} 已授权")
+    except SystemExit:
+        warns.append("HqFPGA 版本未配置，跳过授权检查（hqbuddy -cfg）")
 
     # -- 6. IP consistency ---------------------------------------------------
     try:

@@ -370,9 +370,12 @@ def get_pin_bank(device_part: str, pin: str) -> None:
         f.write(tcl)
         tcl_path = f.name
     try:
-        proc = subprocess.run([hqfpga_exe, "-cmd", tcl_path],
+        proc = subprocess.run(launcher.side_session_cmd(hqfpga_exe, tcl_path),
                               cwd=os.getcwd(),
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        print("Error: hqfpga.exe 超时（300s）——工具可能挂起。")
+        sys.exit(1)
     finally:
         os.unlink(tcl_path)
     if proc.returncode != 0:

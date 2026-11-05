@@ -18,7 +18,39 @@ NOTES_FILE = '.hqbuddy_dl_notes.json'
 # "Key:<spaces>value" header (Design name / Device / Date / ...) that ends
 # with 0A FF FF FF before the binary frame data.
 BITSTREAM_MAGIC = b'\xff\x00XIST ASCII Bitstream'
-_HEADER_KEYS = re.compile(r'^(Design name|Device):\s*(\S.*)')
+_HEADER_KEYS = re.compile(
+    r'^(Design name|Device|Date|Architecture|Bitstream Status|Version):\s*(\S.*)')
+_KEY_ALIAS = {"Design name": "design", "Device": "device", "Date": "date",
+              "Architecture": "architecture", "Bitstream Status": "status",
+              "Version": "version"}
+
+
+def read_bitstream_header(path):
+    """Full XiST FPGA bitstream header probe.
+
+    Returns {'path','size','design','device','date','architecture','status',
+    'version'} for an FPGA bitstream (missing keys -> ''), None for MCU
+    firmware / HqInsight module data / unreadable files (they lack the magic
+    + ASCII header)."""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(4096)
+        size = os.path.getsize(path)
+    except OSError:
+        return None
+    if not head.startswith(BITSTREAM_MAGIC):
+        return None
+    info = {'path': path, 'size': size, 'design': '', 'device': '', 'date': '',
+            'architecture': '', 'status': '', 'version': ''}
+    for line in head[len(BITSTREAM_MAGIC):].split(b'\n'):
+        try:
+            text = line.decode('ascii').rstrip('\r')
+        except UnicodeDecodeError:
+            break  # 0A FF FF FF terminator reached
+        m = _HEADER_KEYS.match(text)
+        if m:
+            info[_KEY_ALIAS[m.group(1)]] = m.group(2).strip()
+    return info
 
 
 def read_bin_info(path):
@@ -27,28 +59,10 @@ def read_bin_info(path):
     Only XiST FPGA bitstreams carry the magic + ASCII header; MCU firmware,
     HqInsight module data etc. lack it and are rejected. Unreadable files
     are also rejected (counted as filtered)."""
-    try:
-        with open(path, 'rb') as f:
-            head = f.read(4096)
-    except OSError:
+    h = read_bitstream_header(path)
+    if h is None:
         return False, '', ''
-    if not head.startswith(BITSTREAM_MAGIC):
-        return False, '', ''
-    design = device = ''
-    for line in head[len(BITSTREAM_MAGIC):].split(b'\n'):
-        try:
-            text = line.decode('ascii').rstrip('\r')
-        except UnicodeDecodeError:
-            break  # 0A FF FF FF terminator reached
-        m = _HEADER_KEYS.match(text)
-        if not m:
-            continue
-        if m.group(1) == 'Design name':
-            design = m.group(2).strip()
-        else:
-            device = m.group(2).strip()
-            break
-    return True, design, device
+    return True, h['design'], h['device']
 
 
 def _no_window_flags():

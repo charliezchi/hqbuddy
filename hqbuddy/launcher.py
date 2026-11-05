@@ -3,9 +3,29 @@
 import os
 import subprocess
 import sys
+import tempfile
 
 from . import config, scanner
 from .utils import wait_process
+
+
+def side_log_dir() -> str:
+    """Fixed directory for internal side-session hqfpga logs.  Without
+    -outdir hqfpga writes hqfpga.log into its cwd — for the wrapped side
+    sessions (doctor/udev/device/pincsv/...) that is the user's cwd, which
+    used to pollute every project the tool touched."""
+    d = os.path.join(tempfile.gettempdir(), "hqbuddy", "hq_logs")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def side_session_cmd(hqfpga_path: str, tcl_path: str) -> list:
+    """hqfpga command line for internal side sessions: the session log goes
+    to %TEMP%/hqbuddy/hq_logs/hqfpga.log (last session wins) instead of the
+    user's cwd.  Only for capture-and-parse sessions; product flows (-build,
+    -flow, -cmd passthrough) keep native cwd semantics."""
+    return [hqfpga_path, "-outdir", side_log_dir(), "-log", "hqfpga.log",
+            "-cmd", tcl_path]
 
 
 def resolve_hqfpga_version() -> dict | None:

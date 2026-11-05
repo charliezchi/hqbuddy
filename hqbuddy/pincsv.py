@@ -77,7 +77,8 @@ def _eval_upc(upc_path: str) -> list:
     tf.write(tcl)
     tf.close()
     try:
-        proc = subprocess.run([version["hqfpga_path"], "-cmd", tf.name],
+        proc = subprocess.run(launcher.side_session_cmd(version["hqfpga_path"],
+                                                        tf.name),
                               capture_output=True, timeout=300)
     finally:
         try:
@@ -353,7 +354,8 @@ def _validate_balls(balls: list, family: str, part: str) -> list:
     tf.write(tcl)
     tf.close()
     try:
-        proc = subprocess.run([version["hqfpga_path"], "-cmd", tf.name],
+        proc = subprocess.run(launcher.side_session_cmd(version["hqfpga_path"],
+                                                        tf.name),
                               capture_output=True, timeout=300)
     finally:
         try:

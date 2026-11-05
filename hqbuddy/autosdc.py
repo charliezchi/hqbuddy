@@ -73,13 +73,14 @@ def run_autosdc(args: list) -> None:
            f"rtl.elaborate -top {top}\n"
            f'puts "===SDC-BEgin==="\n'
            f"{auto_line}\n"
-           f'puts "===SDC-End===\n')
+           f'puts "===SDC-End==="\n')
 
     tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8")
     tf.write(tcl)
     tf.close()
     try:
-        proc = subprocess.run([hqfpga_path, "-cmd", tf.name], cwd=work,
+        proc = subprocess.run(launcher.side_session_cmd(hqfpga_path, tf.name),
+                              cwd=work,
                               capture_output=True, text=True,
                               errors="replace", timeout=600)
     except subprocess.TimeoutExpired:
@@ -101,7 +102,10 @@ def run_autosdc(args: list) -> None:
     sdc_lines = [l for l in seg.splitlines()
                  if l.strip() and not l.strip().startswith("===")]
     if not sdc_lines:
-        print("Error: tc.autogen 产出为空。")
+        print("Error: tc.autogen 未产出任何约束行。")
+        print("       FT110126 实测：tc.* 命令族在批处理会话（-cmd 脚本）中对本版本静默")
+        print("       无输出（与早期版本/手册行为不符，疑厂商变更）。替代路径：")
+        print("       hqbuddy -analyze <工程> 查看时钟清单后手写 SDC，或向智多晶反馈。")
         sys.exit(1)
 
     out_path = out or os.path.join(work, "auto_generated.sdc")

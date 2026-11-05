@@ -31,6 +31,7 @@ from .synopt import run_synopt
 from .pinplan import run_pinplan
 from .pincsv import run_pin2csv, run_csv2upc
 from .autosdc import run_autosdc
+from .bitinfo import run_bitinfo
 from .regression import run_regression
 from .device import run_device
 from .ipgen import run_ipgen
@@ -170,6 +171,8 @@ Tools:
   -update_ip [<.hqprj>]                 Regenerate all IP netlists for project
   -encrypt [<files...>] [-d dir] [-m m] [-po]  Encrypt HDL sources (.v/.vh/.f, default: all .v in cwd)
   -simlib [<dir>]                       Compile XiST simulation library
+  -bitinfo <file.bin> [...]             Parse XiST FPGA bitstream headers (design/device/date/size;
+                                        glob allowed; read-only, no hqfpga session)
   -cmd [<file>]                         Launch hqfpga CLI (with TCL script, or interactive if omitted)
   -cmd -e "<tcl>" [-q]                  Execute a single TCL command string
                                         (-q: hide banner and Info: lines)
@@ -214,7 +217,7 @@ Debug:
   -insight -selftest [-signal s] [-value N]
                                         Regression selftest: arm+capture, verify samples
                                         increment by 1 per cycle (deterministic counter design)
-  -insight -depth N [-windows W] [-level L]
+  -insight -depth N [-windows W] [-level L] [-position P]
                                         Sampling params (GUI 采样参数 dialog): write .hqins
                                         sections. N in 256..65536; depth/windows need -run
                                         +re-download to take effect (capture refuses on mismatch)
@@ -1903,6 +1906,11 @@ def main():
     # Pre-implementation design analysis (synthesize once, report family)
     if first == '-analyze':
         run_analyze(args[1:])
+        return
+
+    # Bitstream header info (pure python, no hqfpga session)
+    if first == '-bitinfo':
+        run_bitinfo(args[1:])
         return
 
     # Regression suite

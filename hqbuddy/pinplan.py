@@ -75,7 +75,8 @@ def _elab_ports(hqfpga_path: str, work: str, hqprj: str, top: str) -> list:
     tf.write(tcl)
     tf.close()
     try:
-        proc = subprocess.run([hqfpga_path, "-cmd", tf.name], cwd=work,
+        proc = subprocess.run(launcher.side_session_cmd(hqfpga_path, tf.name),
+                              cwd=work,
                               capture_output=True, text=True,
                               errors="replace", timeout=600)
     except subprocess.TimeoutExpired:

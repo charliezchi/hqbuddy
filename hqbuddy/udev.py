@@ -72,12 +72,16 @@ def _run_hqfpga_sections(family: str, part: str, sections: list,
         with open(tcl_path, "w", encoding="utf-8") as f:
             f.write(body)
         try:
-            proc = subprocess.run([version["hqfpga_path"], "-cmd", tcl_path],
-                                  capture_output=True)
-            try:
-                out = proc.stdout.decode("utf-8")  # strict: detect GBK output
-            except UnicodeDecodeError:
-                out = proc.stdout.decode("gbk", errors="replace")
+            proc = subprocess.run(launcher.side_session_cmd(version["hqfpga_path"],
+                                                            tcl_path),
+                                  capture_output=True, timeout=600)
+        except subprocess.TimeoutExpired:
+            print(f"Error: hqfpga 超时（600s）——'{name}' 报告生成挂起。")
+            sys.exit(1)
+        try:
+            out = proc.stdout.decode("utf-8")  # strict: detect GBK output
+        except UnicodeDecodeError:
+            out = proc.stdout.decode("gbk", errors="replace")
         finally:
             if os.path.exists(tcl_path):
                 os.remove(tcl_path)
