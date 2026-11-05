@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.28.0
+3.29.0
 
 ## 功能特点
 
@@ -33,6 +33,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **VIO 运行时探针**：生成 VIO IP 模块、登记命名探针、运行时读取/驱动设计信号，无需重编译（`-vio`）
 - **报告摘要**：一键解析实现流程报告——FMAX、setup/hold WNS（分列判定 MET/VIOLATED）、资源利用率、bit 文件清单（`-report`）
 - **设计分析（实现前体检）**：综合一次（不 P&R）即输出时钟清单/漏约束检测、高扇出排行、时钟域与跨域（CDC 线索）、层次资源、组合环检测六类报告到 `<工程根>/analysis/` 并打印摘要（`-analyze`）；每段独立防护，厂商命令崩溃不影响其余段落；工程无 SDC 时提示可用 `-autosdc` 生成
+- **管脚表互转（Excel 工作流）**：`-pin2csv` 把工程 UPC 管脚分配 + 器件封装表（'udev.pkg.report）join 成全量 CSV（Bank/球/Pad/功能/信号/IO 属性，238 管脚一行不落），`-csv2upc` 把编辑后的 CSV 转回 `phycst.pin.set` UPC（球名先经 dv.get_pin_bank 校验）；UPC 先按 TCL 求值再导出（板卡变体 set/if 条件分支取实际值，不重复导出两个分支）。厂商原生 pin2csv/csv2upc 在 FT110126 上不可用（导出无 Pad Location、导入静默空产物），本功能为本地实现；vccio/ioh 等非 pin.set 约束不在 CSV 往返范围
 - **下载器**：GUI 递归列出当前目录及子目录的 FPGA bitstream bin（按位流头 `FF 00 + XIST ASCII Bitstream` 识别，MCU 固件、HqInsight module_data 等非 FPGA bin 自动过滤），按目录分组显示（文件夹节点可折叠），列表展示位流头的设计名与器件，点击即用 cable.exe 下载，支持备注（`-dl`，detached 启动不阻塞终端）；带参数时透传 hqdnload
 - **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
 - **配置管理**：用系统编辑器打开 config.json 管理扫描路径和版本选择（`-cfg`）
@@ -570,6 +571,8 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-get_device [<file>]`              | 查看`.hqprj` 使用的器件型号                                          |
 | `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
 | `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
+| `-pin2csv [<.hqprj>] [-o <out.csv>]` | UPC→CSV 管脚表：UPC 按 TCL 求值（条件分支取实际值）+ 器件封装表 join，全量管脚 CSV（utf-8-sig，Excel 直接编辑）；输出缺省 `<工程名>_pins.csv`（已存在则报错，`-o` 覆盖） |
+| `-csv2upc <in.csv> [-o <out.upc>] [-device <part>\|<.hqprj>]` | CSV→UPC 管脚表：消费 `-pin2csv` 表头格式（Signal Name + Pin Name 列，其余非常规列回写为 `-attr`）；器件可解析时先校验全部球名；输出缺省与 CSV 同目录同名 `.upc` |
 | `-udev [<part>\|<.hqprj>] [--arch\|--iotype\|--pkg]` | 原生器件报告：tile 架构图（`--fmt html\|csv\|text`，默认 html 着色地图）/ IO 类型表 / 封装管脚（+CSV）；无需设计，目标缺省先探测 `.hqprj` 再进交互选择 |
 | `-new_prj <name> [-device <part>]`  | 从模板创建`.hqprj` 工程                                              |
 | `-new_soc <name> [-core cm3\|star] [-preset <ex>]` | 从 Demo 预设生成 SoC 工程（FPGA+MCU 全套）             |

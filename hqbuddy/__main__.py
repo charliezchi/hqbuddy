@@ -29,6 +29,7 @@ from .analyze import run_analyze
 from .doctor import run_doctor
 from .synopt import run_synopt
 from .pinplan import run_pinplan
+from .pincsv import run_pin2csv, run_csv2upc
 from .autosdc import run_autosdc
 from .regression import run_regression
 from .device import run_device
@@ -131,6 +132,12 @@ Project:
                                        Per-project synthesis option overrides (injected
                                        into -flow/-build to match FILE_SRC/FILE_TC/FILE_PC)
   -pinplan <src.hqprj> -board <board>  Pin plan skeleton: match ports to board nets (boards/*.md)
+  -pin2csv [<.hqprj>] [-o <out.csv>]   UPC pin assignments + device package table ->
+                                        fully joined CSV (Excel pin sheet: bank /
+                                        pad/function/signal/IO attrs per pin)
+  -csv2upc <in.csv> [-o <out.upc>]     CSV back to a phycst.pin.set UPC (consumes
+                                        [-device <part>]      the -pin2csv format; balls validated
+                                        against the device when resolvable)
   -autosdc <src.hqprj> [-period ns]    Auto-generate clock constraints SDC (tc.autogen)
   -analyze [<.hqprj>] [-n N] [-detail] Pre-implementation design analysis: synthesize once
                                         [-toggle_rate X] [-o <dir>]      (no P&R) and write clock / fanout /
@@ -1874,6 +1881,15 @@ def main():
     # Pin planning helper
     if first == '-pinplan':
         run_pinplan(args[1:])
+        return
+
+    # Pin table exchange: UPC <-> CSV
+    if first == '-pin2csv':
+        run_pin2csv(args[1:])
+        return
+
+    if first == '-csv2upc':
+        run_csv2upc(args[1:])
         return
 
     # Auto-generate SDC from elaborated design
