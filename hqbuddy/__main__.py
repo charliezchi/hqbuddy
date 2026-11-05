@@ -25,6 +25,7 @@ from .heatmap import run_heatmap
 from .viewer import run_floorplan, run_routing
 from .udev import run_udev
 from .netlist import run_edf2v, run_netlist_build, run_vla_gen
+from .analyze import run_analyze
 from .doctor import run_doctor
 from .synopt import run_synopt
 from .pinplan import run_pinplan
@@ -131,6 +132,10 @@ Project:
                                        into -flow/-build to match FILE_SRC/FILE_TC/FILE_PC)
   -pinplan <src.hqprj> -board <board>  Pin plan skeleton: match ports to board nets (boards/*.md)
   -autosdc <src.hqprj> [-period ns]    Auto-generate clock constraints SDC (tc.autogen)
+  -analyze [<.hqprj>] [-n N] [-detail] Pre-implementation design analysis: synthesize once
+                                        [-toggle_rate X] [-o <dir>]      (no P&R) and write clock / fanout /
+                                                                        clock-domain / hierarchy / power / loop
+                                                                        reports to <prj_dir>/analysis/ + digest
   -regression [--offline] [base_dir]   One-command regression suite (--offline skips
                                         board-dependent checks)
   -seed_sweep [-ins] [-no_dl] [<src.hqprj>] [-n N] [-j J]
@@ -1874,6 +1879,11 @@ def main():
     # Auto-generate SDC from elaborated design
     if first == '-autosdc':
         run_autosdc(args[1:])
+        return
+
+    # Pre-implementation design analysis (synthesize once, report family)
+    if first == '-analyze':
+        run_analyze(args[1:])
         return
 
     # Regression suite

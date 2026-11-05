@@ -58,6 +58,8 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
   相对路径会导致流程"成功"却无 bin
 - `hqbuddy -report [<dir>|<file>] [-paths N]` — **主流程报告摘要（agent 必用）**：实现流程后运行，一眼拿到 FMAX（各时钟）、WNS（最差 slack，标注 MET/VIOLATED）、资源利用率表（IO/SLICE/LUT/FF/BRAM/DSP）、bin 文件与时间戳、各报告文件存在性。省去 grep 原始 .rpt。报告源：`fmax.rpt`/`<top>_slack.rpt`/`res_place.rpt`（insight 流程取 `ratio.rpt`；res_pack/res_rtl 兜底）；`-paths N` 额外从 slack 报告提取最差 N 条违例时序路径（起始寄存器→结束寄存器+slack）
 - `hqbuddy -report <dirA> --diff <dirB>` / `--json` — 报告对比与机器可读输出（3.14.0）
+
+- `hqbuddy -analyze [<.hqprj>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]` — 实现前设计体检：综合一次（不 P&R），六类报告落 `<工程根>/analysis/`（clocks/fanout/clkdom/hier/power/loop.rpt，重跑清空重建）+ stdout 摘要；实测格式基于 3.1.1 FT110126：`nl.clock.detect`/`ta.clock.list` 是返回值式（已 puts 捕获）、扇出排行需先 `nl.flatten -nmnc`、`nl.power.report` 需布线后设计（WARN 优雅降级）、`nl.hier.report` 本版本无输出；每段 catch 防护，厂商命令崩溃不影响其余段
 - 省略 `.hqprj` 参数时，自动检测当前目录下的工程文件
 - **bitgen 需要引脚约束**：工程无 `.upc`（FILE_PC）时，bitgen 必停于 `ERROR(BIT-11): pads have no location constraint`——跑到 route 成功、bitgen 报这个错是预期行为，补 `.upc` 后即可
 

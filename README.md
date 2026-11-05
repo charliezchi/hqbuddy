@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.27.1
+3.28.0
 
 ## 功能特点
 
@@ -32,6 +32,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **命令行执行**：通过 hqfpga CLI 执行 TCL 脚本（`-cmd`）
 - **VIO 运行时探针**：生成 VIO IP 模块、登记命名探针、运行时读取/驱动设计信号，无需重编译（`-vio`）
 - **报告摘要**：一键解析实现流程报告——FMAX、setup/hold WNS（分列判定 MET/VIOLATED）、资源利用率、bit 文件清单（`-report`）
+- **设计分析（实现前体检）**：综合一次（不 P&R）即输出时钟清单/漏约束检测、高扇出排行、时钟域与跨域（CDC 线索）、层次资源、组合环检测六类报告到 `<工程根>/analysis/` 并打印摘要（`-analyze`）；每段独立防护，厂商命令崩溃不影响其余段落；工程无 SDC 时提示可用 `-autosdc` 生成
 - **下载器**：GUI 递归列出当前目录及子目录的 FPGA bitstream bin（按位流头 `FF 00 + XIST ASCII Bitstream` 识别，MCU 固件、HqInsight module_data 等非 FPGA bin 自动过滤），按目录分组显示（文件夹节点可折叠），列表展示位流头的设计名与器件，点击即用 cable.exe 下载，支持备注（`-dl`，detached 启动不阻塞终端）；带参数时透传 hqdnload
 - **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
 - **配置管理**：用系统编辑器打开 config.json 管理扫描路径和版本选择（`-cfg`）
@@ -582,6 +583,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测） |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
 | `-synopt [<src.hqprj>] [-set k=on\|off] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等旋钮；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL） |
+| `-analyze [<.hqprj>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]` | 设计分析（实现前体检）：综合一次（不 P&R），报告落 `<工程根>/analysis/`（clocks/fanout/clkdom/hier/power/loop.rpt，重跑清空重建）并打印摘要；`-n` 扇出排行条数（缺省 20），`-detail` 扇出与时钟域附逐 net 明细，`-o` 自定义报告目录；功耗需布线后数据、层次报告在本版本无输出（均优雅降级并在摘要注明）；源文件缺失/综合失败提前明确报错 |
 | `-doctor [<.hqprj>]`                | 工程体检：源文件/模块重复/时间戳一致性/器件合法性/UPC 引脚预检（球号合法性+时钟 P 侧，提前于 build 报错）/HqInsight 状态一次全查 |
 | `-seed_sweep [-ins] [-no_dl] [-n N] [-j J] [<.hqprj>]` | 多种子布局布线扫描：综合一次存共享 UDB，逐 seed 并行重跑 P&R（effort 固定，仅 `-seed` 变化，默认 4 进程并行，`-j 1` 串行），产物按 seed 放在 `seed_sweep/seed<N>/`（bin、布线后 XPN、时序/fmax/布局报告），汇总表写入 `seed_sweep/seed_sweep_summary.csv`（`.hqprj` 缺省时自动探测当前目录/指定目录；工程必须已挂 FILE_TC，缺失时提前报错）；`-ins` 改为扫描 HqInsight 插桩设计（每次先强制重建插桩产物（refresh——覆盖 IP 内部 include 改动与产物缺失导致的 HQINS001）再跑官方 insight 流程刷新 `hqins_impl`，各 seed 位流带 VLA 探针），产物在 `seed_sweep_ins/`；完成后自动清除上一轮下载备注 `.hqbuddy_dl_notes.json` 并在 sweep 目录 detached 拉起 `-dl` 下载 GUI，方便直接挑选 seed 位流下载（`-no_dl` 跳过 GUI 拉起，适合 agent/脚本，各 seed bin 在 `seed_sweep[_ins]/seed<N>/` 直接 `-cable` 下载） |
 | `-copy_prj <src.hqprj> <dst_dir>`   | 复制工程（源码+约束+.hqprj）到新目录并改写 FILE 路径为 `$WORK_DIR$` 相对引用 |
