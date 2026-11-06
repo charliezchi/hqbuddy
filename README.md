@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.36.0
+3.37.0
 
 ## 功能特点
 
@@ -612,6 +612,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
 | `-bitinfo <file.bin> [...] [--json]` | 解析 XiST FPGA 位流头：设计名/器件/架构/日期/大小（纯 Python，与 -dl 下载器同一解析器；glob 可用，只读无会话）。下载前核对 bin 身份 |
 | `-ipdoc <ip> [--list] [--no_open]` | 定位并打开 IP 的 UG 用户手册 PDF（ipdepot 模糊匹配；84 IP/97 手册全量索引在 skill ip_doc_index.md；只读无会话） |
+| `-eco <routed.xpn> --script <eco.tcl> [-o <out.xpn>]` | 批处理 ECO：对布线后 XPN 执行 eco.* 修改并局部重布（xpn.read→eco.init→脚本→xpn.write→eco.end 全脚手架；脚本只写 ECO 修改；无需 eval server/GUI；FT110126 实测验证） |
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本（flow 生成的脚本比工程旧时警告重新 `-flow`）；缺省时进入 hqfpga 交互式 CLI |
 | `-regression [--offline] [base_dir]` | 一键回归套件（触发捕获+错误路径+冒烟）；`--offline` 跳过板卡项；显式 `base_dir` 时自动识别其中的 `.hqprj`（缺省基线仅开发机存在，缺失时提示传 base_dir；SKIP 项单列不计入 PASS） |
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |

@@ -19,7 +19,7 @@
 
 | 资源 | 路径 | 说明 |
 |---|---|---|
-| **MS-MPI 多进程布线** | `build\win_x64\bin\msmpi.dll` + `build\common\util\{mpiexec.exe,smpd.exe}` | hqfpga.exe 内嵌 `-mpi` 顶层参数与 rtMpiRouter；启用路径（推断，需实测）：`smpd -d` 起守护 → `mpiexec -n N hqfpga.exe -mpi -cmd flow.tcl`。大设计布线加速候选，实验性 |
+| **MS-MPI 多进程布线** | `build\win_x64\bin\msmpi.dll` + `build\common\util\{mpiexec.exe,smpd.exe}` | hqfpga.exe 内嵌 `-mpi` 顶层参数与 rtMpiRouter；实测（2026-11-06）：**无需 smpd 守护**，`mpiexec -n N hqfpga.exe -mpi -cmd t.tcl` 直接多进程跑通（双进程 RC=0；路由并行度对大设计的收益待测） |
 | **fpl.exe（ML 布局器）** | `build\win_x64\bin\fpl.exe` + `build\win_x64\lib\fpl.d\`（各器件超参 cfg.json） | PyInstaller 程序（torch/numpy）；是 `lpp.fpl` TCL 命令的执行体，**不要直接跑**。RELEASE_NOTE FT101126："Add experimental LPP (Lut-level Packing&Placement) support (disabled by default)" |
 | **hq_ipencrypt.exe** | `build\common\util\hq_ipencrypt.exe` + 同目录 `keys.txt` | 用法：`hqencrypt -l <list> -pk <keys_file> [-m aes128-cbc\|aes256-cbc] [-po]`。keys.txt 是 IEEE P1735 公钥表（勿改）。hqbuddy `-encrypt` 已封装 |
 
@@ -35,7 +35,8 @@ eco.query.comp_index / eco.query.design_state / eco.query.program_detail / eco.q
 eco.signal_probe[.xist.seal|.sealion|.shark]
 ```
 
-典型链路（GUI 流程的命令化）：导入 XPN/DUMP/UDB → `xpn.read` → 改 program 属性 → `eco.place/eco.route` → `xpn.write` → bitgen。**注意**：hqbuddy 此前的决策边界是不做 eval-server（-guisrv）路线的 ECO/常驻会话——本节是普通批处理会话内的 eco.* 命令，二者不同；是否封装成 hqbuddy `-eco` 待用户定夺。
+典型链路（GUI 流程的命令化）：导入 XPN/DUMP/UDB → `xpn.read` → 改 program 属性 → `eco.place/eco.route` → `xpn.write` → bitgen。
+**hqbuddy 3.37.0 已封装：`hqbuddy -eco <routed.xpn> --script <eco.tcl> [-o out.xpn]`**（脚手架全包，脚本只写 ECO 修改；FT110126 实测 eco.route→xpn.write 全链通）。**注意**：hqbuddy 此前的决策边界是不做 eval-server（-guisrv）路线的 ECO/常驻会话——本节是普通批处理会话内的 eco.* 命令，二者不同；是否封装成 hqbuddy `-eco` 待用户定夺。
 
 ## 4. lpp.* 实验命令族（Lut-level Packing & Placement）
 
