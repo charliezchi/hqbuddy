@@ -9,8 +9,11 @@ plain batch session — no eval server, no GUI:
 The script body contains ONLY the ECO modifications (eco.set_route_points /
 eco.forbid_route_node / program-attribute edits / eco.route ...); read, init,
 write and end are handled here.  Verified on FT110126 (probe: routed XPN ->
-eco.route -> rewritten XPN; CmdCcdRegFix-style crashes belong to
-lo.cdc_sync_reg.insert, a different family).
+eco.route -> rewritten XPN).  NOTE the two-tier recipe (see skill
+references/install_tree.md): program-field edits (LUT equations, IO attrs,
+FFMUX picks) do NOT need eco.route at all — text-edit the XPN and run
+hqbuddy -xpn2bin directly (bitgen consumes the XPN config); eco.route is
+only for structural edits (nets/sites/cells).
 """
 import os
 import subprocess

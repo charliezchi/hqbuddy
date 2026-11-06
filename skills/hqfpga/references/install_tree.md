@@ -36,7 +36,17 @@ eco.signal_probe[.xist.seal|.sealion|.shark]
 ```
 
 典型链路（GUI 流程的命令化）：导入 XPN/DUMP/UDB → `xpn.read` → 改 program 属性 → `eco.place/eco.route` → `xpn.write` → bitgen。
-**hqbuddy 3.37.0 已封装：`hqbuddy -eco <routed.xpn> --script <eco.tcl> [-o out.xpn]`**（脚手架全包，脚本只写 ECO 修改；FT110126 实测 eco.route→xpn.write 全链通）。**注意**：hqbuddy 此前的决策边界是不做 eval-server（-guisrv）路线的 ECO/常驻会话——本节是普通批处理会话内的 eco.* 命令，二者不同；是否封装成 hqbuddy `-eco` 待用户定夺。
+**hqbuddy 3.37.0 已封装：`hqbuddy -eco <routed.xpn> --script <eco.tcl> [-o out.xpn]`**（脚手架全包，脚本只写 ECO 修改；FT110126 实测 eco.route→xpn.write 全链通）。
+
+**两级修改配方（FT110126 实板验证 2026-11-06）**：
+- **方程/属性类修改（改 LUT 方程、IO 属性、FFMUX 选择等 program 字段）→ 无需重布**：直接文本编辑 XPN
+  （program 段是明文，如 `"A5LUT:#LUT:O5=(A2@A4) "`，@=XOR * =AND + =OR ~=NOT；`#OFF`=未用）→ `hqbuddy -xpn2bin <改后.xpn>`
+  直接出 bin（bitgen 直接消费 XPN 配置）。
+- **结构类修改（改网线、挪 site、增删单元）→ 需要 `hqbuddy -eco`（eco.route 局部重布）→ -xpn2bin**。
+- 查询接口：`eco.query.comp_index`（返回 JSON：全部 comp 按 PIO/SLICEL/IOLOGIC 分组 + site）、
+  `eco.query.program_detail {comp名}`（返回该 comp 完整 program JSON——LUT 方程/FFMUX/INIT/SR 全字段，**注意 comp 名含 [ ] 时要花括号**）。
+- 实证案例：comp bus_b_raw[2] 的 `AFFMUX:AX→O6` + `A6LUT:#OFF→#LUT:O6=(A6+(~A6))` 两处协同修改（FF 的 D 从
+  直连路由切到恒 1 LUT）→ -xpn2bin → 上板 led[2] 恒亮；与基线 bin 差异 3846 字节（局部生效特征）。**注意**：hqbuddy 此前的决策边界是不做 eval-server（-guisrv）路线的 ECO/常驻会话——本节是普通批处理会话内的 eco.* 命令，二者不同；是否封装成 hqbuddy `-eco` 待用户定夺。
 
 ## 4. lpp.* 实验命令族（Lut-level Packing & Placement）
 
