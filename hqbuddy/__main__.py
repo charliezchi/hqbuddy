@@ -32,6 +32,7 @@ from .pinplan import run_pinplan
 from .pincsv import run_pin2csv, run_csv2upc, run_ucf2upc
 from .autosdc import run_autosdc
 from .bitinfo import run_bitinfo
+from .ipdoc import run_ipdoc
 from .regression import run_regression
 from .device import run_device
 from .ipgen import run_ipgen
@@ -181,6 +182,8 @@ Tools:
   -encrypt [<files...>] [-d dir] [-m m] [-po]  Encrypt HDL sources (.v/.vh/.f, default: all .v in cwd)
   -simlib [<dir>]                       Compile XiST simulation library
   -bitinfo <file.bin> [...]             Parse XiST FPGA bitstream headers (design/device/date/size;
+  -ipdoc <ip> [--list] [--no_open]      Locate & open an IP's UG user manual from the
+                                        ipdepot (fuzzy name match; full index in the skill)
                                         glob allowed; read-only, no hqfpga session)
   -cmd [<file>]                         Launch hqfpga CLI (with TCL script, or interactive if omitted)
   -cmd -e "<tcl>" [-q]                  Execute a single TCL command string
@@ -1938,6 +1941,11 @@ def main():
     # Bitstream header info (pure python, no hqfpga session)
     if first == '-bitinfo':
         run_bitinfo(args[1:])
+        return
+
+    # IP manual locator (ipdepot UG*.pdf)
+    if first == '-ipdoc':
+        run_ipdoc(args[1:])
         return
 
     # Regression suite

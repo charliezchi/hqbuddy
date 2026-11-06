@@ -125,4 +125,6 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -regression [--offline] [base_dir]` — 一键回归套件（触发捕获+错误路径+冒烟；--offline 跳过板卡项）
 - `hqbuddy`（无参数）— 启动 HqFPGA GUI；`hqbuddy <file>.hqprj` — GUI 打开工程
 - `hqbuddy -h` / `-v` — 帮助 / 版本；`-cfg` — 编辑 config.json
+- `hqbuddy -ipdoc <ip> [--list] [--no_open]` — 定位并打开 IP 的 UG 用户手册（ipdepot 模糊匹配；全量索引见 references/ip_doc_index.md）
+- 安装目录资源地图（eco_editor/xsberteye/MS-MPI/lpp/cmd.xml/错误码目录/原语模板/阶段钩子等未封装资源）：见 references/install_tree.md
 - 中文输出：hqfpga/ipgen 等子进程输出为 GBK，UTF-8 终端显示乱码属显示问题、不影响结果

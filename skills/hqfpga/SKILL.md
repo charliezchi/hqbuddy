@@ -45,6 +45,8 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 - `references/setup.md` — 安装、目录结构、hqfpga.exe 启动参数
 - `references/udm.md` — UDM 数据模型与网表对象操控（高级）
 - `references/verilog-sdc.md` — Verilog 可综合子集与 SDC 约束语法
+- `references/install_tree.md` — 安装目录资源地图（未封装 GUI 工具 eco_editor/xsberteye、eco.*/lpp.* 命令族、MS-MPI 多进程布线、cmd.xml GUI↔TCL 官方对照表、三语错误码目录、原语模板库、综合阶段钩子、下载器/驱动排障素材——找工具/文档/排错素材先看这个）
+- `references/ip_doc_index.md` — IP 用户手册索引（84 IP → UG 编号；配合 `hqbuddy -ipdoc <ip>` 直接打开 PDF）
 - `references/synthesis_directives.md` — RTL 综合指令（syn_ramstyle/keep/HQ_MAX_FANOUT/HQ_DATA_SKEW 等，写 RTL 前后按需读）
 - `references/soc_workflow.md` — SoC（FPGA+ARM 软核）全 CLI 工作流（-new_soc/-build/-mcu_build/-merge_bin 链路、预设清单、工程结构，做 SA5Z-30/50 SoC 开发时必读）
 - `references/modelsim.md` — ModelSim/QuestaSim 仿真（XiST 仿真库、xsGSR/xsPWR 强制实例、.do 脚本模板，做仿真任务前必读）
