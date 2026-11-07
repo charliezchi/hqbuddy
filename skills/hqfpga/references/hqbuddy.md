@@ -125,6 +125,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -regression [--offline] [base_dir]` — 一键回归套件（触发捕获+错误路径+冒烟；--offline 跳过板卡项）
 - `hqbuddy`（无参数）— 启动 HqFPGA GUI；`hqbuddy <file>.hqprj` — GUI 打开工程
 - `hqbuddy -h` / `-v` — 帮助 / 版本；`-cfg` — 编辑 config.json
+- `hqbuddy -gatesim <routed.xpn> --tb <tb.v>` — 门级时序仿真一键化（XPN→网表+SDF 导出→vsim SDF 注解自动实例探测→gatesim.rpt；TB 需 xsGSR/xsPWR；布线后网表只需 XiST 库，U_PRIM 仅 EDIF 流程需要——FT110126 实测 SDF 注解 0 error）
 - `hqbuddy -eco --query/--force-signal/--set-lut` — ECO 便捷子命令（两阶段查询、SLICE FF 一键钉死 A/B 侧通吃、A6LUT 方程改写；文本级免重布）
 - `hqbuddy -flow/-build --hook STEP="script"` — 官方 ::HQ.DEBUG.STEP.* 阶段钩子注入（26 步白名单；综合/P&R 中途免重跑取现场）
 - `hqbuddy -eco <routed.xpn> --script <eco.tcl> [-o <out.xpn>]` — 批处理 ECO：布线后 XPN 上跑 eco.* 修改并局部重布（脚手架全包，无需 eval server；实测通）

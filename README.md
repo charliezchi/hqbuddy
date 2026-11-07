@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.38.0
+3.39.0
 
 ## 功能特点
 
@@ -615,6 +615,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-ipdoc <ip> [--list] [--no_open]` | 定位并打开 IP 的 UG 用户手册 PDF（ipdepot 模糊匹配；84 IP/97 手册全量索引在 skill ip_doc_index.md；只读无会话） |
 | `-eco <routed.xpn> --script <eco.tcl> [-o <out.xpn>]` | 批处理 ECO：对布线后 XPN 执行 eco.* 修改并局部重布（xpn.read→eco.init→脚本→xpn.write→eco.end 全脚手架；脚本只写 ECO 修改；无需 eval server/GUI；FT110126 实测验证） |
 | `-eco --query <xpn> [comp关键字]` / `--force-signal <xpn> <comp> <实例名> <0|1>` / `--set-lut <xpn> <comp> <方程>` | ECO 便捷子命令：comp 索引与 program 明细两阶段查询；SLICE FF 一键钉死（AFFMUX/A*LUT 两处协同，A/B 侧通吃）；宽 LUT 方程改写——全部文本级免重布，改后 `-xpn2bin` 出 bin（--force-signal 输出与实板验证过的手工配方逐字节一致） |
+| `-gatesim <routed.xpn> --tb <tb.v> [--top n] [--sdf-instance p] [--sdfmax|min|typ] [--time dur] [--work dir] [--no_run]` | 门级时序仿真一键化：布线后 XPN → 导出带位置门级网表+SDF → vlog+vsim SDF 注解（自动探测 TB 内 DUT 实例路径）→ SDF error 统计与 gatesim.rpt；TB 需例化 xsGSR/xsPWR（配方见 skill modelsim.md；实测 SDF 注解 0 error） |
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本（flow 生成的脚本比工程旧时警告重新 `-flow`）；缺省时进入 hqfpga 交互式 CLI |
 | `-regression [--offline] [base_dir]` | 一键回归套件（触发捕获+错误路径+冒烟）；`--offline` 跳过板卡项；显式 `base_dir` 时自动识别其中的 `.hqprj`（缺省基线仅开发机存在，缺失时提示传 base_dir；SKIP 项单列不计入 PASS） |
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |

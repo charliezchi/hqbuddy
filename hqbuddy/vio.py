@@ -16,6 +16,7 @@ Probe metadata lives in ``hqvla_vio/probes.json`` next to the generated module.
 import glob
 import json
 import os
+import re
 import sys
 import time
 
@@ -241,8 +242,38 @@ def _read_raw(hqfpga_exe: str, cable_exe: str, work: str, die: str, width: int) 
     return int(vals[-1], 16)
 
 
+def _check_module_width(work: str, reg: dict) -> None:
+    """Compare registry totals against the generated module's port widths.
+
+    The registry can drift from src/<module>.v (probes re-registered after
+    -gen): a -write then shifts the wrong bit count into the hardware
+    (C6 board session finding).  Mismatch is a hard error."""
+    module = reg.get("module")
+    if not module:
+        return
+    mod_path = os.path.join(work, "src", module + ".v")
+    if not os.path.isfile(mod_path):
+        return
+    txt = open(mod_path, encoding="utf-8", errors="replace").read()
+    m_in = re.search(r"input\s*\[(\d+):0\]\s*probe_in", txt)
+    m_out = re.search(r"output\s*\[(\d+):0\]\s*probe_out", txt)
+    if not m_in or not m_out:
+        return
+    mod_in = int(m_in.group(1)) + 1
+    mod_out = int(m_out.group(1)) + 1
+    reg_in = reg.get("in_width", sum(p["width"] for p in reg.get("inputs", [])))
+    reg_out = reg.get("out_width", sum(p["width"] for p in reg.get("outputs", [])))
+    if reg_in != mod_in or reg_out != mod_out:
+        print(f"Error: 探针登记位宽与生成模块不符（模块 {module}: "
+              f"in={mod_in}/out={mod_out}，注册表: in={reg_in}/out={reg_out}）——"
+              f"多半是 -gen 之后又 -reg 过。请 hqbuddy -vio -reg -clear 后重新登记，"
+              f"并重新 -gen/构建。")
+        sys.exit(1)
+
+
 def cmd_read(work: str, loop: int, interval: float) -> None:
     reg = load_registry(work)
+    _check_module_width(work, reg)
     inputs = reg.get("inputs", [])
     if not inputs:
         print("Error: no input probes registered (use -vio -reg -in name:w).")
@@ -279,6 +310,7 @@ def cmd_read(work: str, loop: int, interval: float) -> None:
 
 def cmd_write(work: str, assigns: list) -> None:
     reg = load_registry(work)
+    _check_module_width(work, reg)
     outs = reg.get("outputs", [])
     if not outs:
         print("Error: no output probes registered (use -vio -reg -out name:w).")

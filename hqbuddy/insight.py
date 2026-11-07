@@ -1101,6 +1101,19 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         newest_bit = max(os.path.getmtime(b) for b in bit_paths)
         if newest_bit > stamp_bit_mtime + 1:
             print("Warning: hqins_impl 里有比上次下载更新的 bin——先重新 -cable 下载再验收。")
+        # Bit identity check (C6 finding): a wrong/stale bit on the board
+        # silently never fires; compare the bitstream header design name
+        # against the project top before trusting any capture.
+        newest_bit_path = max(bit_paths, key=os.path.getmtime)
+        try:
+            from .downloader import read_bitstream_header
+            hdr = read_bitstream_header(newest_bit_path)
+        except OSError:
+            hdr = None
+        if hdr and hdr.get("design") and hdr["design"] != proj.get("top"):
+            print(f"Warning: 位流头 design={hdr['design']} 与工程顶层 "
+                  f"{proj.get('top')} 不符——板上可能不是本工程的位流，"
+                  f"触发/抓波结果不可信。先重新 -run + 下载。")
     elif bit_paths:
         print("Note: 无 .bit_stamp 基线（本工程尚未用新版 hqbuddy 跑过 -run），")
         print("      位流过期预警未启用。跑一次 -insight -run 即可建立基线。")
