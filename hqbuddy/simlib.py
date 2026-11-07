@@ -204,7 +204,14 @@ def run_simlib(hqfpga_root: str | None = None) -> None:
 
     proc = subprocess.Popen(cmd, cwd=xist_dir)
     try:
+        proc.wait(timeout=900)
+    except subprocess.TimeoutExpired:
+        proc.kill()
         proc.wait()
+        print("")
+        print("Error: vsim 库编译超时（900s）——进程已终止。")
+        print("Tip: 重跑 hqbuddy -simlib；若持续超时检查 ModelSim 授权与磁盘。")
+        sys.exit(1)
     except KeyboardInterrupt:
         proc.terminate()
         try:

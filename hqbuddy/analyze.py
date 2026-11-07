@@ -176,8 +176,8 @@ def _run(hqfpga_path: str, tcl_text: str, work: str) -> str:
     try:
         proc = subprocess.run(launcher.side_session_cmd(hqfpga_path, tf.name),
                               cwd=work,
-                              capture_output=True, text=True, errors="replace",
-                              timeout=1800)
+                              capture_output=True, text=True, encoding="gbk",
+                              errors="replace", timeout=1800)
     except subprocess.TimeoutExpired:
         print("Error: hqfpga analyze 超时（1800s）——设计可能过大或工具挂起。")
         sys.exit(1)

@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.37.0
+3.38.0
 
 ## 功能特点
 
@@ -567,6 +567,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-filelist [<file>] -o <out>`       | 将 filelist 输出到指定文件                                             |
 | `-flow [<file>]`                    | 生成`hqprj2tcl` TCL 脚本，省略时自动检测，默认生成 `run_hqprj.tcl`（-o/路径位置无关；未知 flag 报错） |
 | `-flow [<file>] -o <out>`           | 指定生成的 TCL 文件名                                                  |
+| `-flow/-build --hook STEP=\"script\" [--hook-file f]` | 注入官方 `::HQ.DEBUG.STEP.*` 阶段调试钩子（26 步白名单：Before/AfterAnalyzeHDL、SdbOpt.*、Before/After{Tmap,Pack,Place,Route,Bitgen}…），综合/P&R 中途免重跑取现场；STEP 白名单+花括号配平校验 |
 | `-flow [<file>] -looptdo`           | looptdo 模式：合成后运行`design.looptdo` 搜索优化参数                |
 | `-flow [<file>] -bin_only [<name>]` | bin-only 模式：仅生成`.bin`，不产生中间文件                          |
 | `-sync_prj [<tcl>] [<.hqprj>]`      | 把 `-flow` 生成的 TCL 反向写回 `.hqprj`（tcl 缺省 `<prj_dir>/run_hqprj.tcl`；prj 缺省取 TCL 头注释源路径，其次 cwd 自动检测） |
@@ -613,6 +614,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-bitinfo <file.bin> [...] [--json]` | 解析 XiST FPGA 位流头：设计名/器件/架构/日期/大小（纯 Python，与 -dl 下载器同一解析器；glob 可用，只读无会话）。下载前核对 bin 身份 |
 | `-ipdoc <ip> [--list] [--no_open]` | 定位并打开 IP 的 UG 用户手册 PDF（ipdepot 模糊匹配；84 IP/97 手册全量索引在 skill ip_doc_index.md；只读无会话） |
 | `-eco <routed.xpn> --script <eco.tcl> [-o <out.xpn>]` | 批处理 ECO：对布线后 XPN 执行 eco.* 修改并局部重布（xpn.read→eco.init→脚本→xpn.write→eco.end 全脚手架；脚本只写 ECO 修改；无需 eval server/GUI；FT110126 实测验证） |
+| `-eco --query <xpn> [comp关键字]` / `--force-signal <xpn> <comp> <实例名> <0|1>` / `--set-lut <xpn> <comp> <方程>` | ECO 便捷子命令：comp 索引与 program 明细两阶段查询；SLICE FF 一键钉死（AFFMUX/A*LUT 两处协同，A/B 侧通吃）；宽 LUT 方程改写——全部文本级免重布，改后 `-xpn2bin` 出 bin（--force-signal 输出与实板验证过的手工配方逐字节一致） |
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本（flow 生成的脚本比工程旧时警告重新 `-flow`）；缺省时进入 hqfpga 交互式 CLI |
 | `-regression [--offline] [base_dir]` | 一键回归套件（触发捕获+错误路径+冒烟）；`--offline` 跳过板卡项；显式 `base_dir` 时自动识别其中的 `.hqprj`（缺省基线仅开发机存在，缺失时提示传 base_dir；SKIP 项单列不计入 PASS） |
 | `-cmd -e "<tcl>" [-q]`              | 执行单条 TCL 命令字符串；`-q` 过滤 banner 与 `Info:` 行              |

@@ -16,6 +16,7 @@ from . import config, launcher, build_selector, soc
 from .utils import wait_process
 from .hqprj_parser import extract_filelist
 from .flow import run_flow, run_flow_bin_only, run_flow_looptdo, _check_bitstream
+from .flow import _scan_flow_hooks
 from .flow import run_seed_sweep
 from .syncprj import run_sync_prj, prj_from_header
 from .xpn import run_xpn, run_xpn_inspect
@@ -61,6 +62,7 @@ Project:
   -filelist [<.hqprj>] [-o <file>]     Extract FILE_SRC filelist
   -flow [<.hqprj>] [-o <file>]         Generate TCL via hqprj2tcl
     -looptdo                            Looptdo mode (synthesis + looptdo)
+    --hook STEP="script" [--hook-file f]  Inject official ::HQ.DEBUG.STEP.* debug hooks
     -bin_only [<name>]                  Bin-only mode (synthesis -> bitgen, no intermediate files)
   -sync_prj [<tcl>] [<.hqprj>]         Reverse-update .hqprj from a -flow TCL (edits in the TCL are
                                         written back to the project; .hqprj defaults to the path in
@@ -353,6 +355,7 @@ def _scan_flow_mode(args: list) -> tuple:
 def cmd_flow(args):
     """Run hqprj2tcl flow via hqfpga."""
     looptdo, bin_only_mode, bin_only_name, filtered = _scan_flow_mode(args)
+    filtered, hooks, hook_file = _scan_flow_hooks(filtered)
 
     if looptdo and bin_only_mode:
         print("Error: -looptdo and -bin_only cannot be used together")
@@ -361,11 +364,11 @@ def cmd_flow(args):
     hqprj_path, output_tcl = _parse_args_with_output(filtered)
 
     if looptdo:
-        run_flow_looptdo(hqprj_path, output_tcl)
+        run_flow_looptdo(hqprj_path, output_tcl, hooks, hook_file)
     elif bin_only_mode:
-        run_flow_bin_only(hqprj_path, bin_only_name, output_tcl)
+        run_flow_bin_only(hqprj_path, bin_only_name, output_tcl, hooks, hook_file)
     else:
-        run_flow(hqprj_path, output_tcl)
+        run_flow(hqprj_path, output_tcl, hooks, hook_file)
 
 
 def cmd_sync_prj(args):
@@ -958,6 +961,7 @@ def cmd_refresh_time(args):
 def cmd_build_fpga(args):
     """Run the full FPGA implementation flow (generate run_hqprj.tcl, execute)."""
     looptdo, bin_only, bin_name, filtered = _scan_flow_mode(args)
+    filtered, hooks, hook_file = _scan_flow_hooks(filtered)
     if looptdo and bin_only:
         print("Error: -looptdo and -bin_only cannot be used together")
         sys.exit(1)
@@ -967,11 +971,11 @@ def cmd_build_fpga(args):
     flow_tcl = os.path.join(work_dir, output_tcl or "run_hqprj.tcl")
 
     if looptdo:
-        run_flow_looptdo(hqprj_path, output_tcl)
+        run_flow_looptdo(hqprj_path, output_tcl, hooks, hook_file)
     elif bin_only:
-        run_flow_bin_only(hqprj_path, bin_name, output_tcl)
+        run_flow_bin_only(hqprj_path, bin_name, output_tcl, hooks, hook_file)
     else:
-        run_flow(hqprj_path, output_tcl)
+        run_flow(hqprj_path, output_tcl, hooks, hook_file)
 
     if not os.path.isfile(flow_tcl):
         print(f"Error: flow TCL not generated: {flow_tcl}")

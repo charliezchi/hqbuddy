@@ -45,6 +45,89 @@ def _generate_temp_tcl(hqprj_path: str, output_tcl: str | None = None) -> str:
     return temp_tcl
 
 
+# ---------------- flow debug hooks (::HQ.DEBUG.STEP.*) ----------------
+# Official per-stage hook points (build/common/debug/step_dbg_sample.tcl);
+# values are TCL scripts the engine runs before/after each stage.
+HOOK_STEPS = (
+    "BeforeAnalyzeHDL", "AfterAnalyzeHDL",
+    "Sdb.Init",
+    "SdbOpt.BeforeMuxOpt", "SdbOpt.AfterMuxOpt",
+    "SdbOpt.BeforeFsmOpt", "SdbOpt.AfterFsmOpt",
+    "SdbOpt.BeforeExprOpt", "SdbOpt.AfterExprOpt",
+    "SdbOpt.BeforeResShare", "SdbOpt.AfterResShare",
+    "SdbOpt.BeforeInferSrl", "SdbOpt.AfterInferSrl",
+    "BeforeDesignEntry", "AfterDesignEntry",
+    "BeforeTmap", "AfterTmap",
+    "BeforePack", "AfterPack",
+    "BeforePlace", "AfterCoreNplace", "AfterPlace",
+    "BeforeRoute", "AfterRoute",
+    "BeforeBitgen", "AfterBitgen",
+)
+
+
+def _scan_flow_hooks(args: list) -> tuple:
+    """Shared -flow/-build hook scan: --hook STEP="script" (repeatable) and
+    --hook-file <file.tcl> (whole file inserted at the TCL head).
+    Returns (filtered_args, hooks, hook_file)."""
+    hooks: list = []
+    hook_file = None
+    filtered = []
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--hook":
+            if i + 1 >= len(args):
+                print('Error: --hook requires STEP="script"')
+                sys.exit(1)
+            spec = args[i + 1]
+            step, _, body = spec.partition("=")
+            if step not in HOOK_STEPS or not body.strip():
+                print(f"Error: bad --hook spec: {spec}")
+                print(f"       STEP must be one of: {', '.join(HOOK_STEPS)}")
+                sys.exit(1)
+            if body.count("{") != body.count("}"):
+                print(f"Error: --hook script braces unbalanced: {spec}")
+                print("       (TCL braced script needs matching { })")
+                sys.exit(1)
+            hooks.append((step, body))
+            i += 2
+        elif a == "--hook-file":
+            if i + 1 >= len(args):
+                print("Error: --hook-file requires a value")
+                sys.exit(1)
+            hook_file = args[i + 1]
+            if not os.path.isfile(hook_file):
+                print(f"Error: file not found: {hook_file}")
+                sys.exit(1)
+            i += 2
+        else:
+            filtered.append(a)
+            i += 1
+    return filtered, hooks, hook_file
+
+
+def _apply_flow_hooks(full_tcl: str, hooks: list, hook_file: str | None) -> None:
+    """Insert set ::HQ.DEBUG.STEP.* lines at the top of a generated flow TCL
+    (after the #[hqprj2tcl] marker, which must stay line 1)."""
+    if not hooks and not hook_file:
+        return
+    with open(full_tcl, encoding="utf-8", errors="replace") as f:
+        lines = f.readlines()
+    ins = ["# hqbuddy flow debug hooks", ""]
+    if hook_file:
+        ins += open(hook_file, encoding="utf-8", errors="replace").read().splitlines()
+        ins.append("")
+    for step, body in hooks:
+        ins.append(f"set ::HQ.DEBUG.STEP.{step} {{ {body} }}")
+    lines[1:1] = [ln + "\n" for ln in ins]
+    with open(full_tcl, "w", encoding="utf-8", newline="") as f:
+        f.writelines(lines)
+    for step, body in hooks:
+        print(f"  [HOOK] {step}: {body}")
+    if hook_file:
+        print(f"  [HOOK] file: {hook_file}")
+
+
 def _make_looptdo_tcl(full_tcl_path: str) -> None:
     """
     Post-process the generated TCL for looptdo mode.
@@ -280,7 +363,8 @@ def _check_bitstream(work_dir: str, since: float,
         sys.exit(1)
 
 
-def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
+def run_flow(hqprj_path: str, output_tcl: str | None = None,
+             hooks: list | None = None, hook_file: str | None = None) -> None:
     """
     Run the flow command: generate temp TCL and execute via hqfpga (normal mode).
 
@@ -312,7 +396,7 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
     # a crashed hqprj2tcl can leave a header-only file behind — require the
     # marker AND the device-variable block before trusting it
     with open(full_tcl, encoding="utf-8", errors="replace") as f:
-        head = [f.readline() for _ in range(10)]
+        head = [f.readline() for _ in range(50)]
     if not head[0].startswith("#[hqprj2tcl]") or \
             not any(ln.startswith("set DEV_") for ln in head):
         print(f"Error: {full_tcl} looks like a partial hqprj2tcl output "
@@ -320,11 +404,15 @@ def run_flow(hqprj_path: str, output_tcl: str | None = None) -> None:
               f"— delete it and retry.")
         sys.exit(1)
 
+    if hooks or hook_file:
+        _apply_flow_hooks(full_tcl, hooks, hook_file)
+
     # per-project synthesis option overrides (-synopt sidecar)
     _inject_synopt_if_present(full_tcl, hqprj_path)
 
 
-def run_flow_looptdo(hqprj_path: str, output_tcl: str | None = None) -> None:
+def run_flow_looptdo(hqprj_path: str, output_tcl: str | None = None,
+                     hooks: list | None = None, hook_file: str | None = None) -> None:
     """
     Run the flow in looptdo mode.
 
@@ -368,7 +456,8 @@ def run_flow_looptdo(hqprj_path: str, output_tcl: str | None = None) -> None:
     _inject_synopt_if_present(flow_tcl, hqprj_path)
 
 
-def run_flow_bin_only(hqprj_path: str, bin_name: str | None = None, output_tcl: str | None = None) -> None:
+def run_flow_bin_only(hqprj_path: str, bin_name: str | None = None, output_tcl: str | None = None,
+                      hooks: list | None = None, hook_file: str | None = None) -> None:
     """
     Run the flow in bin-only mode.
 
