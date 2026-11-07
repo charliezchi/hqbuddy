@@ -126,6 +126,8 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy`（无参数）— 启动 HqFPGA GUI；`hqbuddy <file>.hqprj` — GUI 打开工程
 - `hqbuddy -h` / `-v` — 帮助 / 版本；`-cfg` — 编辑 config.json
 - `hqbuddy -serv start/-e/stop` — 常驻 hqfpga 会话（broker 守护持有 eval server 唯一连接；状态跨命令持久、错误后健康、无残留进程；协议要点：裸命令帧、**单连接生命周期**、ID 前缀帧会被重置——FT110126 实测）
+- `hqbuddy -analyze --routed <布线后.xpn>` — 对布线后数据库跑六类分析（功耗真数据、层次报告可用；3 秒级）
+- `hqbuddy -regression --offline` — 自包含离线回归（9 项，免基线/板卡）
 - `hqbuddy -gatesim <routed.xpn> --tb <tb.v>` — 门级时序仿真一键化（XPN→网表+SDF 导出→vsim SDF 注解自动实例探测→gatesim.rpt；TB 需 xsGSR/xsPWR；布线后网表只需 XiST 库，U_PRIM 仅 EDIF 流程需要——FT110126 实测 SDF 注解 0 error）
 - `hqbuddy -eco --query/--force-signal/--set-lut` — ECO 便捷子命令（两阶段查询、SLICE FF 一键钉死 A/B 侧通吃、A6LUT 方程改写；文本级免重布）
 - `hqbuddy -flow/-build --hook STEP="script"` — 官方 ::HQ.DEBUG.STEP.* 阶段钩子注入（26 步白名单；综合/P&R 中途免重跑取现场）

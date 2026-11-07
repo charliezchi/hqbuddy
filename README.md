@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.40.0
+3.41.0
 
 ## 功能特点
 
@@ -599,7 +599,628 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测） |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
 | `-synopt [<src.hqprj>] [-set k=<value>] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等开关；`fsm_encoding=auto\|onehot\|binary\|gray\|johnson` → `fsm.set -encoding`；`postsyn_areaopt=tiny..extreme\|none\|auto` → 综合后自动跑 `postsyn.areaopt`；cdc_sync=on\|off\|<N>` → 综合后自动 `lo.cdc_sync_reg.insert`（⚠️ FT110126 实测：无跨域目标时静默无效果，含真实跨域时**使构建崩溃**——不可用，RTL 手写同步链）；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL，postsyn 段注入 design.rtlsyn 之后） |
-| `-analyze [<.hqprj>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]` | 设计分析（实现前体检）：综合一次（不 P&R），报告落 `<工程根>/analysis/`（clocks/fanout/clkdom/hier/power/loop.rpt，重跑清空重建）并打印摘要；`-n` 扇出排行条数（缺省 20），`-detail` 扇出与时钟域附逐 net 明细，`-o` 自定义报告目录（重跑只覆盖本工具的 .rpt，目录内其他文件保留）；功耗需布线后数据、层次报告在本版本无输出（均优雅降级并在摘要注明）；源文件缺失/综合失败提前明确报错 |
+| `-analyze [<.hqprj>] [--routed <布线后.xpn>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]` | 设计分析（实现前体检）：综合一次（不 P&R），报告落 `<工程根>/analysis/`（clocks/fanout/clkdom/hier/power/loop.rpt，重跑清空重建）并打印摘要；`--routed <布线后.xpn>` 对布线后数据库分析（功耗出真数据、层次报告可用，3 秒级）；`-n` 扇出排行条数（缺省 20），`-detail` 扇出与时钟域附逐 net 明细，`-o` 自定义报告目录（重跑只覆盖本工具的 .rpt，目录内其他文件保留）；功耗需布线后数据、层次报告在本版本无输出（均优雅降级并在摘要注明）；源文件缺失/综合失败提前明确报错 |
+| `-autosdc <src.hqprj> [-period ns]` | 自动生成时钟约束 SDC（tc.autogen -print）。⚠️ FT110126 实测 tc.* 族在批处理会话静默无输出，本命令在该版本不可用——用 `-analyze` 的 clocks.rpt 按时钟清单手写 SDC 替代 |
+| `-doctor [<.hqprj>] [--json]`       | 工程体检：源文件/模块重复/时间戳一致性/器件合法性/授权检查（license.query：类型/到期/器件授权，dv_list 合法不等于已授权）/UPC 引脚预检（球号合法性+时钟 P 侧，提前于 build 报错）/HqInsight 状态一次全查 |
+| `-seed_sweep [-ins] [-no_dl] [-n N] [-j J] [<.hqprj>]` | 多种子布局布线扫描：综合一次存共享 UDB，逐 seed 并行重跑 P&R（effort 固定，仅 `-seed` 变化，默认 4 进程并行，`-j 1` 串行），产物按 seed 放在 `seed_sweep/seed<N>/`（bin、布线后 XPN、时序/fmax/布局报告），汇总表写入 `seed_sweep/seed_sweep_summary.csv`（`.hqprj` 缺省时自动探测当前目录/指定目录；工程必须已挂 FILE_TC，缺失时提前报错）；`-ins` 改为扫描 HqInsight 插桩设计（每次先强制重建插桩产物（refresh——覆盖 IP 内部 include 改动与产物缺失导致的 HQINS001）再跑官方 insight 流程刷新 `hqins_impl`，各 seed 位流带 VLA 探针），产物在 `seed_sweep_ins/`；完成后自动清除上一轮下载备注 `.hqbuddy_dl_notes.json` 并在 sweep 目录 detached 拉起 `-dl` 下载 GUI，方便直接挑选 seed 位流下载（`-no_dl` 跳过 GUI 拉起，适合 agent/脚本，各 seed bin 在 `seed_sweep[_ins]/seed<N>/` 直接 `-cable` 下载） |
+| `-copy_prj <src.hqprj> <dst_dir>`   | 复制工程（源码+约束+.hqprj）到新目录并改写 FILE 路径为 `$WORK_DIR$` 相对引用 |
+| `-set_top <name> [<.hqprj>]`        | 设置顶层模块`TOP_MODULE`（工程可省略，自动探测）                      |
+| `-clean [-force]`                   | 按`clean_list.json` 清理工程目录，`-force` 跳过确认                |
+| `-ipgen [<file>] [-lang <lang>]`    | 根据`.hqip` 生成 IP 网表，省略时自动检测                             |
+| `-gen_hqip [<meta.xml>] [-device <part>]` | 生成默认配置 .hqip（省略 xml 时交互选择 IP）                  |
+| `-update_ip [<file>]`               | 重新生成工程内所有 IP 网表                                             |
+| `-encrypt [<files...>] [-d dir] [-m m] [-po]` | 加密 HDL 源文件（缺省处理当前目录所有 .v/.vh/.f，aes256-cbc，输出 encrypted/） |
+| `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
+| `-bitinfo <file.bin> [...] [--json]` | 解析 XiST FPGA 位流头：设计名/器件/架构/日期/大小（纯 Python，与 -dl 下载器同一解析器；glob 可用，只读无会话）。下载前核对 bin 身份 |
+| `-ipdoc <ip> [--list] [--no_open]` | 定位并打开 IP 的 UG 用户手册 PDF（ipdepot 模糊匹配；84 IP/97 手册全量索引在 skill ip_doc_index.md；只读无会话） |
+| `-eco <routed.xpn> --script <eco.tcl> [-o <out.xpn>]` | 批处理 ECO：对布线后 XPN 执行 eco.* 修改并局部重布（xpn.read→eco.init→脚本→xpn.write→eco.end 全脚手架；脚本只写 ECO 修改；无需 eval server/GUI；FT110126 实测验证） |
+| `-eco --query <xpn> [comp关键字]` / `--force-signal <xpn> <comp> <实例名> <0|1>` / `--set-lut <xpn> <comp> <方程>` | ECO 便捷子命令：comp 索引与 program 明细两阶段查询；SLICE FF 一键钉死（AFFMUX/A*LUT 两处协同，A/B 侧通吃）；宽 LUT 方程改写——全部文本级免重布，改后 `-xpn2bin` 出 bin（--force-signal 输出与实板验证过的手工配方逐字节一致） |
+| `-gatesim <routed.xpn> --tb <tb.v> [--top n] [--sdf-instance p] [--sdfmax|min|typ] [--time dur] [--work dir] [--no_run]` | 门级时序仿真一键化：布线后 XPN → 导出带位置门级网表+SDF → vlog+vsim SDF 注解（自动探测 TB 内 DUT 实例路径）→ SDF error 统计与 gatesim.rpt；TB 需例化 xsGSR/xsPWR（配方见 skill modelsim.md；实测 SDF 注解 0 error） |
+| `-serv start` / `-e \"<tcl>\"` / `status` / `stop` | 常驻 hqfpga 会话（broker 守护进程持有厂商 eval server 唯一连接，复用给每次 `-serv -e`）：状态跨命令持久、错误后会话健康、免 ~2s/次进程启动——agent 批量查询/ECO 迭代吞吐倍增（FT110126 实测：持久性/错误恢复/干净停止全过） |
+| `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本（flow 生成的脚本比工程旧时警告重新 `-flow`）；缺省时进入 hqfpga 交互式 CLI |
+| `-regression [--offline] [base_dir]` | 一键回归套件；`--offline` 自包含（%TEMP% 自建迷你工程跑 doctor/filelist/--hook/synopt/bitinfo/-analyze/错误路径 9 项，无需基线目录/板卡）；缺省板卡模式需 r21a 基线（base_dir）
+# HqBuddy
+
+智多晶海麒（HqFPGA）的全流程命令行工具箱：从建工程到下载比特流，覆盖工程管理、全 CLI 实现流程、SoC 软硬件协同（FPGA + MCU）、在线调试（HqInsight 逻辑分析仪 / VIO 运行时探针）、IP 与网表处理、报告分析，并内置 AI Agent Skill，让 AI 助手自主操作整个开发流程。
+
+An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA development loop from project creation to bitstream download: project management, full CLI implementation flow, SoC co-development (FPGA + MCU), on-chip debugging (HqInsight logic analyzer / VIO runtime probes), IP & netlist tooling, and report analysis — with a built-in AI-agent skill that lets AI assistants operate the whole flow autonomously.
+
+## 当前版本
+
+3.41.0
+
+## 功能特点
+
+- **提取 filelist**：从 `.hqprj` 工程文件中提取 `FILE_SRC` 源文件列表
+- **路径解析**：自动将 `$WORK_DIR$` 替换为 `.hqprj` 文件所在目录的绝对路径
+- **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
+- **XPN 生成**：从布线后的设计生成 XPN 文件（生成后自动打开；`-no_open` 静默）。前置条件：**对应实现流的布线结果必须已存在，且两条流的库不通用**——普通模式读产品流 `hq_run`（先 `-build`），`-ins` 模式读 insight 流 `hqins_impl`（先 `-insight -run`）；`-ins -from_src` 源码直达：布线结果缺失时自动补跑 insight 实现（一条命令源码到 XPN）
+- **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；改 RTL/IP 后 `-refresh` 原地重建插桩产物（总是重插桩刷新信号库，RTL 逻辑/属性改动可靠带入；保留信号选择与触发条件，等价 GUI 保存）；`-capture` 支持自定义超时与输出前缀
+- **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`，`-no_dl` 只生成不下载）；不指定 xpn 时批量转换当前目录所有 `.xpn` 并输出结果报告，多个 xpn 时不逐个下载，而是转换完后唤起 `-dl` GUI 下载器
+- **布线热力图**：从布线后的 XPN 生成 rtheatmap 查看器的输入 JSON 并自动打开 GUI 热力图（`-heatmap`），等价 GUI 的 Routing Heatmap Viewer（布线资源使用率按 tile/线型展示）；`-no_open` 静默生成（agent 用），`-o` 自定义输出，`-lang chs|eng` 查看器语言
+- **布局图/布线图**：从 XPN 生成官方查看器输入并自动打开 GUI——`-floorplan` 走 `dconv.dev2chipedit`/`dconv.xpn2chipedit` + ChipEditor 布局查看器（读布局信息，无需等布线），`-routing` 走 `rt.genRoutingResult` + rtviewer 布线查看器（逐 net 走线路径，需布线后 XPN）；选项与 `-heatmap` 一致；均为 hqfpga 官方用法（xpn_util.tcl）
+- **时钟域 FF 位置提取**：`-ffloc <clk_net>` 移植官方 `extr_slice_ff_loc`——导出某时钟域全部 SLICE FF 的物理位置清单（`R行C列.FF槽位  驱动信号名`），用于时钟区域/拥塞分析；只读布局数据，与布线无关
+- **器件查看/修改**：查看 `.hqprj` 使用的器件型号，或修改为新器件（自动验证合法性，支持交互式搜索选择）
+- **新建工程**：从模板创建 `.hqprj` 工程（`-new_prj`）
+- **添加源文件**：向工程添加 `.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件并维护对应时间戳（`-add`；可带 `.hqprj` 显式指定目标工程，缺省自动探测当前目录）
+- **设置顶层模块**：修改 `TOP_MODULE`（`-set_top <name> [<.hqprj>]`）
+- **工程清理**：按 `clean_list.json` 清理工程目录中的中间产物（`-clean`）
+- **IP 网表生成**：根据 `.hqip` 自动定位并调用对应 ipgen 工具生成网表（`-ipgen` / `-update_ip`）
+- **HDL 加密**：调用版本自带的 `hq_ipencrypt.exe` 加密源文件，密钥自动定位（`-encrypt`）
+- **仿真库编译**：自动将 XiST 原语仿真库编译到 ModelSim/QuestaSim 中
+- **版本选择**：通过交互式菜单选择 HqFPGA 版本，支持模糊查找与 latest 自动选择（`-build_sel`）
+- **启动 GUI**：无参数运行或双击 `.hqprj` 直接启动 HqFPGA GUI（hqui）
+- **命令行执行**：通过 hqfpga CLI 执行 TCL 脚本（`-cmd`）
+- **VIO 运行时探针**：生成 VIO IP 模块、登记命名探针、运行时读取/驱动设计信号，无需重编译（`-vio`）
+- **报告摘要**：一键解析实现流程报告——FMAX、setup/hold WNS（分列判定 MET/VIOLATED）、资源利用率、bit 文件清单（`-report`）
+- **设计分析（实现前体检）**：综合一次（不 P&R）即输出时钟清单/漏约束检测、高扇出排行、时钟域与跨域（CDC 线索）、层次资源、组合环检测六类报告到 `<工程根>/analysis/` 并打印摘要（`-analyze`）；每段独立防护，厂商命令崩溃不影响其余段落；工程无 SDC 时给出手写建议（`-autosdc` 依赖的 tc.autogen 在 FT110126 批处理会话静默无输出，该命令在该版本不可用）
+- **管脚表互转（Excel 工作流）**：`-pin2csv` 把工程 UPC 管脚分配 + 器件封装表（'udev.pkg.report）join 成全量 CSV（Bank/球/Pad/功能/信号/IO 属性，238 管脚一行不落），`-csv2upc` 把编辑后的 CSV 转回 `phycst.pin.set` UPC（球名先经 dv.get_pin_bank 校验）；UPC 先按 TCL 求值再导出（板卡变体 set/if 条件分支取实际值，不重复导出两个分支）。厂商原生 pin2csv/csv2upc 在 FT110126 上不可用（导出无 Pad Location、导入静默空产物），本功能为本地实现；vccio/ioh 等非 pin.set 约束不在 CSV 往返范围
+- **下载器**：GUI 递归列出当前目录及子目录的 FPGA bitstream bin（按位流头 `FF 00 + XIST ASCII Bitstream` 识别，MCU 固件、HqInsight module_data 等非 FPGA bin 自动过滤），按目录分组显示（文件夹节点可折叠），列表展示位流头的设计名与器件，点击即用 cable.exe 下载，支持备注（`-dl`，detached 启动不阻塞终端）；带参数时透传 hqdnload
+- **线缆工具**：启动 cable.exe，透传所有参数（`-cable`）
+- **配置管理**：用系统编辑器打开 config.json 管理扫描路径和版本选择（`-cfg`）
+- **自动检测**：`-filelist`、`-flow`、`-xpn`、`-get_device` 可省略 `.hqprj` 路径，自动检测当前目录下的第一个 `.hqprj` 文件
+
+## 构建
+
+从源码仓库一行命令完成编译并注册到 PATH：会先清理构建产物，再用 PyInstaller 打包，成功后自动将 `hqbuddy.exe` 复制到 `%APPDATA%\hqbuddy\` 并添加到用户 PATH：
+
+```bat
+python build.py
+```
+
+> **构建/安装完成后，首次使用前请先配置 HqFPGA 路径（见下）**，否则 hqbuddy 会一直提示 `no HqFPGA versions found`。
+
+## 导出离线分发源码包
+
+给无法访问 GitHub 的用户分发版本时，用一键导出脚本打源码包：
+
+```bat
+python export.py                 # 打包到仓库根目录
+python export.py -o <dir>        # 指定输出目录
+```
+
+产出 `hqbuddy_v<版本>_src.zip`（约 2 MB），解压为 `hqbuddy_v<版本>/` 目录，内含 `build.py`、`hqbuddy/` 源码包、`templates/` 工程模板、`skills/hqfpga/`、`install_skill.py`、`README.md` 与 `LICENSE`。**包内不含 exe**——收件人在解压目录运行 `python build.py` 自行构建（需 Python 3.10+，PyInstaller 自动安装，构建后自动注册 PATH 并可选安装 AI skill），之后的首次使用配置与在线用户一致。
+
+## ⚠️ 首次使用：配置 HqFPGA 安装路径（必读）
+
+hqbuddy 必须知道你的 HqFPGA 装在哪，才能调用它。配置保存在 `%APPDATA%\hqbuddy\config.json`。
+
+> **默认只扫描 `C:\` 根目录**。大多数用户把 HqFPGA 装在其它盘（如 `D:\`）或子目录，**若不配置，任何需要版本的命令都会失败**（GUI、`-flow`、`-cable`、`-insight` 等全部不可用）。
+
+快速检查是否已就绪：
+
+```bat
+hqbuddy -root
+```
+
+能打印出版本根目录路径即已可用；若报 `Error: no HqFPGA versions found.` 则需按下面配置。
+
+### 如何配置
+
+方法一（推荐，用系统编辑器）：
+
+```bat
+hqbuddy -cfg
+```
+
+这会打开 `config.json`，把 `scan_path` 改成**包含你所有 `hqv*_xist_*_win64` 文件夹的父目录**。例如装在 `D:\tools\hqv3_xist_3.1.1_FT090526_win64`，则写成 `"D:\\tools"`（多个就列成数组）。保存后运行 `hqbuddy -root` 验证。
+
+示例 `config.json`：
+
+```json
+{
+  "scan_path": ["D:\\tools", "C:\\"],
+  "selected_build": null
+}
+```
+
+- `scan_path`：HqFPGA 安装根目录扫描列表，每个目录下会被查找 `hqv*_xist_*_win64` 文件夹作为可用版本
+- `selected_build`：选中的版本 build，留 `null` 自动用最新版；用 `hqbuddy -build_sel` 交互选择
+
+配置完成后：`hqbuddy -build_sel` 选版本 → `hqbuddy -root` 确认 → 即可正常使用。agent 无需人工开编辑器，直接改写 `%APPDATA%\hqbuddy\config.json` 的 `scan_path` 字段即可（详见 hqfpga skill 的 `references/hqbuddy.md`）。
+
+## 使用方式
+
+> 下文示例多以 `example/ddrc_native_demo.hqprj` 为例——该例程随开发板资料分发、**不在本仓库**，照抄时请替换为你自己的 `.hqprj` 路径。
+
+### 查看版本
+
+```bat
+hqbuddy -v
+```
+
+### 提取 filelist
+
+```bat
+hqbuddy -filelist                          # 自动检测当前目录的 .hqprj
+hqbuddy -filelist example/ddrc_native_demo.hqprj
+hqbuddy -filelist example/ddrc_native_demo.hqprj -o filelist.f
+hqbuddy -filelist -o filelist.f            # 自动检测 + 自定义输出
+```
+
+### 执行 Flow（生成 TCL）
+
+> `-flow` 只生成 `run_hqprj.tcl`；要**生成并执行**完整实现流程用 `-build`（语法与 `-flow` 完全一致，含 `-looptdo` / `-bin_only [<name>]`）。
+
+```bat
+hqbuddy -flow                              # 自动检测当前目录的 .hqprj
+hqbuddy -flow example/ddrc_native_demo.hqprj
+hqbuddy -flow example/ddrc_native_demo.hqprj -o my_output.tcl
+hqbuddy -flow -o my_output.tcl             # 自动检测 + 自定义输出（-o 位置无关）
+```
+
+**looptdo 模式**：移除 packing / placement / routing / bitgen 阶段，改用 `design.looptdo` 随机搜索优化参数（在生成的 TCL 中找不到 `design.flatten` 综合段时会明确报错，不会静默退回普通流程）：
+
+```bat
+hqbuddy -flow -looptdo                     # 自动检测当前目录的 .hqprj
+hqbuddy -flow example/ddrc_native_demo.hqprj -looptdo
+```
+
+**bin-only 模式**：只生成 `.bin` 比特流，不产生中间文件，可自定义 bin 名称（默认与 `-flow` 一致）。bin 名与工程路径不会混淆：`-bin_only` 后紧跟 `.hqprj` 时按工程路径处理，工程缺省时自动检测：
+
+```bat
+hqbuddy -flow -bin_only                    # 自动检测，默认 bin 名称
+hqbuddy -flow -bin_only my_bitstream.bin   # 自动检测工程 + 自定义 bin 名
+hqbuddy -flow example/ddrc_native_demo.hqprj -bin_only my_bitstream.bin
+```
+
+### 反向同步 TCL → 工程（-sync_prj）
+
+> `-sync_prj` 把 `-flow` 生成的 `run_hqprj.tcl`（hqprj2tcl 输出）**反向写回 `.hqprj`**：手改 TCL（effort、综合/时序选项、源文件清单、器件、top、bitgen 选项……）后一键同步回工程，GUI 打开即为 TCL 所描述的状态。
+
+```bat
+hqbuddy -sync_prj                                        # TCL 缺省 <prj_dir>/run_hqprj.tcl；.hqprj 缺省取 TCL 头注释里的源工程路径（其次自动检测 cwd）
+hqbuddy -sync_prj script/run_hqprj.tcl prj/selftest.hqprj
+hqbuddy -sync_prj prj/selftest.hqprj                     # 只给工程：TCL 取同目录 run_hqprj.tcl
+```
+
+**语义**：只更新 TCL 实际表达的设置，逐键输出 `[SET]` 变更报告，其余键原样保留；结尾重建 FILE_TIME/FILE_TIME_CST。器件名按 `DIE-速度+封装+温度` 拆回 DIE/SPEEDS/PACKAGES/CONDITION，多条 SDC/UPC 按 `{...}` 列表展开。RTL_11、MAP_1..4、PLACE_2..6、ROUTE_2..4、BGEN_13 等 hqprj2tcl 从不导出的键不在同步范围。已验证 round-trip：`hqprj2tcl` → `-sync_prj` → 再 `hqprj2tcl` 与原 TCL 逐行一致。
+
+### 生成 XPN（普通模式）
+
+> **三条实现的数据库互不通用（易踩）**：`-build`/`-flow` 的布线结果在 `hq_run`（`-xpn` 普通模式读它）；`-insight -run` 的布线结果在 `hqins_run/.../hqins_impl`（`-xpn -ins` 读它）；`-seed_sweep -ins` 每个 seed 独立一份在 `seed_sweep_ins/seed<N>/`。布线 dump（`_step_run_route.dump`）是流程持久保留的中间产物——不存在通常意味着该流还没跑到布线，而不是"跑完被清理"。`-xpn -ins -from_src` 可在缺失时自动补跑 insight 实现（源码直达）。
+
+从 `hq_run/hq_temp/_step_run_route.dump` 生成 XPN 文件。生成完成后会自动打开 XPN 文件。
+
+```bat
+hqbuddy -xpn                               # 自动检测，默认生成 hq.xpn
+hqbuddy -xpn example/ddrc_native_demo.hqprj
+hqbuddy -xpn -o my_design.xpn              # 自动检测，生成 my_design.xpn
+hqbuddy -xpn example/ddrc_native_demo.hqprj -o my_design.xpn
+hqbuddy -xpn -no_open                      # 静默生成，不自动打开（agent 用）
+hqbuddy -xpn -ins -from_src -o exp.xpn     # 源码直达：自动补 insight 实现再导出 XPN
+```
+
+### 生成 XPN（hqinsight 模式）
+
+从 `hqins_run/hq_import/hqins_impl/hq_temp/_step_run_route.dump` 生成 XPN 文件（需先 `-insight -run`）。生成完成后会自动打开 XPN 文件（`-no_open` 静默）；布线结果缺失时加 `-from_src` 自动补跑 insight 实现流程（等价 `-insight -run`，实现现有插桩网表；需已 `-insight -init/-add` 登记 HqInsight 工程）。
+
+```bat
+hqbuddy -xpn -ins                          # 自动检测，默认生成 hq_ins.xpn
+hqbuddy -xpn -ins example/ddrc_native_demo.hqprj
+hqbuddy -xpn -ins -o my_ins_design.xpn     # 自动检测，生成 my_ins_design.xpn
+hqbuddy -xpn -ins example/ddrc_native_demo.hqprj -o my_ins_design.xpn
+```
+
+### XPN 转 BIN
+
+将 `.xpn` 文件转换为 `.bin` 比特流文件。单个 xpn 转换成功后会自动通过 cable.exe 探测板上型号并下载到开发板（`--Burst`），因此使用时需保持开发板连接；`-no_dl` 只生成 bin 不下载。
+
+指定 `.xpn` 时只转换该文件；不指定时批量转换**当前目录下所有** `.xpn`，最后输出每个文件的生成结果报告（任一失败则以非零码退出）。有多个 xpn 时不逐个下载，转换完后会自动唤起 `-dl` GUI 下载器，由你选择要下载的 bin。
+
+```bat
+hqbuddy -xpn2bin                           # 批量转换当前目录所有 .xpn + 报告，完成后唤起 GUI 下载器
+hqbuddy -xpn2bin -no_dl                    # 批量转换，只生成不下载（也不唤起 GUI）
+hqbuddy -xpn2bin debug.xpn                 # 只转换 debug.xpn，默认生成 debug.bin 并自动下载
+hqbuddy -xpn2bin -o my_bitstream.bin debug.xpn   # 自定义输出路径（目录自动创建；-o 需指定 xpn）
+hqbuddy -xpn2bin debug.xpn -no_dl          # 只生成不下载
+```
+
+### 布线热力图
+
+从**布线后**的 `.xpn` 物理网表生成 rtheatmap 查看器的输入 JSON（等价 GUI 打开 Routing Heatmap Viewer 时写入 `hq_temp/.rt_heatmap.json` 的过程），并自动拉起 `build/rtheatmap/rtheatmap.exe -w <json> -l <lang>` 打开热力图窗口。输入 XPN 必须含布线信息（每个 signal 带 `route` 段，即 `-xpn` 从布线后设计导出的、或流程 `xpn.write` 在 route 之后写的网表）——只有布局没有布线的 XPN 会生成全零热力图（命令会预先检测并警告）。生成完成后打印器件/线型/使用率摘要；`.cexpn`（流程内部二进制网表）不能作为输入。
+
+```bat
+hqbuddy -heatmap t2.xpn                    # 生成 t2_heatmap.json 并打开热力图
+hqbuddy -heatmap                           # 当前目录只有一个 .xpn 时自动使用
+hqbuddy -heatmap -o my.json t2.xpn         # 自定义输出 JSON 路径
+hqbuddy -heatmap -no_open t2.xpn           # 静默生成 JSON，不拉起查看器（agent 用）
+hqbuddy -heatmap -lang eng t2.xpn          # 查看器英文界面（缺省 chs）
+```
+
+典型工作流：`hqbuddy -build` 完成布局布线 → `hqbuddy -xpn` 导出布线后 XPN → `hqbuddy -heatmap hq.xpn`（热力图）/ `-routing hq.xpn`（逐 net 布线图）/ `-floorplan hq.xpn`（布局图）。
+
+### 布局图 / 布线图查看器
+
+与 `-heatmap` 同族的官方查看器流程（hqfpga 官方脚本 xpn_util.tcl 的 `gui_show_floorplan`/`gui_show_routing`），输入同样从**布线后** `.xpn` 生成，产物持久保留在 XPN 旁（官方脚本用完即删，hqbuddy 保留以便随时重开）：
+
+- `hqbuddy -floorplan`：`xpn.read` → `dconv.dev2chipedit`/`dconv.xpn2chipedit` 生成 `<stem>_floorplan.cdev/.cexpn`（另有转换器自动生成的 `.cexpn.json` 辅助文件），拉起 `build/chipeditor/ChipEditor.exe -d <cdev> -x <cexpn> -lang <lang>` 打开布局图。**只需布局信息**——只有布局没有布线的 XPN 也能看。
+- `hqbuddy -routing`：`xpn.read` → `rt.genRoutingResult` 生成 `<stem>_routing.json`（逐 net 的 pips/sink 走线详情，体积大，SA5Z-30 级设计约 30MB），拉起 `build/rtviewer/rtviewer.exe -d <part> -r <json> -l <lang>` 打开布线图。器件全名（如 `SA5Z-30-D2-8U256`）由 TCL 侧 `dv.info name` 自动获取。需要布线信息（命令会预检 route 段并警告）。
+
+```bat
+hqbuddy -floorplan t2.xpn                  # 生成 t2_floorplan.cdev/.cexpn 并打开布局图
+hqbuddy -floorplan -o out/fp t2.xpn        # 自定义输出前缀（生成 out/fp.cdev/.cexpn）
+hqbuddy -routing t2.xpn                    # 生成 t2_routing.json 并打开布线图
+hqbuddy -routing -no_open t2.xpn           # 静默生成 JSON，不拉起查看器（agent 用）
+hqbuddy -floorplan -lang eng t2.xpn        # 查看器英文界面（缺省 chs）
+```
+
+`-floorplan`/`-routing` 的 `-no_open`/`-lang`/`-o`/XPN 自动探测语义与 `-heatmap` 完全一致。生成命令需要 FT101726 及以上版本（更老版本未验证，失败时会透传 hqfpga 报错）。
+
+### 时钟域 FF 位置提取
+
+`hqbuddy -ffloc <clk_net>` 移植官方 `extr_slice_ff_loc` 工具：遍历时钟 net 的负载，取 SLICEL/SLICEM 中全部 FF 原语，输出 `物理位置  驱动信号名` 清单（如 `R22C32.A5FF    u_xx/reg[0]`，按位置排序）——做时钟区域约束、拥塞定位时的原始数据。只需布局信息，无需布线。
+
+```bat
+hqbuddy -ffloc wscanclk t2.xpn             # 提取 wscanclk 域 → t2_wscanclk_ffloc.txt
+hqbuddy -ffloc wscanclk                    # 当前目录只有一个 .xpn 时自动使用
+hqbuddy -ffloc wscanclk t2.xpn -o ff1.txt  # 自定义输出路径
+```
+
+完成后打印摘要（FF 数、slice 数、行列跨度）；时钟 net 名不存在或域内无 SLICE FF 时明确告警（net 名可用 `hqbuddy -xpn inspect` 核对）。多个时钟域就多条命令各跑一次。
+
+### HqInsight 在线逻辑分析仪
+
+前提：开发板已连接。选信号可以在 HqFPGA GUI 中完成，也可以全程用 CLI（`-init`/`-ls`/`-add`/`-del`）完成。
+
+```bat
+hqbuddy -insight -init                     # 初始化 HqInsight 工程（elaborate 设计，无需 GUI）
+hqbuddy -insight -refresh        # 改了 RTL/IP（逻辑或属性）后原地重建插桩产物，自动重插桩、保留信号选择
+hqbuddy -insight -ls [关键字]              # 列出设计信号（* = 已选入，含层次路径）
+hqbuddy -insight -add dq_err -clk aclk -type both     # 添加信号（sample/trigger/both）
+hqbuddy -insight -del dq_err               # 移除信号
+hqbuddy -insight                           # 查看 HqInsight 工程状态（信号/触发条件）
+hqbuddy -insight -trig                     # 交互式设置触发条件
+hqbuddy -insight -trig "dq_err EQ 0"       # 参数式设置触发（EQ/GT/LT/NE/LE/GE）
+hqbuddy -insight -trig "dq_err RANGE 1 10"           # 范围触发（RANGE=开区间；另有 RANGE_C 闭区间、RANGE_LC/RANGE_RC 单边闭）
+hqbuddy -insight -trig "usr_clk RISE"                # 边沿触发（RISE/FALL/BOTH/X）
+hqbuddy -insight -trig "state EQ 4 AND dq_err EQ 0 AND busy RISE"   # 多条件链（AND/OR，可 NOT/--negate）
+hqbuddy -insight -capture                  # 布防并等待触发，抓取波形（默认超时 60s）
+hqbuddy -insight -capture -timeout 120     # 自定义超时
+hqbuddy -insight -capture -force           # 强制触发，立即抓取
+hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin；自动关闭其拉起的 hqdnload 窗口）；源文件比插桩网表新时会警告
+hqbuddy -insight -selftest                 # 回归自测：布防 sig EQ 128 → 抓取 → 校验样本连续且 +1 递增
+hqbuddy -insight -selftest -signal cnt -value 200    # 指定信号与比较值
+```
+
+`同信号多条件会自动折叠为单比较单元（硬件每信号仅一个比较单元）：AND 链按交集
+折叠（`EQ 5 AND NE 5` 等恒假组合直接报错），OR 链按并集折叠（`RANGE_C 1 3 OR
+RANGE_C 4 6` → `RANGE_C 1 6`、`RISE OR FALL` → `BOTH`）；并集不连续或恒真等单
+比较单元无法表达的表达式会被拒绝并说明原因，而不是静默丢弃某个条件。
+
+-selftest` 面向确定性计数器类设计（采样的信号每拍 +1），一条命令验证
+"下载 → 布防 → 触发 → 抓取 → VCD 样本完整性"整条链路；HqFPGA 升级后先跑它。
+
+### VIO 虚拟 IO（运行时读/驱动设计信号，无需重编译）
+
+```bat
+hqbuddy -vio -gen -in 8 -out 8             # 生成 VIO 探针模块（RTL 实例化 probe_in/probe_out）
+hqbuddy -vio -reg -in cnt:8 -out led:2     # 登记探针（hqvla_vio/probes.json；按名 upsert，重复登记不会清掉已有探针）
+hqbuddy -vio -reg -clear                    # 清空探针表
+hqbuddy -vio -read [-loop N] [-interval s]  # 运行时读输入探针
+hqbuddy -vio -write led=0b10               # 运行时驱动输出探针（整链移位，未赋值的
+                                           # 已登记输出探针会写 0 并打印警告）
+```
+
+改了代码或探针后的重建路径：改了 IP/RTL（逻辑**或属性** keep/HQ_LOC 等，**含 IP 仓库内部 include 的文件**——任何文件清单 staleness 检测都看不住）→ `hqbuddy -insight -refresh` 原地重建 `insight_ip.v` + `hq_import_with_bscan.v`（总是先重新插桩刷新信号库——早期跳过 elaborate 的快路径会静默丢属性改动，3.19.0 起移除；信号选择与触发条件保留，等价 GUI 保存）；增删信号 → `-insight -add/-del`（快速重建，**改过 RTL 属性后先 -refresh 再用**，add/del 同链不刷新信号库也会丢属性）。之后都需 `-insight -run` 重新生成插桩 bitstream 并用 cable.exe 下载（`-run` 只实现现有插桩网表、绝不重新探针插入，网表比源文件旧会警告；已自动关闭流程末尾拉起的 hqdnload 窗口）。注意：插桩探针只能 tap 综合后仍存在的 net——若触发信号被综合吸收，任何触发条件都不会命中（详见 `skills/hqfpga/references/insight.md` 的“插桩探针陷阱”）。
+
+抓取成功后生成 VCD 波形（`hqins_run/hq_import/<top>_insight_0_ww.vcd`），并打印触发时刻各信号的值。用 `hqbuddy -wave` 打开波形（自动定位 HqFPGA 自带的 GTKWave，可指定文件）。
+
+### 报告摘要（-report）
+
+实现流程跑完后一条命令拿结果摘要（agent 必用；省去 grep 原始 .rpt）：
+
+```bat
+hqbuddy -report [<dir>|<.hqprj>]           # Fmax（各时钟）/WNS（MET/VIOLATED）/资源利用率/bit 文件
+hqbuddy -report . -paths 5                 # 另提取最差 5 条违例时序路径（源自 slack 报告）
+hqbuddy -report <dirA> --diff <dirB>       # 两轮实现报告对比（调参前后）
+hqbuddy -report . --json                   # 机器可读输出（agent/脚本消费）
+```
+
+### 查看/修改器件
+
+查看 `.hqprj` 当前使用的器件型号（格式：DIE-SPEED-PACKAGE-CONDITION）。
+
+```bat
+hqbuddy -get_device                         # 自动检测当前目录的 .hqprj
+hqbuddy -get_device example/ddrc_native_demo.hqprj
+```
+
+修改 `.hqprj` 的器件型号，修改前会通过所选版本的 `dv_list.xml` 验证器件是否合法。修改 `.hqprj` 的同时，会自动同步修改工程中直接使用的 `.hqip` IP 配置文件中的 `device=` 字段。
+
+**注意**：此功能仅支持直接加入到工程中的文件（即 `.hqprj` 的 `FILE_SRC` 中列出的文件），不支持通过 `include` 等方式间接引用的文件。
+
+```bat
+hqbuddy -set_device                                   # 交互式搜索并选择器件
+hqbuddy -set_device SA5T-100-D0-7F676CI
+hqbuddy -set_device SA5T-100-D0-7F676CI example/ddrc_native_demo.hqprj
+hqbuddy -set_device example/ddrc_native_demo.hqprj    # 指定工程 + 交互式选择
+```
+
+带尾杠的条件段写法（如 `SA5Z-50-D0-7F484-C`，SoC 例程/数据手册常见）会被自动归一化为 dv_list 的规范形式（`...7F484C`），`-new_prj -device` / `-get_pin_bank -device` 同样接受。
+
+不指定 `part` 时进入交互式器件列表：上下键选择、输入关键字模糊查找，选中项带箭头标记。
+
+查询引脚所属 IO bank（器件缺省取当前目录 `.hqprj`，也可 `-device` 显式指定）：
+
+```bat
+hqbuddy -get_pin_bank A4
+hqbuddy -get_pin_bank A4 -device SA5Z-30-D1-8U213C
+```
+
+### 器件原生报告（'udev.*）
+
+调用所选 HqFPGA 版本的原生 `'udev.*` 命令导出**器件级**信息（只需器件、无需设计网表）。目标可以是 `part` 或 `.hqprj`（取工程器件）；两者都省略时先探测当前目录唯一 `.hqprj`，没有则进入交互式器件选择器（上下键 + 回车，支持模糊搜索）。
+
+```bat
+hqbuddy -udev                                   # .hqprj 或交互式选器件，三件套全出
+hqbuddy -udev SA5Z-30-D0-8U324C                 # 指定器件
+hqbuddy -udev my.hqprj --pkg                    # 工程器件 + 只出封装管脚
+hqbuddy -udev SA5Z-30-D0-8U324C --arch --fmt csv
+hqbuddy -udev SA5Z-30-D0-8U324C -o out_dir      # 指定输出目录（默认当前目录）
+```
+
+输出（`<part>` 前缀命名）：
+
+| 选择 | 文件 | 内容 |
+| --- | --- | --- |
+| `--arch`（默认含） | `_arch.txt` / `_arch.html` / `_arch_tiles.csv` + `_arch_sites.csv` | tile 架构图：`--fmt html`（默认）出着色网格地图（tile 类型配色 + site 名称图 + 资源 Count 表），`csv` 出 36×N 网格两份，`text` 为原生全量文本 |
+| `--iotype`（默认含） | `_iotype.txt` | 各 bank 支持的 IO 电气标准表 |
+| `--pkg`（默认含） | `_pkg.txt` + `_pkg.csv` | 封装管脚：IO/site/tile/bank/desc（CSV 供 Excel 筛选） |
+
+### 编译 XiST 仿真库
+
+自动将 XiST 原语仿真库编译到 ModelSim/QuestaSim 中。默认自动检测所选版本的 HqFPGA 根目录，也可以手动指定。
+
+```bat
+hqbuddy -simlib                            # 自动检测 HqFPGA 根目录
+hqbuddy -simlib C:/hqv3_xist_3.1.1_FT053026_win64
+```
+
+**过程：**
+
+1. 复制 `templates/compile_xist.tcl` 到 `<HQ>/build/common/sim/verilog/XIST/`
+2. 运行 `vsim -c -do compile_xist.tcl`
+3. 自动修改 ModelSim/QuestaSim 根目录的 `modelsim.ini`，将 `XiST` 映射改为 `XiST = $MODEL_TECH/../XiST`
+
+**依赖**：需要 `vsim` 在 PATH 中。如果 `modelsim.ini` 是只读文件，脚本会尝试自动解除只读；若失败会提示手动处理。
+
+### 选择 HqFPGA 版本
+
+通过交互式菜单选择当前使用的 HqFPGA 版本。按上下键导航，回车确认；支持输入关键字模糊查找，`[latest]` 行可自动选择最新版本。
+
+```bat
+hqbuddy -build_sel
+```
+
+### 查看 HqFPGA 根目录
+
+打印当前所选 HqFPGA 版本的根目录路径。
+
+```bat
+hqbuddy -root
+```
+
+### 新建工程
+
+按 `templates/project.hqprj` 模板在当前目录创建 `.hqprj` 工程，文件名即为 `PROJ_NAME`。可显式指定 `-device`，否则会唤起交互式器件选择。
+
+```bat
+hqbuddy -new_prj my_project
+hqbuddy -new_prj my_project -device SA5T-100-D0-7F676CI
+```
+
+### SoC 工程（FPGA + MCU 软核）
+
+面向 SA5Z-30（Cortex-M3）/ SA5Z-50（Cortex-M33）SoC 器件，从官方 Demo 例程预设一键生成完整工程树并全 CLI 编译烧写：
+
+```bat
+hqbuddy -list_soc                                  # 列出可用预设（cm3/star 各 19-20 个）
+hqbuddy -new_soc my_app -core cm3 -preset ex4_uart # 生成 FPGA_Prj + MCU_Prj 工程树
+cd my_app\FPGA_Prj\hq_prj
+hqbuddy -build                                     # FPGA 全流程（生成并执行 run_hqprj.tcl）
+cd ..\..
+hqbuddy -mcu_build                                 # Keil 无人值守编译（编译后自动合并 bin）
+hqbuddy -dl -f my_app\FPGA_Prj\hq_prj\my_app_merged.bin   # 下载合并镜像
+```
+
+说明：
+
+- `-new_soc` 生成的工程已改好 `PROJ_NAME`、校准时间戳、还原去重的 CMSIS 库，并把 Demo 里硬编码工具路径的合并脚本替换为基于 `-merge_bin` 的版本（合并不下板；`mergeBinFileAndProgram.bat -dl` 才下载）
+- `-build` 生成的 FPGA bin 位于 `.hqprj` 同目录（CLI 流程不使用 GUI 的 `hq_run` 输出目录）
+- `-mcu_build` 自动定位 Keil UV4（config `keil_uv4` 指定 → 注册表 Keil MDK 安装路径 → 常见盘符路径）；也支持 GCC：config 加 `"mcu_toolchain": "gcc"`（可选 `"arm_gcc": "<toolchain>\bin"` 指定工具链，缺省自动探测），此时在 `MCU_Prj/` 跑 `make`（PATH 或 MSYS2 的 make），产物约定为 `MCU_Prj/build/*.bin`，成功后自动与最新 FPGA bin 合并（型号从 .hqprj DEVICE 推断）
+- `-merge_bin <fpga.bin> <mcu.bin>` 支持 `-o`、`-model SA30K|SA50K`、`-remap`、`-dl`（合并后下载）
+- merge bat 依赖 PATH 上的 hqbuddy，更新代码后需 `python build.py` 重新构建安装
+- 巨型例程（lwip/mqtt/FreeRTOS/bootloader/DDR/CAN）未内置为预设，需要时从 Demo 目录手动拷贝；用法详见 skills/hqfpga/references/soc_workflow.md
+
+### 添加源文件
+
+向工程添加设计文件与约束文件，并自动维护对应时间戳：
+
+- `.v` / `.vh` → 添加到 `FILE_SRC`，每条新增一条 `FILE_TIME`
+- `.sdc` → 添加到 `FILE_TC`
+- `.upc` → 添加到 `FILE_PC`
+- `.f`（filelist）→ 展开其中的 `.v` / `.vh` 后加入 `FILE_SRC`
+
+支持绝对路径与相对路径（相对路径以 filelist 文件所在目录为基准），找不到的文件或不支持的后缀会报错提示。
+
+```bat
+hqbuddy -add test.v test2.v timing.sdc physical.upc files.f
+hqbuddy -add test.v D:\prj\demo.hqprj   :: 显式指定目标工程（可跨目录）
+```
+
+### 刷新时间戳条目
+
+重建 `.hqprj` 中的 `FILE_TIME` / `FILE_TIME_CST` 条目，使其数量与 `FILE_SRC` / `FILE_TC`+`FILE_PC` 一致（GUI 要求两者数目相等，否则打开工程会失败）。条目不足则补、多余则删，时间戳取当前时刻：
+
+```bat
+hqbuddy -refresh_time [<.hqprj>]
+```
+
+### 设置顶层模块
+
+修改 `TOP_MODULE`：
+
+```bat
+hqbuddy -set_top my_top
+hqbuddy -set_top my_top D:\prj\demo.hqprj
+```
+
+### 清理工程目录
+
+按 `templates/clean_list.json` 中的清单清理脚本所在目录下的中间文件与空文件夹（保留 `.hqprj`）。清理前会二次确认，`-force` 跳过确认：
+
+```bat
+hqbuddy -clean
+hqbuddy -clean -force
+```
+
+### 生成 IP 默认配置文件
+
+从 IP meta XML 生成默认配置的 `.hqip` 文件。不带参数时，按当前工程的器件（或 `-device` 指定的器件）列出当前版本支持的所有 IP，交互式选择（支持模糊搜索 IP 名 / 变体 / 描述）：
+
+```bat
+hqbuddy -gen_hqip                          :: 交互选择 IP，按当前工程器件筛选
+hqbuddy -gen_hqip -device SL2-12E-8F256    :: 交互选择 IP，显式指定器件
+hqbuddy -gen_hqip <meta.xml>               :: 直接指定 xml 生成
+```
+
+生成的 `.hqip` 输出到 `ipcore_dir/<IP_NAME>/xsIP_<IP_NAME>.hqip`，可直接用 `hqbuddy -ipgen` 生成网表。
+
+### 生成 IP 网表
+
+根据 `.hqip` 文件（INI 格式）中的 `meta_file` 定位对应的 ipgen 工具并生成 IP 网表。省略路径时自动使用当前目录下找到的第一个 `.hqip`。
+
+```bat
+hqbuddy -ipgen                                      # 自动检测 .hqip
+hqbuddy -ipgen my_ip.hqip
+hqbuddy -ipgen my_ip.hqip -lang chs
+```
+
+### 更新工程 IP 网表
+
+找到工程中的所有 `.hqip` 文件，逐一重新生成网表：
+
+```bat
+hqbuddy -update_ip
+```
+
+注意：`-update_ip` / `-ipgen` 支持 desc 使用 `INDEPENDENT_EXE=` 的 IP（如 CM33）的工具定位，但 CM33/STAR 内核 IP 的静默再生成不被 `CM33_Creator.exe` 支持——改其 `.hqip` 参数（如开启 AHB Master）需用 `CM33_Creator.exe --modify <hqip>` 打开 GUI 点「确定」生成，且成品输出在 `%TEMP%\<随机名>\` staging 目录，需手工拷回 `ipcore_dir/STAR_Processor/`（弹窗提示"生成成功"不代表拷回成功）。详见 hqfpga skill 的 `references/soc_workflow.md`。
+
+### 加密 HDL 源代码
+
+调用当前所选版本自带的 `hq_ipencrypt.exe` 加密 `.v` / `.vh` 源文件（密钥文件自动定位，无需指定）：
+
+```bat
+hqbuddy -encrypt                         :: 缺省处理当前目录所有 .v/.vh/.f（.f 走 -l 分支）
+hqbuddy -encrypt top.v core.v            :: 加密多个文件，输出到 encrypted/
+hqbuddy -encrypt filelist.f -d out       :: 支持 .f filelist，-d 指定输出目录（自动创建）
+hqbuddy -encrypt top.v -m aes128-cbc     :: 指定算法（缺省 aes256-cbc）
+hqbuddy -encrypt top.v -po               :: 只加密 protect begin/end 块
+```
+
+### 启动 GUI
+
+不带任何参数运行即启动 HqFPGA GUI（hqui）；将 `.hqprj` 文件路径作为首个参数传入可直接打开对应工程（注册文件关联后，双击 `.hqprj` 文件也会触发）。
+
+```bat
+hqbuddy              # 启动 GUI
+hqbuddy example/ddrc_native_demo.hqprj  # 启动 GUI 并打开工程
+```
+
+### 命令行执行
+
+通过 hqfpga CLI 执行指定的 TCL 脚本。不带参数时直接进入 hqfpga 交互式 CLI；也可以用 `-e` 直接执行一条 TCL 命令字符串。`-e` 模式支持 `-q` 安静模式：过滤 banner 和所有 `Info:` 行，只保留结果与警告/错误。
+
+```bat
+hqbuddy -cmd my_script.tcl              :: 执行 TCL 脚本（flow 脚本比工程旧时警告）
+hqbuddy -cmd                            :: 进入 hqfpga 交互式 CLI
+hqbuddy -cmd -e "dv.setup SEALION SL2-12E-8F256; dv.query"  :: 执行单条 TCL 命令
+hqbuddy -cmd -e "dv.query" -q           :: 安静模式，只保留结果
+```
+
+### 启动下载器
+
+无参数运行时打开自带 GUI 下载器（detached 子进程方式启动，不阻塞终端）：递归扫描**当前目录及子目录**下所有 `.bin` 文件，通过位流头（`FF 00` + `XIST ASCII Bitstream` 魔数）识别 FPGA bitstream，MCU 固件、HqInsight module_data 等非 FPGA bin 自动过滤、不进入列表；**按目录分组显示**——每个含 bitstream 的目录是一个可折叠的文件夹节点（标签带数量），bin 挂在对应节点下，列表展示位流头的**设计名**与**器件**；双击 bin 行即通过 cable.exe 直接下载（自动探测板上型号，固定带 `--Burst`），双击文件夹节点折叠/展开。双击「备注」列可为 bin 添加备注，备注保存在当前目录的 `.hqbuddy_dl_notes.json` 中，重开不丢失。带参数时保持旧行为，透传启动 hqdnload 下载器。
+
+```bat
+hqbuddy -dl                               # 打开 GUI 下载器（递归扫描 FPGA bitstream，点击下载）
+hqbuddy -dl -f my_bitstream.bin           # 透传 hqdnload，指定下载文件
+```
+
+### 线缆工具
+
+启动 cable.exe，所有参数透传给电缆工具。
+
+```bat
+hqbuddy -cable                            # 启动 cable.exe
+hqbuddy -cable -scan                      # 透传 -scan 参数
+```
+
+### 配置（config.json）
+
+配置保存在 `%APPDATA%\hqbuddy\config.json`，用 `hqbuddy -cfg` 打开编辑：
+
+- `scan_path`：HqFPGA 安装根目录扫描列表，每个条目是一个目录，hqbuddy 会扫描其中形如 `hqv*_xist_*_win64` 的目录作为可用版本
+- `selected_build`：当前选中的版本 build（由 `-build_sel` 维护，留空则自动使用最新版本）
+
+修改保存后下次运行即生效。
+
+### 其他命令
+
+```bat
+hqbuddy -h           # 显示帮助
+hqbuddy -v           # 显示版本
+hqbuddy -root        # 显示 HqFPGA 根目录路径
+```
+
+## 参数速查
+
+| 参数                                  | 说明                                                                   |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| （无参数）                            | 启动 HqFPGA GUI（hqui）                                                |
+| `<file>.hqprj`                      | 启动 HqFPGA GUI 并打开工程                                             |
+| `-h`                                | 显示帮助                                                               |
+| `-v`                                | 显示版本                                                               |
+| `-root`                             | 显示 HqFPGA 根目录路径                                                 |
+| `-build_sel`                        | 交互式选择 HqFPGA 版本（支持搜索与 latest）                            |
+| `-filelist [<file>]`                | 从`.hqprj` 提取 FILE_SRC filelist，省略时自动检测                    |
+| `-filelist [<file>] -o <out>`       | 将 filelist 输出到指定文件                                             |
+| `-flow [<file>]`                    | 生成`hqprj2tcl` TCL 脚本，省略时自动检测，默认生成 `run_hqprj.tcl`（-o/路径位置无关；未知 flag 报错） |
+| `-flow [<file>] -o <out>`           | 指定生成的 TCL 文件名                                                  |
+| `-flow/-build --hook STEP=\"script\" [--hook-file f]` | 注入官方 `::HQ.DEBUG.STEP.*` 阶段调试钩子（26 步白名单：Before/AfterAnalyzeHDL、SdbOpt.*、Before/After{Tmap,Pack,Place,Route,Bitgen}…），综合/P&R 中途免重跑取现场；STEP 白名单+花括号配平校验 |
+| `-flow [<file>] -looptdo`           | looptdo 模式：合成后运行`design.looptdo` 搜索优化参数                |
+| `-flow [<file>] -bin_only [<name>]` | bin-only 模式：仅生成`.bin`，不产生中间文件                          |
+| `-sync_prj [<tcl>] [<.hqprj>]`      | 把 `-flow` 生成的 TCL 反向写回 `.hqprj`（tcl 缺省 `<prj_dir>/run_hqprj.tcl`；prj 缺省取 TCL 头注释源路径，其次 cwd 自动检测） |
+| `-xpn [<file>] [-o <file>]`         | 生成 XPN（普通模式），省略时自动检测，默认生成`hq.xpn`               |
+| `-xpn -ins [<file>] [-o <file>]`    | 生成 XPN（hqinsight 模式），省略时自动检测，默认生成`hq_ins.xpn`     |
+| `-xpn inspect <file.xpn>`           | 解析 XPN 物理网表：设计/器件/comp 统计/IO 列表 |
+| `-xpn2bin [<file>] [-o <file>]`     | 将 XPN 转换为 BIN 并自动下载到开发板；不指定 file 时批量转换当前目录所有 `.xpn` 并输出报告（多个 xpn 时转换完唤起 `-dl` GUI 下载器，不逐个下载） |
+| `-xpn2bin [<file>] -no_dl`          | 只生成 BIN 不下载                                                  |
+| `-heatmap [<.xpn>] [-o <file>]`     | 从布线后 XPN 生成 rtheatmap 查看器 JSON 并自动打开热力图（当前目录唯一 `.xpn` 时可省略；`-no_open` 静默、`-lang chs\|eng`） |
+| `-floorplan [<.xpn>] [-o <prefix>]` | 生成 ChipEditor 输入（cdev/cexpn）并自动打开布局图；只需布局无需布线；选项同 `-heatmap`（`-o` 为输出前缀） |
+| `-routing [<.xpn>] [-o <file>]`     | 生成 rtviewer 布线 JSON（逐 net 走线）并自动打开布线图；需布线后 XPN；选项同 `-heatmap` |
+| `-ffloc <clk_net> [<.xpn>] [-o <f>]` | 提取某时钟域全部 SLICE FF 物理位置到文本清单（官方 extr_slice_ff_loc 移植；只需布局） |
+| `-get_device [<file>]`              | 查看`.hqprj` 使用的器件型号                                          |
+| `-set_device [<part>] [<file>]`     | 修改器件型号（支持交互式选择），并同步关联`.hqip`                    |
+| `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
+| `-pin2csv [<.hqprj>] [-o <out.csv>]` | UPC→CSV 管脚表：UPC 按 TCL 求值（条件分支取实际值）+ 器件封装表 join，全量管脚 CSV（utf-8-sig，Excel 直接编辑）；输出缺省 `<工程名>_pins.csv`（已存在则报错，`-o` 覆盖） |
+| `-csv2upc <in.csv> [-o <out.upc>] [-device <part>\|<.hqprj>]` | CSV→UPC 管脚表：消费 `-pin2csv` 表头格式（Signal Name + Pin Name 列，其余非常规列回写为 `-attr`）；器件可解析时先校验全部球名；输出缺省与 CSV 同目录同名 `.upc` |
+| `-ucf2upc <in.ucf> [-o <out.upc>]` | Xilinx UCF 管脚约束转 UPC（厂商 ucf2upc 封装，FT110126 实测可用；无需设计；总线位输出为 名称<位> 形式需人工核对；输出已存在则报错，`-o` 覆盖） |
+| `-udev [<part>\|<.hqprj>] [--arch\|--iotype\|--pkg]` | 原生器件报告：tile 架构图（`--fmt html\|csv\|text`，默认 html 着色地图）/ IO 类型表 / 封装管脚（+CSV）；无需设计，目标缺省先探测 `.hqprj` 再进交互选择 |
+| `-new_prj <name> [-device <part>]`  | 从模板创建`.hqprj` 工程                                              |
+| `-new_soc <name> [-core cm3\|star] [-preset <ex>]` | 从 Demo 预设生成 SoC 工程（FPGA+MCU 全套）             |
+| `-list_soc`                         | 列出可用 SoC 预设                                                    |
+| `-build [<file>]`                   | 生成 run_hqprj.tcl 并执行完整 FPGA 实现流程（`-looptdo`/`-bin_only [<name>]` 与 `-flow` 同语法；产物校验：无新鲜 bin/bit 则非零退出） |
+| `-mcu_build [-p <uvprojx>]`         | 无人值守编译 MCU 固件（Keil UV4；config `mcu_toolchain=gcc` 时走 arm-none-eabi-gcc + Makefile） |
+| `-merge_bin <fpga> <mcu>`           | 合并 FPGA+MCU bin（`-o`/`-model`/`-dl`）                             |
+| `-vla -gen [-name VLA] [-dir <dir>] [-device <part>]` | 调起 VLA IP 生成向导（产出 xsIP_VLA.v/hqip/cfg，自动检测生成完成） |
+| `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族；`-o` 目录不存在时自动创建） |
+| `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11；报告/日志统一落 `netlist_run/`，不散落在 .edif 目录） |
+| `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测） |
+| `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
+| `-synopt [<src.hqprj>] [-set k=<value>] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等开关；`fsm_encoding=auto\|onehot\|binary\|gray\|johnson` → `fsm.set -encoding`；`postsyn_areaopt=tiny..extreme\|none\|auto` → 综合后自动跑 `postsyn.areaopt`；cdc_sync=on\|off\|<N>` → 综合后自动 `lo.cdc_sync_reg.insert`（⚠️ FT110126 实测：无跨域目标时静默无效果，含真实跨域时**使构建崩溃**——不可用，RTL 手写同步链）；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL，postsyn 段注入 design.rtlsyn 之后） |
+| `-analyze [<.hqprj>] [--routed <布线后.xpn>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]` | 设计分析（实现前体检）：综合一次（不 P&R），报告落 `<工程根>/analysis/`（clocks/fanout/clkdom/hier/power/loop.rpt，重跑清空重建）并打印摘要；`--routed <布线后.xpn>` 对布线后数据库分析（功耗出真数据、层次报告可用，3 秒级）；`-n` 扇出排行条数（缺省 20），`-detail` 扇出与时钟域附逐 net 明细，`-o` 自定义报告目录（重跑只覆盖本工具的 .rpt，目录内其他文件保留）；功耗需布线后数据、层次报告在本版本无输出（均优雅降级并在摘要注明）；源文件缺失/综合失败提前明确报错 |
 | `-autosdc <src.hqprj> [-period ns]` | 自动生成时钟约束 SDC（tc.autogen -print）。⚠️ FT110126 实测 tc.* 族在批处理会话静默无输出，本命令在该版本不可用——用 `-analyze` 的 clocks.rpt 按时钟清单手写 SDC 替代 |
 | `-doctor [<.hqprj>] [--json]`       | 工程体检：源文件/模块重复/时间戳一致性/器件合法性/授权检查（license.query：类型/到期/器件授权，dv_list 合法不等于已授权）/UPC 引脚预检（球号合法性+时钟 P 侧，提前于 build 报错）/HqInsight 状态一次全查 |
 | `-seed_sweep [-ins] [-no_dl] [-n N] [-j J] [<.hqprj>]` | 多种子布局布线扫描：综合一次存共享 UDB，逐 seed 并行重跑 P&R（effort 固定，仅 `-seed` 变化，默认 4 进程并行，`-j 1` 串行），产物按 seed 放在 `seed_sweep/seed<N>/`（bin、布线后 XPN、时序/fmax/布局报告），汇总表写入 `seed_sweep/seed_sweep_summary.csv`（`.hqprj` 缺省时自动探测当前目录/指定目录；工程必须已挂 FILE_TC，缺失时提前报错）；`-ins` 改为扫描 HqInsight 插桩设计（每次先强制重建插桩产物（refresh——覆盖 IP 内部 include 改动与产物缺失导致的 HQINS001）再跑官方 insight 流程刷新 `hqins_impl`，各 seed 位流带 VLA 探针），产物在 `seed_sweep_ins/`；完成后自动清除上一轮下载备注 `.hqbuddy_dl_notes.json` 并在 sweep 目录 detached 拉起 `-dl` 下载 GUI，方便直接挑选 seed 位流下载（`-no_dl` 跳过 GUI 拉起，适合 agent/脚本，各 seed bin 在 `seed_sweep[_ins]/seed<N>/` 直接 `-cable` 下载） |

@@ -42,8 +42,10 @@ _MARK = "@@ANALYZE:"
 
 
 def _usage() -> None:
-    print("Usage: hqbuddy -analyze [<.hqprj>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]")
-    print("       综合一次（不 P&R），输出实现前设计体检报告到 <工程根>/analysis/")
+    print("Usage: hqbuddy -analyze [<.hqprj>] [--routed <布线后.xpn>] [-n N] [-detail] "
+          "[-toggle_rate X] [-o <dir>]")
+    print("       缺省：综合一次（不 P&R），输出实现前设计体检报告到 <工程根>/analysis/")
+    print("       --routed：对布线后 XPN 分析（功耗出真数据，跳过综合）")
     print("  -n N           扇出排行取前 N（缺省 20）")
     print("  -detail        扇出/时钟域报告附加逐 net 明细")
     print("  -toggle_rate X 功耗翻转率（0~1，缺省工具默认；实现前仅能出 WARN，见 README）")
@@ -54,7 +56,7 @@ def _usage() -> None:
 def _parse_args(args: list) -> dict:
     """Position-independent: flags anywhere, .hqprj last (single positional)."""
     opt = {"hqprj": None, "n": 20, "detail": False, "toggle_rate": None,
-           "outdir": None}
+           "outdir": None, "routed": None}
     i = 0
     while i < len(args):
         a = args[i]
@@ -80,6 +82,9 @@ def _parse_args(args: list) -> dict:
             i += 2
         elif a == "-o" and i + 1 < len(args):
             opt["outdir"] = args[i + 1]
+            i += 2
+        elif a == "--routed" and i + 1 < len(args):
+            opt["routed"] = args[i + 1]
             i += 2
         elif a.startswith("-"):
             print(f"Error: unknown -analyze option: {a}")
@@ -137,7 +142,11 @@ def _build_tcl(prj: dict, opt: dict) -> str:
         return (f'if {{[catch {{set r [{cmd}]; puts "{tag} $r"}} e]}} '
                 f'{{ puts "SECTION-ERROR: $e" }}\n')
 
-    tcl = f"""set vfiles {{}}
+    if prj.get("routed_xpn"):
+        tcl = f"""xpn.read {{{prj['routed_xpn']}}}
+"""
+    else:
+        tcl = f"""set vfiles {{}}
 {vlines}
 dv.setup -synlib_only {prj['family'] or 'SEAL'}
 if {{[catch {{
@@ -210,7 +219,8 @@ def _section(out: str, mark: str) -> str:
 def _digest(out_dir: str, secs: dict, opt: dict) -> None:
     print("")
     print("=" * 64)
-    print("设计分析摘要（实现前：已综合，未布局布线）")
+    print("设计分析摘要（布线后数据库）" if opt.get("_routed")
+          else "设计分析摘要（实现前：已综合，未布局布线）")
     print("=" * 64)
 
     # clocks
@@ -271,8 +281,8 @@ def _digest(out_dir: str, secs: dict, opt: dict) -> None:
     # power
     p = secs.get("POWER", "")
     if "PWR001" in p:
-        print("[功耗] 需布线后设计才能估算 —— 本次跳过（实现后看 GUI 功耗窗口，")
-        print("       或对布线后数据库再跑分析）")
+        print("[功耗] 需布线后设计才能估算 —— 本次跳过"
+              f"{'（--routed 模式不应出现此告警，请反馈）' if opt.get('_routed') else '（用 --routed <布线后.xpn> 出真数据）'}")
     elif p.strip():
         print(f"[功耗] 报告已生成 ({len(p.splitlines())} 行)")
 
@@ -287,14 +297,45 @@ def _digest(out_dir: str, secs: dict, opt: dict) -> None:
 
     print("-" * 64)
     print(f"明细报告: {os.path.abspath(out_dir)}")
-    print("注意: 本次为综合后(未布局布线)数据；扇出/组合环结论在布局布线后可能变化。")
+    if not opt.get("_routed"):
+        print("注意: 本次为综合后(未布局布线)数据；扇出/组合环结论在布局布线后可能变化。")
 
 
 def run_analyze(args: list) -> None:
-    """Entry for 'hqbuddy -analyze [<.hqprj>] [-n N] [-detail] [-toggle_rate X] [-o dir]'."""
+    """Entry for 'hqbuddy -analyze [<.hqprj>] [--routed <xpn>] [-n N] [-detail] [-toggle_rate X] [-o dir]'."""
     if not args or args[0] in ("-h", "--help"):
         _usage()
     opt = _parse_args(args)
+
+    # --routed mode: the .hqprj is optional context; the routed XPN is the
+    # design input (no synthesis chain runs)
+    if opt["routed"]:
+        xpn = os.path.abspath(opt["routed"])
+        if not os.path.isfile(xpn):
+            print(f"Error: file not found: {xpn}")
+            sys.exit(1)
+        hqprj = opt["hqprj"]
+        work = (os.path.dirname(os.path.abspath(hqprj))
+                if hqprj and os.path.isfile(hqprj)
+                else os.path.dirname(xpn))
+        prj = (_read_project(hqprj) if hqprj and os.path.isfile(hqprj) else {
+            "top": None, "family": None, "srcs": [], "sdc": None, "work": work})
+        prj["routed_xpn"] = xpn.replace("\\", "/")
+        out_dir = os.path.abspath(opt["outdir"] or os.path.join(work, "analysis"))
+        version = launcher.require_hqfpga_version()
+        tcl = _build_tcl(prj, opt)
+        print(f"Analyzing (routed): {xpn}")
+        print(f"  报告目录: {out_dir}")
+        sys.stdout.flush()
+        started = time.time()
+        out = _run(version["hqfpga_path"], tcl, work)
+        elapsed = time.time() - started
+        secs = _write_reports(out_dir, out)
+        opt["_routed"] = True
+        _digest(out_dir, secs, opt)
+        print(f"Done in {elapsed:.0f}s.")
+        return
+
     hqprj = opt["hqprj"]
     if not hqprj:
         import glob
@@ -344,10 +385,19 @@ def run_analyze(args: list) -> None:
     started = time.time()
     out = _run(version["hqfpga_path"], tcl, prj["work"])
     elapsed = time.time() - started
+    secs = _write_reports(out_dir, out)
 
-    # report-dir refresh: only ever delete THIS tool's own .rpt files —
-    # never rmtree (a `-o` pointing at user content must not lose data;
-    # unknown files in the directory are kept and reported)
+    _digest(out_dir, secs, opt)
+    if "SECTION-ERROR" in out and not any(s.strip() for s in secs.values()):
+        print("Error: 所有分析段均失败，请把上述输出反馈给厂商/检查工具版本。")
+        sys.exit(1)
+    print(f"Done in {elapsed:.0f}s.")
+
+
+def _write_reports(out_dir: str, out: str) -> dict:
+    """Clear-rebuild this tool's own .rpt files into out_dir and return the
+    section dict.  Never rmtree: a `-o` pointing at user content must not
+    lose data (unknown files in the directory are kept and reported)."""
     our_rpts = {f"{base}.rpt" for _, base in SECTIONS}
     if os.path.isdir(out_dir):
         stale = os.listdir(out_dir)
@@ -364,7 +414,6 @@ def run_analyze(args: list) -> None:
     os.makedirs(out_dir, exist_ok=True)
 
     secs = {}
-    wrote = 0
     for mark, base in SECTIONS:
         seg = _section(out, mark)
         secs[mark] = seg
@@ -374,10 +423,4 @@ def run_analyze(args: list) -> None:
                 f.write(f"(no output — {base} report produced nothing this run)\n")
             else:
                 f.write(seg.rstrip() + "\n")
-        wrote += 1
-
-    _digest(out_dir, secs, opt)
-    if "SECTION-ERROR" in out and not any(s.strip() for s in secs.values()):
-        print("Error: 所有分析段均失败，请把上述输出反馈给厂商/检查工具版本。")
-        sys.exit(1)
-    print(f"Done in {elapsed:.0f}s.")
+    return secs
