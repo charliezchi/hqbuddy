@@ -50,10 +50,9 @@ eco.signal_probe[.xist.seal|.sealion|.shark]
 
 ## 4. lpp.* 实验命令族（Lut-level Packing & Placement）
 
-FT101126 引入、默认禁用。除布局引擎外有一批**只读分析命令**对调 QoR 有用：
-`lpp.grid_report`（实例密度网格报告）、`lpp.export_conn` / `lpp.export_pin_delay`（导出连接/引脚延迟数据）、
-`lpp.export_udev`；可执行类：`lpp.bpl / lpp.ap / lpp.ca / lpp.fpl`、`lpp.bpl.genupc`、
-`lpp.bpl.loc.set`（= phycst.loc.set -force_loc 别名）、`lpp.clk.region.flow`、`lpp.set_guided` 等。
+**FT110126 实测（2026-11-07）：只读分析命令不可用**——`lpp.grid_report` 与
+`lpp.export_pin_delay` 崩溃（TIEOFF block 缺失，lpp_util:420）、`lpp.export_conn` 静默无产物。
+`-lpp_report` 封装立项否决，待新版验证。
 
 ## 5. 知识与参考文件（agent 查询用）
 

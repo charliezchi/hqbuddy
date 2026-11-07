@@ -72,28 +72,36 @@ def _daemon_main() -> None:
     """Detached broker: hold the single hqfpga connection, serve clients."""
     logs_dir = launcher.side_log_dir()
     boot_log = os.path.join(logs_dir, "guisrv_boot.log")
-    boot_fp = open(boot_log, "w", encoding="utf-8", errors="replace")
     version = launcher.require_hqfpga_version()
-    hq = subprocess.Popen(
-        [version["hqfpga_path"], "-guisrv", "1", "-outdir", logs_dir,
-         "-log", "guisrv.log"],
-        cwd=logs_dir, stdout=boot_fp, stderr=subprocess.STDOUT)
-    hq_port = _wait_hqfpga_port(boot_log, hq)
-    boot_fp.close()
 
-    # the ONE hqfpga connection — held for the daemon's lifetime
-    hq_sock = socket.create_connection(("127.0.0.1", hq_port), timeout=10)
-    hq_sock.settimeout(None)
+    def _start_hq() -> tuple:
+        """(re)start hqfpga -guisrv and open the single connection."""
+        boot_fp = open(boot_log, "w", encoding="utf-8", errors="replace")
+        hq = subprocess.Popen(
+            [version["hqfpga_path"], "-guisrv", "1", "-outdir", logs_dir,
+             "-log", "guisrv.log"],
+            cwd=logs_dir, stdout=boot_fp, stderr=subprocess.STDOUT)
+        hq_port = _wait_hqfpga_port(boot_log, hq)
+        boot_fp.close()
+        sock = socket.create_connection(("127.0.0.1", hq_port), timeout=10)
+        sock.settimeout(None)
+        prev = _load_state() or {}
+        _save_state({"daemon_pid": os.getpid(), "hqfpga_pid": hq.pid,
+                     "port": hq_port, "ctrl_port": prev.get("ctrl_port"),
+                     "started": prev.get("started", time.time())})
+        return hq, sock
+
+    hq, hq_sock = _start_hq()
 
     ctrl = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     ctrl.bind(("127.0.0.1", 0))
     ctrl.listen(4)
     ctrl_port = ctrl.getsockname()[1]
-    _save_state({"daemon_pid": os.getpid(), "hqfpga_pid": hq.pid,
-                 "port": hq_port, "ctrl_port": ctrl_port,
-                 "started": time.time()})
+    st = _load_state() or {}
+    st["ctrl_port"] = ctrl_port
+    _save_state(st)
     print(f"daemon ready: pid={os.getpid()} hqfpga={hq.pid} "
-          f"port={hq_port} ctrl={ctrl_port}", flush=True)
+          f"port={st['port']} ctrl={ctrl_port}", flush=True)
 
     def forward(command: str) -> tuple[str, bool]:
         hq_sock.sendall((command + "\n").encode())
@@ -105,6 +113,23 @@ def _daemon_main() -> None:
             data += chunk
         text = data.decode("gbk", errors="replace")
         return text.strip("\r\n"), "@@Ucmd_Done" in text
+
+    def forward_selfheal(command: str) -> tuple[str, bool]:
+        nonlocal hq, hq_sock
+        try:
+            return forward(command)
+        except (ConnectionError, OSError):
+            # a crashing command (e.g. eco.route on an empty design) kills the
+            # hqfpga link — rebuild the session but do NOT retry the same
+            # command: deterministic crashers would loop forever
+            try:
+                hq.kill()
+            except OSError:
+                pass
+            hq, hq_sock = _start_hq()
+            return (f"[session rebuilt] 命令未重试——它杀死了上一个会话"
+                    f"（常见于对无设计会话跑 eco.route 等），请修正后重发。", False)
+
 
     while True:
         conn, _addr = ctrl.accept()
@@ -124,7 +149,7 @@ def _daemon_main() -> None:
                     conn.close()
                     os._exit(0)
                 try:
-                    payload, ok = forward(cmd)
+                    payload, ok = forward_selfheal(cmd)
                     conn.sendall((payload + "\n" +
                                   ("@@SERV_OK\n" if ok else "@@SERV_ERR\n"))
                                  .encode("utf-8", errors="replace"))
@@ -209,10 +234,22 @@ def _ctrl_exchange(ctrl_port: int, command: str, timeout: float = 1800) -> tuple
 
 def cmd_exec(args: list) -> None:
     st = _require_alive()
-    text = " ".join(args).strip()
-    if not text:
-        print('Usage: hqbuddy -serv -e "<tcl>"')
-        sys.exit(1)
+    if args and args[0] in ("-e", "-f"):
+        args = args[1:]
+    if args and args[0] == "-f":  # legacy placement: -serv -f handled below
+        args = args[1:]
+    if args and args[0] == "-f":
+        # batch: source the file inside the resident session (one round trip)
+        if len(args) < 1 or not os.path.isfile(args[0]):
+            print("Usage: hqbuddy -serv -f <file.tcl>")
+            sys.exit(1)
+        f_tcl = os.path.abspath(args[0]).replace("\\", "/")
+        text = f"source {{{f_tcl}}}"
+    else:
+        text = " ".join(args).strip()
+        if not text:
+            print('Usage: hqbuddy -serv -e "<tcl>"  |  -serv -f <file.tcl>')
+            sys.exit(1)
     out, ok = _ctrl_exchange(st["ctrl_port"], text)
     print(out)
     if not ok:
@@ -229,7 +266,7 @@ def cmd_status() -> None:
           f"hqfpga={st['hqfpga_pid']}  ctrl={st['ctrl_port']}  uptime={up/60:.0f}min")
 
 
-def cmd_stop() -> None:
+def cmd_stop(args: list | None = None) -> None:
     st = _load_state()
     if not st:
         print("No resident session.")
@@ -256,8 +293,8 @@ def run_serv(args: list) -> None:
     if not args or args[0] == "start":
         cmd_start(args[1:] if args else [])
         return
-    if args[0] == "-e":
-        cmd_exec(args[1:])
+    if args[0] in ("-e", "-f"):
+        cmd_exec(args)
         return
     if args[0] == "status":
         cmd_status()
