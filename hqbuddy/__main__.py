@@ -36,6 +36,7 @@ from .bitinfo import run_bitinfo
 from .ipdoc import run_ipdoc
 from .eco import run_eco
 from .gatesim import run_gatesim
+from .serv import run_serv
 from .regression import run_regression
 from .device import run_device
 from .ipgen import run_ipgen
@@ -188,7 +189,10 @@ Tools:
   -bitinfo <file.bin> [...]             Parse XiST FPGA bitstream headers (design/device/date/size;
   -ipdoc <ip> [--list] [--no_open]      Locate & open an IP's UG user manual from the
   -eco <routed.xpn> --script <eco.tcl>  Batch ECO: xpn.read -> eco.init -> script ->
-  -gatesim <routed.xpn> --tb <tb.v>     Gate-level timing sim: export netlist+SDF,
+  -gatesim <routed.xpn> --tb <tb.v>     Gate-level timing sim
+  -serv start|-e "tcl"|status|stop    Resident hqfpga session (eval-server channel):
+                                        state persists across -e calls; iterate queries/
+                                        ECO without per-command process starts: export netlist+SDF,
                                         [--top n] [--sdf-instance p]     vlog+vsim SDF annotate (-sdfmax/min/typ),
                                         [--time dur] [--work dir]        run + SDF error report (needs XiST lib via -simlib)
                                         [-o <out.xpn>]            xpn.write -> eco.end (script = ECO
@@ -1968,6 +1972,11 @@ def main():
     # Gate-level timing simulation (SDF annotate via ModelSim)
     if first == '-gatesim':
         run_gatesim(args[1:])
+        return
+
+    # Resident hqfpga session (eval-server channel)
+    if first == '-serv':
+        run_serv(args[1:])
         return
 
     # Regression suite
