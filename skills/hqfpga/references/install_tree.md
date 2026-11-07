@@ -104,3 +104,44 @@ eco.signal_probe[.xist.seal|.sealion|.shark]
 - `ipcr_chkmeta.exe`：IP 包元数据校验（被 ipcreator 内部调用，无独立使用价值）。
 - GUI 主程序驱动脚本参考：`build\win_x64\hqui\resources\app\public\tcl\`（common/project/runSynthesis/downloadBit.tcl）——官方 GUI 的 TCL 封装，可作 hqbuddy 自研逻辑的交叉验证。
 - Tcl 运行时（`build\win_x64\lib\tcl8.6\`）无独立 tclsh，不能当通用 shell 用。
+
+
+## 10. GUI 官方 TCL 层（第二轮深挖·最重要发现）
+
+hqui（Electron）无参 spawn hqfpga.exe 后 **stdin `source` 这 5 个 TCL 文件**，之后所有 GUI 动作都是调其中的 proc——它们就是厂商的官方 CLI 层（共 4799 行，可直接 source 复用或抄序列）：
+
+`build\win_x64\hquiesourcespp\public	cl\{common,runSynthesis,downloadBit,project,dealChinese}.tcl`
+
+### 与 hqprj2tcl 生成物的流程差异（GUI 版多做的事）
+
+- `tc.clear -del_tc_hier`（层次约束清除）；`tc.autogen -period <1000/Fmax>`（按 GUI Fmax 字段）
+- `ioh.set_default_pullmode <NONE|DOWN|UP|KEEPER>` + `ioh.set_global_attr -unused_io tie_z`
+- `impl.guide.query -keep_hier` 为 1 时：`impl.guide.unset -keep_hier` + `design.flatten`
+- `design.tdomap -no_ioins`；`ta.set -actrl2q`；`lo.slo.set -ff_init force0|force1`；`rtl.incpath.clear/add`
+- bitgen 三连发：bit →（BGEN_1）`-bin` →（BGEN_4）`-rbin`，全选项 `-compress -nocrc -framecrc -trans_mode -sspi -i2c -config {...} -dclk <八档> -fuse_protect`（fuse_protect 为隐藏选项），同写 `<PROJ>.bgen.txt`
+- dump 续跑：每阶段 `design.save hq_temp/_step_run_*.dump` + `.dumpValidation` 哨兵 + `info.udbversion` 版本比对 → 增量编译
+- 报告双跑：`lang.set eng` 切换技巧；XML 化：`udt::'mrpt2xml/prpt2xml`
+
+### GUI 里有、hqbuddy 还没有的现成配方（project.tcl/common.tcl）
+
+| 配方 | 命令序列 |
+|---|---|
+| 时钟探测→SDC 骨架 | `sdc.start` → `nl.clock.detect -net -type` → `sdc.end` |
+| IO 属性表/UPC 校验数据源 | `ioh.get_ports I\|O\|B`、`ioh.get_iotype <port>`、`ioh.get_attr_val <p> <iotype> <attr>`、`dv.bank.list`、`dv.vccio.list`、`ioh.get_dpio*` |
+| 时序查询对话框 | `taset.query -all` → `ta.set -analysis_type both ...` → `ta.run` → `ta.report -no_sta -type t -n N -from/-to/-through ...` |
+| 源文件依赖全清单 | `rtl.srcfiles.list -print -o> f` |
+| VIO/VLA 在位检查 | `insight.check has_vio` / `has_vla` |
+| EDIF 导入增强 | `edif.read -lut_combine` → `nl.merge_cut` → `lo.ffctrlset.opt`；`nl.write -eqn` |
+| 功耗估算流水线 | `nl.power.params.report -file` → hqui `powerCalc` 路由的 xls 模板填充（`server	emplates\power_calc_*.xls`） |
+
+### 其他高价值事实
+
+- **.hqprj 权威格式**：cp936 编码 key=value；FILE_*/FILE_TIME 可重复（=lappend）；RTL_1..17/GLOBAL_*/MAP_*/PACK_*/PLACE_*/ROUTE_*/BGEN_1..13/DIMPORT_1..3；WORK_DIR 键被忽略——hqbuddy 解析/生成以此为准（common.tcl readOptV3）
+- **hqfpga.js FLAG 协议**：`FLAG:synthesisDone/placeDone/routingDone/bitGenDone`、`logSeg:xxx:Begin/End`、`FLAG:TOPLIST:`、`FLAG:SDCUPC:READ:START/END`——hqbuddy 解析 hqfpga 输出可对齐同一套标记（server/hqfpga.js 3000+ 行）
+- **编程器 CLI**：`hqdnload.exe -f <bit> -family <fam> -lang L`，fam 由 die 推导（SL2-12X→sealion12x、-30→seal30k…）；ipcreator/ChipEditor/rtviewer/rtheatmap/hq_ins/hq_vio_dbg 的完整 CLI 契约见 downloadBit.tcl 注释块
+- **mcnc_prim.v**："for edif verify"（MCNC 基准 EDIF 验证用）；U_PRIM 共 38 文件（HQ_FF 24 + HQ_LATCH 9 + TRIBUF/PRIMS/XCV stubs）
+- **macro_lib_22k.tcl**：`obj.cell.set /MACRO_SYN/MSYN_RAM_9216_B8KS1S1WW bram` 形式的宏映射——MSYN_ 命名 = 类型_宽度_深度_端口模式编码，读网报时理解 RAM/ADD 推断结果
+- **功耗数据源**：`sealion_pwr.xml`（每封装热阻/静态电流常量）+ power_calc xls 模板 + params.report
+- **DocumentTracker**：`Doc\AN05204_SA5Z-50 硬件设计应用指导` 与 `DS02001_Sealion 2000 数据手册`；`data.json` 含官网文档标题与 `/Private/NewsImgs/<ts>.pdf` 下载相对路径（主站域名需实验）
+- **dealChinese.tcl**：中文路径 workaround——**.hqprj 以 cp936 读取**；中文工程走临时 ASCII 文件 + `xxxChinese <tempFile>` 包装 proc
+- chipeditor/xsberteye 目录本体纯 GUI 无脚本（上轮结论维持）；ChipEditor Sealion 模式输入由 `'ui.save_inst`/`'ui.save_net` 导出（`-s <xml> -l <fp.inst.info> -n <fp_net.info>`）
