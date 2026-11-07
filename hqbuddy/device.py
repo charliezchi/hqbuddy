@@ -366,7 +366,7 @@ def get_pin_bank(device_part: str, pin: str) -> None:
            f"puts \"BANK_RESULT: [dv.get_pin_bank {pin}]\"\n"
            f"exit\n")
     with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
-                                     encoding="utf-8") as f:
+                                     encoding="gbk") as f:
         f.write(tcl)
         tcl_path = f.name
     try:

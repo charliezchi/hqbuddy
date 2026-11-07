@@ -190,9 +190,9 @@ Tools:
   -ipdoc <ip> [--list] [--no_open]      Locate & open an IP's UG user manual from the
   -eco <routed.xpn> --script <eco.tcl>  Batch ECO: xpn.read -> eco.init -> script ->
   -gatesim <routed.xpn> --tb <tb.v>     Gate-level timing sim
-  -serv start|-e "tcl"|status|stop    Resident hqfpga session (eval-server channel):
-                                        state persists across -e calls; iterate queries/
-                                        ECO without per-command process starts: export netlist+SDF,
+  -serv [REPL] | -serv -f <file.tcl>   Resident hqfpga session (eval server, one connection):
+                                        state persists across commands; ASCII commands only
+                                        (Chinese content: use -f with an ANSI/GBK file): export netlist+SDF,
                                         [--top n] [--sdf-instance p]     vlog+vsim SDF annotate (-sdfmax/min/typ),
                                         [--time dur] [--work dir]        run + SDF error report (needs XiST lib via -simlib)
                                         [-o <out.xpn>]            xpn.write -> eco.end (script = ECO
@@ -1529,7 +1529,7 @@ def _warn_stale_flow_tcl(tcl_path: str) -> None:
     """Warn when a flow TCL (hqprj2tcl marker line) is older than its source
     .hqprj: files/constraints added after generation are not in the script."""
     try:
-        with open(tcl_path, encoding="utf-8", errors="replace") as f:
+        with open(tcl_path, encoding="gbk", errors="replace") as f:
             first = f.readline().strip()
     except OSError:
         return
@@ -1729,7 +1729,7 @@ def _auto_add_tcl(flat: str) -> str:
                   "gtkwave::findNextEdge",
                   "gtkwave::findNextEdge"]
     lines.append("gtkwave::/Time/Zoom/Zoom_Full")
-    with open(tcl, "w", encoding="utf-8") as f:
+    with open(tcl, "w", encoding="gbk") as f:
         f.write("\n".join(lines) + "\n")
     return tcl
 

@@ -71,7 +71,7 @@ def _elab_ports(hqfpga_path: str, work: str, hqprj: str, top: str) -> list:
            f'rtl.elaborate -top {top}\n'
            f'puts "===PORTS-O==="\n'
            f'ioh.get_ports O\n')
-    tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8")
+    tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="gbk")
     tf.write(tcl)
     tf.close()
     try:

@@ -69,7 +69,7 @@ def _run_hqfpga_sections(family: str, part: str, sections: list,
                     if name == "arch" else
                     f"dv.setup {family} {part}\n"
                     f"puts \"@@UDEV@@\"\n'udev.iotype.report\nexit\n")
-        with open(tcl_path, "w", encoding="utf-8") as f:
+        with open(tcl_path, "w", encoding="gbk") as f:
             f.write(body)
         try:
             proc = subprocess.run(launcher.side_session_cmd(version["hqfpga_path"],

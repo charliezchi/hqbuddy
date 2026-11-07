@@ -58,7 +58,7 @@ def _run_query(args: list) -> None:
 
     def _session(body: str) -> str:
         tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
-                                         encoding="utf-8")
+                                         encoding="gbk")
         tf.write(body)
         tf.close()
         try:
@@ -230,7 +230,7 @@ def run_eco(args: list) -> None:
 
     import tempfile
     tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
-                                     encoding="utf-8")
+                                     encoding="gbk")
     tf.write(tcl)
     tf.close()
     work = os.path.dirname(os.path.abspath(xpn))

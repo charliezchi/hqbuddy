@@ -179,7 +179,7 @@ if {{[catch {{nl.flatten -nmnc}} e]}} {{ puts "FLATTEN-WARN: $e" }}
 
 def _run(hqfpga_path: str, tcl_text: str, work: str) -> str:
     tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
-                                     encoding="utf-8")
+                                     encoding="gbk")
     tf.write(tcl_text)
     tf.close()
     try:

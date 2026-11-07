@@ -30,7 +30,7 @@ def _generate_xpn2bin_tcl(work_dir: str, xpn_name: str, bin_tcl: str) -> str:
 design.bitgen -bin {bin_tcl} -compress
 """
 
-    with open(temp_tcl, "w", encoding="utf-8") as f:
+    with open(temp_tcl, "w", encoding="gbk") as f:
         f.write(tcl_content)
 
     return temp_tcl

@@ -57,7 +57,7 @@ def _generate_xpn_tcl(work_dir: str, dump_path: str, output_xpn: str) -> str:
 xpn.write {output_xpn}
 """
 
-    with open(temp_tcl, "w", encoding="utf-8") as f:
+    with open(temp_tcl, "w", encoding="gbk") as f:
         f.write(tcl_content)
 
     return temp_tcl

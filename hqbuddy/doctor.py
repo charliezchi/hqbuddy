@@ -155,7 +155,7 @@ def run_doctor(args: list) -> None:
                        f"puts \"LOCCHK $b [phycst.loc.check $b]\" }}\nexit\n")
                 fd, tmp = tempfile.mkstemp(suffix='.tcl', prefix='hqbuddy_upcchk_')
                 try:
-                    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    with os.fdopen(fd, 'w', encoding='gbk') as f:
                         f.write(tcl)
                     try:
                         r = _sp.run(launcher.side_session_cmd(version['hqfpga_path'],
@@ -216,7 +216,7 @@ def run_doctor(args: list) -> None:
         import subprocess as _sp
         fd, tmp = tempfile.mkstemp(suffix='.tcl', prefix='hqbuddy_lic_')
         try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            with os.fdopen(fd, 'w', encoding='gbk') as f:
                 f.write('license.query\n')
             try:
                 r = _sp.run(launcher.side_session_cmd(version['hqfpga_path'], tmp),

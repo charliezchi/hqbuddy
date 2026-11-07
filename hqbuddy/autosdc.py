@@ -82,7 +82,7 @@ def run_autosdc(args: list) -> None:
                f'if {{[catch {{puts [nl.clock.detect]}} e]}} {{ puts "CK-ERR: $e" }}\n'
                f'puts "===CK-END==="\n')
         tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
-                                         encoding="utf-8")
+                                         encoding="gbk")
         tf.write(tcl)
         tf.close()
         try:
@@ -144,7 +144,7 @@ def run_autosdc(args: list) -> None:
            f"{auto_line}\n"
            f'puts "===SDC-End==="\n')
 
-    tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8")
+    tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="gbk")
     tf.write(tcl)
     tf.close()
     try:

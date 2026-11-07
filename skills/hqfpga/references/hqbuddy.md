@@ -127,7 +127,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -h` / `-v` — 帮助 / 版本；`-cfg` — 编辑 config.json
 - `hqbuddy -autosdc --detect <prj>` — 时钟骨架模式（nl.clock.detect，FT110126 可用；端口时钟出 create_clock、内部/衍生转注释；周期占位需复核）——tc.autogen 路径不可用的替代
 - 流程对齐配方（GUI 版流程多做、批处理可经 --hook 注入，FT110126 实测通）：`ioh.set_default_pullmode <NONE|DOWN|UP|KEEPER>`、`ioh.set_global_attr -unused_io tie_z`（Unused IO 悬空处理）——见 install_tree.md §10 流程对照
-- `hqbuddy -serv start/-e/stop` — 常驻 hqfpga 会话（broker 守护持有 eval server 唯一连接；状态跨命令持久、错误后健康、无残留进程；**会话内崩溃类命令自动重建会话（不重试该命令）**；协议要点：裸命令帧、**单连接生命周期**、ID 前缀帧会被重置——FT110126 实测）
+- `hqbuddy -serv`（交互 REPL）/ `-serv -f <file.tcl>` — 常驻会话（**单次调用**：eval server 单连接生命周期，跨进程 broker 实测不可行——守护理由见记忆；会话内多命令状态持久、错误后健康；通道仅限 ASCII 命令，中文内容用 -f + ANSI/GBK 文件；吞吐 2.7x 于逐条 -cmd -e）
 - `hqbuddy -analyze --routed <布线后.xpn>` — 对布线后数据库跑六类分析（功耗真数据、层次报告可用；3 秒级）
 - `hqbuddy -regression --offline` — 自包含离线回归（9 项，免基线/板卡）
 - `hqbuddy -gatesim <routed.xpn> --tb <tb.v>` — 门级时序仿真一键化（XPN→网表+SDF 导出→vsim SDF 注解自动实例探测→gatesim.rpt；TB 需 xsGSR/xsPWR；布线后网表只需 XiST 库，U_PRIM 仅 EDIF 流程需要——FT110126 实测 SDF 注解 0 error）

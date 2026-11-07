@@ -46,7 +46,7 @@ def _run_tcl_streamed(hqfpga_path: str, cmds: list, work_dir: str) -> list:
     """
     tcl_text = "\n".join(cmds) + "\nexit\n"
     fd, tcl_path = tempfile.mkstemp(suffix=".tcl", prefix="hqbuddy_netlist_")
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
+    with os.fdopen(fd, "w", encoding="gbk") as f:
         f.write(tcl_text)
 
     lines = []

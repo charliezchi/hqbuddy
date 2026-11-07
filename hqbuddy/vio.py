@@ -118,7 +118,7 @@ def cmd_gen(work: str, module: str, in_width: int, out_width: int) -> None:
     # hqfpga's vio.ip.create emits the module to a file named after the -O value
     scratch = os.path.join(work, "_vio_ip_tmp").replace(os.sep, "/")
     tcl_path = os.path.join(work, f"_hqbuddy_vio_gen_{os.getpid()}.tcl")
-    with open(tcl_path, "w", encoding="utf-8") as f:
+    with open(tcl_path, "w", encoding="gbk") as f:
         f.write(f"vio.ip.create -O {scratch} -output_module {module}\nexit\n")
     import subprocess
     proc = subprocess.Popen([version["hqfpga_path"], "-cmd", tcl_path], cwd=work,

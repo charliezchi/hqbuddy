@@ -936,7 +936,7 @@ def _run_hqfpga_cmds(hqfpga_exe: str, cmds: list, cwd: str,
     'invalid command name') abort instead of failing silently."""
 
     tcl = "\n".join(cmds) + "\nexit\n"
-    with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="gbk") as f:
         f.write(tcl)
         tcl_path = f.name
     try:
@@ -1397,7 +1397,7 @@ def run_flow(proj: dict, require_bin: bool = True) -> None:
             _f.write(chr(10).join(_out_lines) + chr(10))
         print("[i] 已在 .hqprj 中开启 BGEN_1/BGEN_2（insight 流程需要产出 .bin）")
     tcl = f"run_hqprj2hqins_flow {{{_tcl_path(proj['hqprj'])}}}\nexit\n"
-    with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="gbk") as f:
         f.write(tcl)
         tcl_path = f.name
     print(f"Running instrumented flow for {proj['hqprj']} ...")
@@ -1645,7 +1645,7 @@ exit
     new_rtl = base + f"""rtl.elaborate -top {proj['top']} -new_rtl $WORK_DIR/hqins_run/hq_import.hqins
 exit
 """
-    with open(os.path.join(proj["hqins_dir"], "hq_impor_t.tcl"), "w", encoding="utf-8") as f:
+    with open(os.path.join(proj["hqins_dir"], "hq_impor_t.tcl"), "w", encoding="gbk") as f:
         f.write(t)
     with open(os.path.join(proj["hqins_dir"], "hq_impor_new_rtl.tcl"), "w", encoding="utf-8") as f:
         f.write(new_rtl)

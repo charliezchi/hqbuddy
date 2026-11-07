@@ -40,7 +40,7 @@ def _export_netlist_sdf(xpn: str, work: str) -> tuple:
            f'puts "@@GS-DONE@@"\n')
     import tempfile
     tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
-                                     encoding="utf-8")
+                                     encoding="gbk")
     tf.write(tcl)
     tf.close()
     try:
@@ -183,7 +183,7 @@ def run_gatesim(args: list) -> None:
         "quit",
     ]
     do_path = os.path.join(work, "run_gatesim.do")
-    with open(do_path, "w", encoding="utf-8", newline="\n") as f:
+    with open(do_path, "w", encoding="gbk", newline="\n") as f:
         f.write("\n".join(do_lines) + "\n")
     print(f"[OK] do file: {do_path}")
     if no_run:

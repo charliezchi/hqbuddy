@@ -73,7 +73,7 @@ _FLAG_MAP = {
 
 def prj_from_header(tcl_path: str) -> str | None:
     """Source .hqprj path from the `#[hqprj2tcl] Converted from <path>` line."""
-    with open(tcl_path, "r", encoding="utf-8", errors="replace") as f:
+    with open(tcl_path, "r", encoding="gbk", errors="replace") as f:
         for line in f:
             m = re.match(r"#\[hqprj2tcl\]\s*Converted from (.+)", line.strip())
             return m.group(1).strip() if m else None
@@ -131,7 +131,7 @@ def parse_tcl(tcl_path: str) -> dict:
             return v[0] if v else tok
         return tok
 
-    with open(tcl_path, "r", encoding="utf-8", errors="replace") as f:
+    with open(tcl_path, "r", encoding="gbk", errors="replace") as f:
         for raw in f:
             st = raw.strip()
             if st.startswith("#"):

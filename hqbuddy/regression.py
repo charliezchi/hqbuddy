@@ -114,7 +114,7 @@ def run_offline() -> None:
                     "-o", "reg_flow.tcl"], cwd=work, timeout=600)
     hook_in = False
     if os.path.isfile(flow_tcl):
-        head = open(flow_tcl, encoding="utf-8", errors="replace").read(4000)
+        head = open(flow_tcl, encoding="gbk", errors="replace").read(4000)
         hook_in = "HQ.DEBUG.STEP.AfterRoute" in head
     ok = rc == 0 and os.path.isfile(flow_tcl) and hook_in
     results.append(_check("flow TCL + --hook injected", ok,
@@ -128,7 +128,7 @@ def run_offline() -> None:
     fsm_in = False
     if os.path.isfile(flow_tcl2):
         fsm_in = "fsm.set -encoding onehot" in \
-            open(flow_tcl2, encoding="utf-8", errors="replace").read()
+            open(flow_tcl2, encoding="gbk", errors="replace").read()
     ok = rc == 0 and fsm_in
     results.append(_check("synopt injected (fsm_encoding)", ok,
                           "fsm.set found" if fsm_in else out[-120:]))

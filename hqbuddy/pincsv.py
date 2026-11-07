@@ -73,7 +73,7 @@ def _eval_upc(upc_path: str) -> list:
     )
     import tempfile
     tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
-                                     encoding="utf-8")
+                                     encoding="gbk")
     tf.write(tcl)
     tf.close()
     try:
@@ -351,7 +351,7 @@ def _validate_balls(balls: list, family: str, part: str) -> list:
            f"}}\n")
     import tempfile
     tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
-                                     encoding="utf-8")
+                                     encoding="gbk")
     tf.write(tcl)
     tf.close()
     try:
@@ -415,7 +415,7 @@ def run_ucf2upc(args: list) -> None:
            f'{{ puts "U2U-FAIL: $e" }}\n')
     import tempfile
     tf = tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False,
-                                     encoding="utf-8")
+                                     encoding="gbk")
     tf.write(tcl)
     tf.close()
     try:

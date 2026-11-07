@@ -97,7 +97,7 @@ def run_xpn_tcl(version: dict, xpn_abs: str, body: list[str],
     """Write a temp TCL (xpn.read + body + exit), run it via hqfpga -cmd in
     the foreground, then remove the TCL."""
     temp_tcl = os.path.join(workdir, f"_hqbuddy_{tag}_{os.getpid()}.tcl")
-    with open(temp_tcl, "w", encoding="utf-8") as f:
+    with open(temp_tcl, "w", encoding="gbk") as f:
         f.write(f"xpn.read {{{tcl_path(xpn_abs)}}}\n")
         for line in body:
             f.write(line + "\n")
