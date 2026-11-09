@@ -132,10 +132,18 @@ nl.write {sim_plain.v}               # 明文 + 可选 nl.write {...} -sdf
 - 资源(4KB RAM 基准):默认配置(1×UART)1580 LUT/4 RAMB18K;每开一个
   AXI+165、APB+99、SPI/I2C/TIMER 若干;PLIC/CLINT 另计(UG 表 1)。
 
-## 8. 已知边界(截至 3.45.0 / FT110826)
+## 8. 已知边界(截至 3.45.2 / FT110826)
 
-- UG00034 附件(demo 工程/build_tools/toolchain/openocd+softTap)官方清单无上传——`hqbuddy -doclist/-docget` 可直链下载官网全部文档/附件(3.45.1),待厂商补传后一条命令取回。OpenOCD 在线调试
-  待素材/实板校准(`-tinysoc ocd` 打印当前指引)。
+- **UG00034 官方附件已获取**(2026-11-10,开放目录 http://211.157.136.83/hqfpga_xist/IP_manage/UG00034_Tiny_SoC_IP/):
+  bin_regen.zip(与逆向格式逐条对照一致——定音获官方证实)/build_tools.zip
+  (MSYS 微工具集 make/busybox)/openocd.zip(厂商编译版 0.11.0+dev,**内建 vexriscv target**,已装 %USERPROFILE%\.hqbuddy\tools\openocd-xist)/toolchain.zip(366M 未下,xPack 已替代验证)。
+  **demo 参考工程(cpu0.yaml/makefile)未发布**——OpenOCD 联调待厂商补。
+  其它官网文档/附件走 `-doclist/-docget`(isilicontech.com 直链)。
 - ram_symbol 的 BRAM 仿真模型(xsBRAM8KTD)对 seal/sealion 家族同文件;
   xsLUT4 两家族不同,-simlib 家族分库后按器件族取用。
 - IP 生成内部 rtlsyn 约 40s/次;改固件 = `-tinysoc fw` 一条命令重生成。
+- OpenOCD 在线调试:`-tinysoc ocd` 打印完整指引。官方 debug_softTap.cfg
+  关键参数(实录):TAP `irlen 4 / expected-id 0x10001fff`,
+  `target vexriscv dbgbase 0xF00F0000`,readWaitCycles 12,启动即
+  soft_reset_halt;需环境变量 workspace_loc + workspace/software/cpu0.yaml
+  (cpu0.yaml 在未发布的 demo 参考工程内,待厂商补)。

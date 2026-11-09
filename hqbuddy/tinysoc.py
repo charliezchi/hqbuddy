@@ -552,11 +552,13 @@ def _cmd_list(rest: list) -> None:
 def _cmd_ocd(rest: list) -> None:
     cand = []
     home = os.environ.get("USERPROFILE", "")
+    # 厂商编译版(带 vexriscv target, 标准发行版没有)——首选
+    xist_ocd = os.path.join(home, ".hqbuddy", "tools", "openocd-xist",
+                            "bin", "openocd.exe")
     for pat in (
+        xist_ocd,
         os.path.join(home, ".hqbuddy", "tools", "xpack", "xpack-openocd-*",
                      "bin", "openocd.exe"),
-        os.path.join(home, "AppData", "Local", "Programs", "openocd", "bin",
-                     "openocd.exe"),
     ):
         cand.extend(glob.glob(pat))
     which = shutil.which("openocd")
@@ -564,19 +566,39 @@ def _cmd_ocd(rest: list) -> None:
         cand.append(which)
     if cand:
         print(f"[OK] OpenOCD: {cand[0]}")
+        if cand[0] == xist_ocd:
+            print("[i] 厂商编译版(vexriscv target 内建), softTap 配置同目录 cfg/。")
+        else:
+            print("Warning: 非厂商编译版(标准发行版无 vexriscv target),")
+            print("         Tiny_SoC 调试请用官方 openocd.zip:")
+            print("         http://211.157.136.83/hqfpga_xist/IP_manage/UG00034_Tiny_SoC_IP/openocd.zip")
+            print("         解压到 %USERPROFILE%\\.hqbuddy\\tools\\openocd-xist\\")
     else:
         print("[i] 未找到 OpenOCD。")
-        print("    建议安装 xPack OpenOCD(xpack-openocd), 解压到 "
-              "%USERPROFILE%\\.hqbuddy\\tools\\xpack\\ 或加入 PATH。")
+        print("    Tiny_SoC 须用厂商编译版(vexriscv target):")
+        print("    http://211.157.136.83/hqfpga_xist/IP_manage/UG00034_Tiny_SoC_IP/openocd.zip")
+        print("    解压到 %USERPROFILE%\\.hqbuddy\\tools\\openocd-xist\\")
+        sys.exit(1)
+
     print("")
-    print("Tiny_SoC 在线调试(软 JTAG, UG00034 §5.5):")
-    print("  openocd -f <openocd>/scripts/interface/cmsis-dap.cfg -f debug_softTap.cfg")
+    print("Tiny_SoC 在线调试(软 JTAG, UG00034 §5.5 + 官方 debug_softTap.cfg):")
+    ocd_dir = os.path.dirname(os.path.dirname(cand[0]))
+    cfg_dir = os.path.join(ocd_dir, "cfg")
+    if os.path.isfile(os.path.join(cfg_dir, "debug_softTap.cfg")):
+        print(f"  openocd -f {cfg_dir}{os.sep}cmsis-dap.cfg")
+        print(f"          -f {cfg_dir}{os.sep}debug_softTap.cfg")
+    else:
+        print("  openocd -f cmsis-dap.cfg -f debug_softTap.cfg(见厂商 openocd.zip)")
+    print("  关键参数(官方 cfg 实录): TAP irlen=4 expected-id 0x10001fff;")
+    print("    target vexriscv dbgbase 0xF00F0000; 需环境变量 workspace_loc 且")
+    print("    workspace/software/cpu0.yaml 存在(vexriscv cpuConfigFile——")
+    print("    在官方 demo 参考工程内, 该工程暂未随附件发布, 待补)")
+    print("")
     print("  GDB: riscv-none-embed-gdb fw.elf")
     print("    target extended-remote :3333")
     print("    set remotetimeout 60 / set arch riscv:rv32 / set mem inaccessible-by-default off")
     print("")
-    print("Warning: debug_softTap.cfg 为厂商附件专属文件(本机暂缺), 候选配置待")
-    print("         实板校准; 在此之前请用 BIN 固化 + 网表仿真链路开发。")
+    print("Note: 实板连通性(SA5T/SA5Z + CMSIS-DAP 下载桥)待板卡批验证。")
 
 
 def cmd_tinysoc(args: list) -> None:
