@@ -8,7 +8,7 @@
 
 ### 支持的操作系统
 
-- **Windows**：`Windows NT/2000/XP/Vista/Win7/Win8/Win10`，32 位及 64 位系统
+- **Windows**：`Windows 10/11 x64`(现行安装包仅 64 位;旧手册的 NT/2000/XP 表已过时)
 - **Linux**：`Linux kernel 2.6`，64 位系统
 
 ### 安装方式

@@ -132,7 +132,7 @@ hqui（Electron）无参 spawn hqfpga.exe 后 **stdin `source` 这 5 个 TCL 文
 | 源文件依赖全清单 | `rtl.srcfiles.list -print -o> f` |
 | VIO/VLA 在位检查 | `insight.check has_vio` / `has_vla` |
 | EDIF 导入增强 | `edif.read -lut_combine` → `nl.merge_cut` → `lo.ffctrlset.opt`；`nl.write -eqn` |
-| 功耗估算流水线 | `nl.power.params.report -file` → hqui `powerCalc` 路由的 xls 模板填充（`server	emplates\power_calc_*.xls`） |
+| 功耗估算流水线 | `nl.power.params.report -file` → hqui `powerCalc` 路由的 xls 模板填充（`server\templates\power_calc_*.xls`） |
 
 ### 其他高价值事实
 
@@ -145,3 +145,25 @@ hqui（Electron）无参 spawn hqfpga.exe 后 **stdin `source` 这 5 个 TCL 文
 - **DocumentTracker**：`Doc\AN05204_SA5Z-50 硬件设计应用指导` 与 `DS02001_Sealion 2000 数据手册`；`data.json` 含官网文档标题与 `/Private/NewsImgs/<ts>.pdf` 下载相对路径（主站域名需实验）
 - **dealChinese.tcl**：中文路径 workaround——**.hqprj 以 cp936 读取**；中文工程走临时 ASCII 文件 + `xxxChinese <tempFile>` 包装 proc
 - chipeditor/xsberteye 目录本体纯 GUI 无脚本（上轮结论维持）；ChipEditor Sealion 模式输入由 `'ui.save_inst`/`'ui.save_net` 导出（`-s <xml> -l <fp.inst.info> -n <fp_net.info>`）
+
+## 11. FT110826 构建增量与实测结论(2026-11-10,hqbuddy 3.45.0 探测)
+
+**构建演进**(RELEASE_NOTE.TXT):FT110526 = LPP refine(MCP IO 约束/pin offset)、
+功耗报告支持 post-pack 资源统计、下载器 V7.5;FT110826 = Shark 80K(EBR fuse/
+PIO_MIPI/PROG_INCR_CMP)、MIPI 仿真/LEC 模型、Routing Viewer Seal 200K、Heatmap
+Seal 80K+按时钟域热图、IP Creator tag 禁用 IP。`bin/` 与 `cmd.xml/flow.xml`
+与 FT101726 无增删(纯主程序迭代);CM33_Creator.exe 移入 STAR_Processor/ 目录。
+
+**探测结论(hqbuddy 3.45.0 沙箱,SL2S-25E 工程)**:
+
+| 探测项 | 结论 |
+|---|---|
+| `lpp.*` 只读命令 | **复测仍不可用**:`lpp.grid_report` json parse error(空输入)、`export_pin_delay` 0 字节静默无产物;grid_report 还需器件 .pdv(见下)。`-lpp_report` 立项否决维持 |
+| `SL2S-25E.pdv` | `device/xist/sealion/SL2-25E.pdv` 缺失(FILE003/FILE501)——依赖 .pdv 的命令(rt.genResourceUsage/lpp)在该器件上不可用;`-heatmap`/`-routing` 对 SL2S-25E 不可用(FT110826 的 Heatmap 新增支持是 Seal 80K) |
+| 功耗流水线 | **post-pack 可用**:`nl.power.params.report` 需 baseline——BeforePack(map 后 pack 前)`-baseline_out x.json -refresh_baseline`,AfterPack `-baseline_in x.json -file out.txt` 出 746KB 机器可读详表(时钟/逻辑/翻转率/扇出);`nl.power.report`(功耗分析本体)仍需布线完成,否则 WARN(PWR001)。封装立项见 TODO |
+| `impl.bitgen.xist.sealion` 完整语法 | `-bin -compress -compress_line_len <n> -config <s> -dclk <s> -ext_crystal -framecrc -fuse_protect -i2c -nocrc -rbin -rxfb -sspi -trans_mode -v`(-ext_crystal/-rxfb/-compress_line_len 为 install_tree §10 清单之外新发现;GUI 全选项三连发 bit→-bin(BGEN_1)→-rbin(BGEN_4)) |
+
+**编程器 family 推导权威源**(downloadBit.tcl:100-140):SL2 trait → sealion,
+die 后缀 -12X→sealion12x/-12→12k/-25→25k/-7→7k/-5→5k/-4→4k/-2→2k;SA trait →
+seal,-30→seal30k/-100→seal100k/-50→seal50k/-366→seal366k/-126→seal126k/-22→
+seal22k/SCM905;其它族不加 -family。hqbuddy `-dl -f <bit>` 已自动推导(3.45.0)。

@@ -53,3 +53,12 @@ for m in re.finditer(
   `/* synthesis syn_noprune=1 */` 防优化。
 - 门级仿真：强制例化 `xsGSR(.GSR(1'b1))` 与 `xsPWR(.PUR(1'b1))`（见 modelsim.md）。
 - 原语模型若不支持 SDF 反标，则门级时序仿真不可用（FT091626 现状，勿尝试）。
+
+## 门级仿真库补充(3.45.0 实测)
+
+- 第三方综合门级仿真除本文件 XIST 原语目录外,还需编译
+  `build/common/sim/verilog/U_PRIM/`(HQ_FF_*/HQ_LATCH_* 等行为模型)。
+- seal/shark 家族目录只放家族特调模型(如 xsDFFSA_*),**公共 UDT 原语
+  (xsDFF_K1C1E1 等)在 sealion 目录**——hqbuddy `-simlib` 已按家族分库
+  (XiST_SEAL/XiST_SEALION/XiST_SHARK)并自动补编公共目录;同名异内容模块
+  (xsLUT4)由家族目录后编覆盖。

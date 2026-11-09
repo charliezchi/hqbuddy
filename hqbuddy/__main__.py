@@ -37,6 +37,7 @@ from .ipdoc import run_ipdoc
 from .eco import run_eco
 from .gatesim import run_gatesim
 from .serv import run_serv
+from .tinysoc import cmd_tinysoc
 from .regression import run_regression
 from .device import run_device
 from .ipgen import run_ipgen
@@ -124,6 +125,8 @@ Project:
                                         arm-none-eabi-gcc + MCU_Prj/Makefile, then auto-merge
   -merge_bin <fpga.bin> <mcu.bin>      Merge FPGA+MCU bins for download (cable.exe)
      [-o <file>] [-model SA30K] [-remap] [-dl]  (-dl: download; -remap: MCU remap)
+  -tinysoc <sub> [options]             Tiny_SoC (RISC-V, SL2S-22E/25E) embedded software:
+                                        new/fw/bin/sim/list/ocd (-tinysoc 无参数看详情)
   -vla -gen [-name VLA] [-dir <dir>] [-device <part>]
                                         Launch the VLA IP generator dialog (writes xsIP_VLA.v/hqip/cfg)
   -edf2v <a.edif> [-o <file>]          Convert a third-party EDIF netlist to Verilog
@@ -1588,7 +1591,17 @@ def cmd_dl(args):
     version = launcher.require_hqfpga_version()
 
     if args:
-        # Passthrough to hqdnload (e.g. -dl -f <file>)
+        # Passthrough to hqdnload (e.g. -dl -f <file>), auto-deriving
+        # -family from the bitstream header when the user did not give one.
+        if '-family' not in args:
+            from .downloader import derive_family_for_bit
+            for a in args:
+                if a.lower().endswith('.bin') and os.path.isfile(a):
+                    fam = derive_family_for_bit(a)
+                    if fam:
+                        print(f"[i] bitstream device -> -family {fam}")
+                        args = ['-family', fam] + list(args)
+                    break
         launcher.launch_tool(version, 'hqdnload', list(args))
         return
 
@@ -1884,6 +1897,11 @@ def main():
     # FPGA+MCU bin merge (+ optional download)
     if first == '-merge_bin':
         soc.cmd_merge_bin(args[1:])
+        return
+
+    # Tiny_SoC (RISC-V) embedded software support
+    if first == '-tinysoc':
+        cmd_tinysoc(args[1:])
         return
 
     # Third-party EDIF netlist -> Verilog

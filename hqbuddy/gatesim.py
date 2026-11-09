@@ -3,7 +3,7 @@
 
 One command from a routed XPN to an SDF-annotated ModelSim run:
   xpn.read -> nl.write <netlist>.v -loc -sdf   (FT110126-verified)
-  -> vlog netlist + U_PRIM + TB -> vsim -t 1ps -L XiST -sdf<mode> -voptargs=+acc
+  -> vlog netlist + U_PRIM + TB -> vsim -t 1ps -L XiST_<family> -sdf<mode> -voptargs=+acc
   -> parse SDF annotation stats into gatesim.rpt
 
 The TB must instantiate the DUT plus xsGSR/xsPWR (see skill
@@ -16,8 +16,35 @@ import shutil
 import subprocess
 import sys
 
+from . import device as device_mod
 from . import launcher
 from .simlib import _check_vsim
+
+
+def _xist_lib_flags(xpn: str, family: str | None) -> str:
+    """Resolve -L flags for the per-family XiST sim libraries (3.45.0+).
+
+    Family auto-detects from the XPN device field; unknown devices fall back
+    to the seal -> sealion -> shark search order, which reproduces the
+    pre-3.45.0 merged-library resolution for seal/sealion designs.
+    """
+    libs = {"seal": "XiST_SEAL", "sealion": "XiST_SEALION", "shark": "XiST_SHARK"}
+    if family:
+        fam = family.lower()
+        if fam not in libs:
+            print(f"Error: unknown --family {family}（可选 seal|sealion|shark）")
+            sys.exit(1)
+        return f"-L {libs[fam]}"
+    txt = open(xpn, encoding="utf-8", errors="replace").read()
+    m = re.search(r"device\s+(\S+);", txt)
+    if m:
+        fam = device_mod.get_family_for_device(m.group(1))
+        if fam and fam.lower() in libs:
+            print(f"[i] XiST sim library: {libs[fam.lower()]} (device {m.group(1)})")
+            return f"-L {libs[fam.lower()]}"
+    print("Warning: 无法从 XPN 识别器件家族，回退三库搜索序 seal→sealion→shark")
+    print("         （同名模型优先取靠后家族）；可用 --family seal|sealion|shark 显式指定。")
+    return "-L XiST_SEAL -L XiST_SEALION -L XiST_SHARK"
 
 
 def _usage() -> None:
@@ -27,6 +54,7 @@ def _usage() -> None:
     print("  --sdfmax|--sdfmin|--sdftyp  SDF 延迟档位（缺省 sdfmax）")
     print("  --time <dur>          run 时长（缺省 25us）")
     print("  --work <dir>          工作目录（缺省 <xpn 目录>/gatesim/，重跑清空重建）")
+    print("  --family <fam>        XiST 仿真库家族 seal|sealion|shark（缺省从 XPN 器件自动识别）")
     print("  --no_run              只导出网表+SDF 并生成 do 文件，不启动 vsim")
     sys.exit(1)
 
@@ -92,6 +120,7 @@ def run_gatesim(args: list) -> None:
     sdf_mode = "sdfmax"
     run_time = "25us"
     work = None
+    family = None
     no_run = False
     i = 0
     while i < len(args):
@@ -116,6 +145,9 @@ def run_gatesim(args: list) -> None:
             i += 2
         elif a == "--work":
             work = args[i + 1] if i + 1 < len(args) else None
+            i += 2
+        elif a == "--family":
+            family = args[i + 1] if i + 1 < len(args) else None
             i += 2
         elif a == "--no_run":
             no_run = True
@@ -172,12 +204,14 @@ def run_gatesim(args: list) -> None:
         print("Warning: 未提供 --sdf-instance 且 TB 中未找到 DUT 实例——"
               "SDF 将注解到顶层，多半失败。")
 
+    lib_flags = _xist_lib_flags(xpn, family)
+
     do_lines = [
         "onerror {quit -f}",
         "vlib work",
         f"vlog +define+SIM -work work {{{v.replace(os.sep, '/')}}}",
         f"vlog -work work {{{tb_abs.replace(os.sep, '/')}}}",
-        (f"vsim -t 1ps -L XiST -{sdf_mode} {{{sdf_spec}}} "
+        (f"vsim -t 1ps {lib_flags} -{sdf_mode} {{{sdf_spec}}} "
          f"-voptargs=+acc work.tb"),
         f"run {run_time}",
         "quit",

@@ -1,6 +1,6 @@
 ---
 name: hqfpga
-description: Use when working with XiST HqFpga FPGA development - .hqprj project files, hqfpga.exe TCL console commands (design.*, dv.*, rtl.*, ta.*, phycst.*, nl.*), synthesis/place/route/bitgen flows, timing analysis, SDC/UPC constraints, UDM netlist manipulation, the hqbuddy wrapper tool, ModelSim/QuestaSim simulation (vsim, testbench, XiST sim library), or HqInsight on-chip logic analyzer debugging (signal selection, trigger, VCD capture via hqbuddy -insight)
+description: Use when working with XiST HqFpga FPGA development - .hqprj project files, hqfpga.exe TCL console commands (design.*, dv.*, rtl.*, ta.*, phycst.*, nl.*), synthesis/place/route/bitgen flows, timing analysis, SDC/UPC constraints, UDM netlist manipulation, the hqbuddy wrapper tool, ModelSim/QuestaSim simulation (vsim, testbench, XiST sim library), HqInsight on-chip logic analyzer debugging (signal selection, trigger, VCD capture via hqbuddy -insight), or Tiny_SoC RISC-V soft-core embedded development (firmware bin, hqbuddy -tinysoc)
 ---
 
 # HqFpga 操作指南
@@ -49,6 +49,7 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 - `references/ip_doc_index.md` — IP 用户手册索引（84 IP → UG 编号；配合 `hqbuddy -ipdoc <ip>` 直接打开 PDF）
 - `references/synthesis_directives.md` — RTL 综合指令（syn_ramstyle/keep/HQ_MAX_FANOUT/HQ_DATA_SKEW 等，写 RTL 前后按需读）
 - `references/soc_workflow.md` — SoC（FPGA+ARM 软核）全 CLI 工作流（-new_soc/-build/-mcu_build/-merge_bin 链路、预设清单、工程结构，做 SA5Z-30/50 SoC 开发时必读）
+- `references/tiny_soc.md` — Tiny_SoC（RISC-V 软核，SL2S-22E/25E）嵌入式开发全指南（-tinysoc 命令族、固件 BIN 4-bank 格式、UART 寄存器实测表、裸机固件三坑、网表级软件仿真/OpenOCD，做 Tiny_SoC 或 RISC-V 软核开发时必读）
 - `references/modelsim.md` — ModelSim/QuestaSim 仿真（XiST 仿真库、xsGSR/xsPWR 强制实例、.do 脚本模板，做仿真任务前必读）
 - `references/download.md` — cable.exe 下载调试（检测开发板、下载 bin，要下载/连接开发板时读）
 - `references/insight.md` — HqInsight 在线逻辑分析仪全 CLI 流程（选信号、触发条件、抓波形为 VCD，做在线调试时读）

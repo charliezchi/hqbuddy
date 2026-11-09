@@ -1,11 +1,28 @@
-"""Simulation library management: compile XiST primitives into ModelSim/QuestaSim."""
+"""Simulation library management: compile XiST primitives into ModelSim/QuestaSim.
+
+Since 3.45.0 each device family gets its own library (XiST_SEAL / XiST_SEALION /
+XiST_SHARK) because same-name primitives differ between families (e.g. xsLUT4);
+compiling them into one library silently overwrites one family's models with
+another's depending on compile order.
+"""
 
 import os
+import re
 import shutil
 import subprocess
 import sys
 
 from . import launcher
+
+# Family source dir (under build/common/sim/verilog/XIST/) -> ModelSim library name
+FAMILY_LIBS = {
+    "seal": "XiST_SEAL",
+    "sealion": "XiST_SEALION",
+    "shark": "XiST_SHARK",
+}
+
+# Pre-3.45.0 single library name; its modelsim.ini mapping is removed on re-run
+LEGACY_LIB = "XiST"
 
 
 def _check_vsim() -> str | None:
@@ -21,7 +38,7 @@ def _get_hqfpga_root(user_root: str | None = None) -> str:
         user_root: Optional user-specified HQFPGA root.
 
     Returns:
-        Absolute path to the HQFPGA root directory.
+        Absolute path to the HQFPGA installation root.
     """
     if user_root:
         root = os.path.abspath(user_root)
@@ -91,14 +108,25 @@ def _ensure_writable(path: str) -> bool:
     return False
 
 
+def _mapping_lines() -> list:
+    """modelsim.ini mapping lines for the per-family libraries."""
+    return [f"{lib} = $MODEL_TECH/../{lib}" for lib in FAMILY_LIBS.values()]
+
+
+def _manual_hint() -> None:
+    print("Please add the following lines manually to modelsim.ini:")
+    for m in _mapping_lines():
+        print(f"  {m}")
+
+
 def _update_modelsim_ini(models_root: str) -> None:
-    """Add XiST library mapping to modelsim.ini."""
+    """Add per-family XiST_* library mappings to modelsim.ini and drop the
+    legacy single-library XiST mapping (superseded by family libraries)."""
     ini_path = os.path.join(models_root, "modelsim.ini")
 
     if not os.path.isfile(ini_path):
         print(f"Warning: modelsim.ini not found: {ini_path}")
-        print("Please add the following line manually to modelsim.ini:")
-        print("  XiST = $MODEL_TECH/../XiST")
+        _manual_hint()
         return
 
     # Ensure modelsim.ini is writable
@@ -106,47 +134,59 @@ def _update_modelsim_ini(models_root: str) -> None:
         print(f"Error: cannot write to modelsim.ini: {ini_path}")
         print("Please remove the read-only attribute manually and re-run "
               "(installs under Program Files need an administrator terminal).")
-        print("Or add the following line manually:")
-        print("  XiST = $MODEL_TECH/../XiST")
+        _manual_hint()
         return
 
-    # Check if already present
     with open(ini_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    if "XiST = $MODEL_TECH/../XiST" in content:
-        print("modelsim.ini already contains XiST mapping.")
-        return
+    # Drop legacy single-library mapping line ("XiST = ..."); per-family lines
+    # (XiST_SEAL = ...) never match this pattern.
+    new_lines = [ln for ln in content.splitlines(keepends=True)
+                 if not re.match(r"^XiST\s*=", ln.strip("\r\n"))]
+    dropped = len(content.splitlines(keepends=True)) - len(new_lines)
+    if dropped:
+        print(f"Removed legacy single-library mapping ({LEGACY_LIB}); "
+              f"use XiST_SEAL / XiST_SEALION / XiST_SHARK instead.")
 
-    # Try to insert under [Library] section
-    lines = content.splitlines(keepends=True)
-    new_lines = []
-    inserted = False
-
-    for i, line in enumerate(lines):
-        new_lines.append(line)
-        if not inserted and line.strip().lower() == "[library]":
-            # Insert after the section header
-            new_lines.append("XiST = $MODEL_TECH/../XiST\n")
-            inserted = True
-
-    if not inserted:
-        # Append at the end
-        if new_lines and not new_lines[-1].endswith("\n"):
-            new_lines.append("\n")
-        new_lines.append("[Library]\n")
-        new_lines.append("XiST = $MODEL_TECH/../XiST\n")
+    # Insert missing family mappings right after the [Library] section header
+    inserted_all = True
+    out_lines = []
+    for ln in new_lines:
+        out_lines.append(ln)
+        if ln.strip().lower() == "[library]":
+            for m in _mapping_lines():
+                key = m.split(" = ")[0]
+                if not any(l.strip().startswith(key + " ") or l.strip() == key
+                           for l in new_lines):
+                    out_lines.append(m + "\n")
+                    print(f"  Added: {m}")
+                else:
+                    inserted_all = False
+    if inserted_all and not dropped:
+        if all(any(l.strip().startswith(m.split(" = ")[0] + " ")
+                   for l in new_lines) for m in _mapping_lines()):
+            print("modelsim.ini already contains XiST_* family mappings.")
+            return
+    if not any(ln.strip().lower() == "[library]" for ln in new_lines):
+        # No [Library] section: append one
+        if out_lines and not out_lines[-1].endswith("\n"):
+            out_lines.append("\n")
+        out_lines.append("[Library]\n")
+        for m in _mapping_lines():
+            out_lines.append(m + "\n")
+            print(f"  Added: {m}")
 
     with open(ini_path, "w", encoding="utf-8") as f:
-        f.writelines(new_lines)
+        f.writelines(out_lines)
 
     print(f"Updated modelsim.ini: {ini_path}")
-    print("  Added: XiST = $MODEL_TECH/../XiST")
 
 
 def run_simlib(hqfpga_root: str | None = None) -> None:
     """
-    Compile XiST primitives into ModelSim/QuestaSim.
+    Compile XiST primitives into ModelSim/QuestaSim, one library per device
+    family: XiST_SEAL / XiST_SEALION / XiST_SHARK.
 
     Args:
         hqfpga_root: Optional HQFPGA installation root. If None, auto-detect.
@@ -176,7 +216,7 @@ def run_simlib(hqfpga_root: str | None = None) -> None:
                                'templates', 'compile_xist.tcl')
         with open(bundled, 'r', encoding='utf-8') as f:
             script_content = f.read()
-        with open(script_dst, "w", encoding="utf-8") as f:
+        with open(script_dst, "w", encoding="utf-8", newline="") as f:
             f.write(script_content)
         print(f"Copied compile script to: {script_dst}")
     except Exception as e:

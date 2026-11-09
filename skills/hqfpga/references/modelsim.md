@@ -44,7 +44,7 @@ xsPWR xsPWR_INST (.PUR(1'b1));
 - `xsGSR`：全局置位/复位（Global Set/Reset），`.GSR(1'b1)` 表示释放（高电平=正常工作）
 - `xsPWR`：上电序列（Power-Up Reset），`.PUR(1'b1)` 表示上电完成
 - 这两个实例放在 TB 顶层即可，无需连接其他信号
-- 原语定义在 XiST 仿真库中，编译时通过 `-L XiST` 链接
+- 原语定义在 XiST 家族仿真库中，编译时通过 `-L XiST_<家族>` 链接（3.45.0 起分库 XiST_SEAL/XiST_SEALION/XiST_SHARK，按器件家族取用，SL2S-25E→SEALION；见 hqbuddy.md 的 -simlib 说明）
 
 ## 2.1 原语行为模型源码（排障时直接读）
 

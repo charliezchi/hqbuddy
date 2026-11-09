@@ -53,6 +53,43 @@ def read_bitstream_header(path):
     return info
 
 
+def derive_download_family(device: str) -> str | None:
+    """Map a device part string to the hqdnload -family value.
+
+    Mirrors the official GUI derivation in downloadBit.tcl (die suffix
+    matching, order matters: -12X before -12, -100 before -10, ...).
+    Returns None when no rule matches (caller then passes through untouched).
+    """
+    dev = (device or "").upper()
+    if "SL2" in dev or dev.startswith("SL"):
+        fam = "sealion"
+        for suffix, name in (("-12X", "sealion12x"), ("-12", "sealion12k"),
+                             ("-25", "sealion25k"), ("-7", "sealion7k"),
+                             ("-5", "sealion5k"), ("-4", "sealion4k"),
+                             ("-2", "sealion2k")):
+            if suffix in dev:
+                return name
+        return fam
+    if "SA" in dev or dev.startswith("S"):
+        for suffix, name in (("-30", "seal30k"), ("-100", "seal100k"),
+                             ("-50", "seal50k"), ("-366", "seal366k"),
+                             ("-126", "seal126k"), ("-22", "seal22k")):
+            if suffix in dev:
+                return name
+        if "SCM905" in dev:
+            return "SCM905"
+        return "seal"
+    return None
+
+
+def derive_family_for_bit(path: str) -> str | None:
+    """Read a bitstream header and return its hqdnload -family (or None)."""
+    h = read_bitstream_header(path)
+    if not h:
+        return None
+    return derive_download_family(h.get("device") or "")
+
+
 def read_bin_info(path):
     """Probe a .bin file and return (is_fpga, design, device).
 

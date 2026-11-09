@@ -162,6 +162,25 @@ def run_offline() -> None:
     ok = rc != 0 and "unknown -analyze option" in out
     results.append(_check("unknown flag rejected", ok, out.strip()[:60]))
 
+    # 10. -tinysoc bin: firmware 4-lane split (bin_regen equivalent)
+    fw = os.path.join(work, "fw_test.bin")
+    open(fw, "wb").write(bytes((i * 7 + 3) & 0xFF for i in range(1000)))
+    rc, out = _run(["hqbuddy", "-tinysoc", "bin", fw, "-o",
+                    os.path.join(work, "rom"), "--ram-size", "4096"])
+    lanes = [os.path.join(work, "rom", f"fw{k}.bin") for k in range(4)]
+    ok = rc == 0 and all(os.path.isfile(p) for p in lanes)
+    if ok:
+        fw_data = open(fw, "rb").read()
+        fw_data += b"\x00" * (4096 - len(fw_data))
+        for k in range(4):
+            bits = open(lanes[k]).read().split()
+            if len(bits) != 1024 or any(
+                    int(bits[w], 2) != fw_data[4 * w + k] for w in range(1024)):
+                ok = False
+                break
+    results.append(_check("tinysoc bin 4-lane split", ok,
+                          "byte-lane mapping verified" if ok else out[-120:]))
+
     # cleanup
     shutil.rmtree(root, ignore_errors=True)
 

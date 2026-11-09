@@ -167,3 +167,10 @@ o inv
     type: switch
     default value: None
 ```
+
+## 两级修改配方(FT110126+ 实测,权威版在 install_tree.md §3)
+
+本文件是早期 help dump;**实用配方以 install_tree.md §3 为准**:
+方程/属性类修改(LUT 方程/IO 属性/FFMUX)直接文本改 XPN → `hqbuddy -xpn2bin`
+免重布;结构类修改走 `hqbuddy -eco`(eco.route 局部重布)。查询接口
+`eco.query.comp_index`/`eco.query.program_detail`(comp 名含 [] 要花括号)。

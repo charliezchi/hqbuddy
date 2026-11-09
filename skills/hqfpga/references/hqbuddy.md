@@ -83,10 +83,10 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 
 ## IP 与仿真库
 
-- `hqbuddy -gen_hqip [<meta.xml>] [-device <part>]` — 生成 IP 默认配置 `.hqip`（无参时交互式 IP 选择器）
+- `hqbuddy -gen_hqip [<meta.xml>] [-device <part>] [--ip <name>] [--set k=v ...]` — 生成 IP 默认配置 `.hqip`（无参时交互式 IP 选择器；`--ip Tiny_SoC` 按名字非交互选择，`--set` 直接覆盖 [General] 键值，如 `--set INPUT_PARAMS.RAM_SIZE=65536`）
 - `hqbuddy -ipgen [<.hqip>] [-lang <lang>]` — 生成 IP 网表（经 ipdepot `_ipgen_.desc` 定位 ipgen 程序）
 - `hqbuddy -update_ip [<.hqprj>]` — 工程内所有 .hqip 全部重新 ipgen
-- `hqbuddy -simlib [<dir>]` — 编译 XiST 仿真库到 ModelSim/QuestaSim
+- `hqbuddy -simlib [<dir>]` — 编译 XiST 仿真库到 ModelSim/QuestaSim（3.45.0 起按器件家族分库：**XiST_SEAL / XiST_SEALION / XiST_SHARK**——同名原语各家族内容不同（如 xsLUT4），混编一库会按编译顺序互相覆盖；seal/shark 库自动补编 sealion 目录的公共原语 xsDFF_K*；个别 SV 语法的模型（shark xsMIPI_CTRL）自动以 -sv 重试。门级仿真 `-L XiST_<家族>`，家族从器件查 dv_list：SL2S-25E→SEALION、SA5Z→SEAL）
 
 ## 第三方综合
 
@@ -135,5 +135,6 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `hqbuddy -flow/-build --hook STEP="script"` — 官方 ::HQ.DEBUG.STEP.* 阶段钩子注入（26 步白名单；综合/P&R 中途免重跑取现场）
 - `hqbuddy -eco <routed.xpn> --script <eco.tcl> [-o <out.xpn>]` — 批处理 ECO：布线后 XPN 上跑 eco.* 修改并局部重布（脚手架全包，无需 eval server；实测通）
 - `hqbuddy -ipdoc <ip> [--list] [--no_open]` — 定位并打开 IP 的 UG 用户手册（ipdepot 模糊匹配；全量索引见 references/ip_doc_index.md）
+- `hqbuddy -tinysoc <sub>` — Tiny_SoC（RISC-V 软核，SL2S-22E/SL2-25E 系列专用）嵌入式软件全链：`new`（非交互生成 .hqip+ipgen，外设开关 `--uart0/--gpio/--plic` 等）、`fw <fw.bin|fw.elf>`（固件切 4 个 BIN lane 写回 .hqip 并重生成 IP——改固件=一条命令）、`bin`（仅切分，bin_regen 等价）、`sim --tb <tb.v>`（明文网表导出+ModelSim 网表仿真，TB 内置 UART 帧解码直接回显固件输出）、`list`、`ocd`（OpenOCD 指引）。**实测定音**：BIN_k=固件每字第 k 字节（$readmemb 8bit/行）；UART0=0x81000000；Config[2:0]=DataLength（实际位=值+1）；波特率=clk/((div+1)*(DL+1))。裸机三坑（SP 初始化/_start 置顶/FIFO 轮询）模板已规避（templates/tinysoc_fw/ + tinysoc_tb.v）。详见 references/tiny_soc.md
 - 安装目录资源地图（eco_editor/xsberteye/MS-MPI/lpp/cmd.xml/错误码目录/原语模板/阶段钩子等未封装资源）：见 references/install_tree.md
 - 中文输出：hqfpga/ipgen 等子进程输出为 GBK，UTF-8 终端显示乱码属显示问题、不影响结果

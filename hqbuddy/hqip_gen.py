@@ -330,6 +330,43 @@ def gen_default_hqip(meta_file, hqip_file, device):
     return hqip_file
 
 
+def apply_hqip_sets(hqip_file: str, sets: list) -> None:
+    """Apply `--set key=value` overrides to a generated .hqip.
+
+    Each item rewrites one [General] line whose key matches exactly.
+    Unknown keys abort with the available key list so typos are caught
+    before an ipgen run burns minutes on a bad config.
+    """
+    with open(hqip_file, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    keys_in_file = [ln.split('=', 1)[0] for ln in lines
+                    if '=' in ln and not ln.lstrip().startswith(('#', ';'))]
+
+    for item in sets:
+        if '=' not in item:
+            print(f"Error: --set expects key=value, got: {item}")
+            sys.exit(1)
+        key, val = item.split('=', 1)
+        key = key.strip()
+        hit = False
+        for i, ln in enumerate(lines):
+            if ln.startswith(key + '='):
+                lines[i] = f"{key}={val}\n"
+                hit = True
+                break
+        if not hit:
+            print(f"Error: --set key not found in {hqip_file}: {key}")
+            print("Available keys:")
+            for k in keys_in_file:
+                print(f"  {k}")
+            sys.exit(1)
+        print(f"[OK] {key}={val}")
+
+    with open(hqip_file, 'w', encoding='utf-8', newline='') as f:
+        f.writelines(lines)
+
+
 # ---------------------------------------------------------------
 # ipdepot scanning with device filtering (IP Creator matching rules)
 # ---------------------------------------------------------------
@@ -459,17 +496,25 @@ def _default_output(info: dict) -> str:
 def run_gen_hqip(args: list) -> None:
     """Generate a default-config .hqip from an IP meta XML.
 
-    Usage: hqbuddy -gen_hqip [<meta.xml>] [-device <part>]
-    Without a meta XML, lists IPs supporting the current device and
+    Usage: hqbuddy -gen_hqip [<meta.xml>] [-device <part>] [--ip <name>] [--set k=v ...]
+    Without a meta XML or --ip, lists IPs supporting the current device and
     lets the user pick one interactively.
     """
     xml_arg = None
     device_arg = None
+    ip_name = None
+    sets = []
     i = 0
     while i < len(args):
         a = args[i]
         if a == '-device' and i + 1 < len(args):
             device_arg = args[i + 1]
+            i += 2
+        elif a == '--ip' and i + 1 < len(args):
+            ip_name = args[i + 1]
+            i += 2
+        elif a == '--set' and i + 1 < len(args):
+            sets.append(args[i + 1])
             i += 2
         elif a.startswith('-'):
             print(f"Error: unknown option: {a}")
@@ -493,6 +538,30 @@ def run_gen_hqip(args: list) -> None:
         out = os.path.join(os.getcwd(), 'ipcore_dir', name, f"xsIP_{name}.hqip")
         gen_default_hqip(xml_arg, out, device)
         print(f"[OK] Generated: {out} (device: {device})")
+    elif ip_name:
+        # Non-interactive IP selection by (unique prefix of) name
+        version = launcher.require_hqfpga_version()
+        ipdepot = os.path.join(version['path'], _IPDEPOT_RELPATH)
+        if not os.path.isdir(ipdepot):
+            print(f"Error: ipdepot not found: {ipdepot}")
+            sys.exit(1)
+        items = scan_supported_ips(ipdepot, device)
+        needle = ip_name.upper()
+        hits = [it for it in items if it['name'].upper().startswith(needle)]
+        if not hits:
+            print(f"Error: no IP name starting with '{ip_name}' supports device {device}.")
+            for it in items:
+                print(f"  {it['name']}")
+            sys.exit(1)
+        if len(hits) > 1:
+            print(f"Error: '{ip_name}' matches multiple IPs, be more specific:")
+            for it in hits:
+                print(f"  {it['name']}  ({it['variant']})")
+            sys.exit(1)
+        info = hits[0]
+        out = _default_output(info)
+        gen_default_hqip(info['xml'], out, device)
+        print(f"[OK] Generated: {out} (device: {device})")
     else:
         version = launcher.require_hqfpga_version()
         ipdepot = os.path.join(version['path'], _IPDEPOT_RELPATH)
@@ -514,5 +583,8 @@ def run_gen_hqip(args: list) -> None:
         gen_default_hqip(chosen['xml'], out, device)
         print(f"Selected: {chosen['name']} ({chosen['variant']})")
         print(f"[OK] Generated: {out} (device: {device})")
+
+    if sets:
+        apply_hqip_sets(out, sets)
 
     print(f"Tip: run 'hqbuddy -ipgen' to generate the IP netlist.")
