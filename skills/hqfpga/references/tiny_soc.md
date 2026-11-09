@@ -4,8 +4,10 @@
 # Tiny_SoC IP(RISC-V 软核)嵌入式开发指南
 
 Tiny_SoC = 32bit RISC-V(RV32-[I], 5 级流水, ~1K LUT, ~120MHz@Seal5000)+ JTAG 调试
-+ 可选外设,OnChipRAM 4KB~512KB 档位。**仅支持 Seal SL2S-22E / SL2-25E / SL2S-25E /
-SL2D-25E**。手册 UG00034(ipdepot 内,`hqbuddy -ipdoc Tiny_SoC` 打开)。
++ 可选外设,OnChipRAM 4KB~512KB 档位。**支持 Seal 5000 全系(SA5Z/SA5T,家族
+token 命中,SA5Z-30/SA5T-100 已实测 ipgen 通过)+ Sealion 2000 的 SL2S-22E /
+SL2-25E / SL2S-25E / SL2D-25E**(不支持 SL2-12E/SL2-22E)。产品族命名对照见
+families.md。手册 UG00034(ipdepot 内,`hqbuddy -ipdoc Tiny_SoC` 打开)。
 
 **hqbuddy 入口:`-tinysoc <sub>`**(new/fw/bin/sim/list/ocd,`-tinysoc` 无参数看用法)。
 

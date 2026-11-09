@@ -231,8 +231,8 @@ def _cmd_new(rest: list) -> None:
             print(f"Error: unexpected argument: {a}")
             _usage()
     if not device:
-        print("Error: --device required(如 SL2S-25E-8U213C; 支持 SL2S-22E/SL2-25E/"
-              "SL2S-25E/SL2D-25E 系列)。")
+        print("Error: --device required(Seal 5000 全系 SA5Z/SA5T + SL2S-22E/"
+              "SL2-25E/SL2S-25E/SL2D-25E;如 SA5Z-30-D0-8U324C 或 SL2S-25E-8U213C)。")
         sys.exit(1)
     if ram_size:
         sets.append(f"INPUT_PARAMS.RAM_SIZE={_parse_ram_size(ram_size)}")

@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.45.2
+3.45.3
 
 ## 功能特点
 
@@ -613,7 +613,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-simlib [<dir>]`                   | 编译 XiST 仿真库到 ModelSim/QuestaSim，省略时自动检测 HqFPGA 根目录    |
 | `-bitinfo <file.bin> [...] [--json]` | 解析 XiST FPGA 位流头：设计名/器件/架构/日期/大小（纯 Python，与 -dl 下载器同一解析器；glob 可用，只读无会话）。下载前核对 bin 身份 |
 | `-ipdoc <ip> [--list] [--no_open]` | 定位并打开 IP 的 UG 用户手册 PDF（ipdepot 模糊匹配；84 IP/97 手册全量索引在 skill ip_doc_index.md；只读无会话） |
-| `-tinysoc <sub> [options]` | Tiny_SoC（RISC-V 软核，SL2S-22E/SL2-25E 系列）嵌入式软件全链：`new` 非交互生成 .hqip+网表（`--device`/`--ram-size`/外设开关）、`fw <fw.bin\|fw.elf>` 固件切 4 个 BIN lane 写回 .hqip 并重生成 IP、`bin` 仅切分（bin_regen 等价）、`sim --tb <tb.v>` 明文网表导出+ModelSim 网表仿真（TB 内置 UART 帧解码，直接回显固件输出）、`list` 配置速览、`ocd` OpenOCD 指引 |
+| `-tinysoc <sub> [options]` | Tiny_SoC（RISC-V 软核，Seal 5000 全系 SA5Z/SA5T + SL2S-22E/SL2-25E/SL2S-25E/SL2D-25E）嵌入式软件全链：`new` 非交互生成 .hqip+网表（`--device`/`--ram-size`/外设开关）、`fw <fw.bin\|fw.elf>` 固件切 4 个 BIN lane 写回 .hqip 并重生成 IP、`bin` 仅切分（bin_regen 等价）、`sim --tb <tb.v>` 明文网表导出+ModelSim 网表仿真（TB 内置 UART 帧解码，直接回显固件输出）、`list` 配置速览、`ocd` OpenOCD 指引 |
 | `-doclist [关键词 ...]` / `-docget <关键词> [-o <dir>]` | 官网技术文档/附件目录与下载（数据源=安装树 DocumentTracker 缓存，GUI 跑一次即刷新；magic 校验，标题命名；Tiny_SoC 附件官网暂缺） |
 | `-eco <routed.xpn> --script <eco.tcl> [-o <out.xpn>]` | 批处理 ECO：对布线后 XPN 执行 eco.* 修改并局部重布（xpn.read→eco.init→脚本→xpn.write→eco.end 全脚手架；脚本只写 ECO 修改；无需 eval server/GUI；FT110126 实测验证） |
 | `-eco --query <xpn> [comp关键字]` / `--force-signal <xpn> <comp> <实例名> <0|1>` / `--set-lut <xpn> <comp> <方程>` | ECO 便捷子命令：comp 索引与 program 明细两阶段查询；SLICE FF 一键钉死（AFFMUX/A*LUT 两处协同，A/B 侧通吃）；宽 LUT 方程改写——全部文本级免重布，改后 `-xpn2bin` 出 bin（--force-signal 输出与实板验证过的手工配方逐字节一致） |
