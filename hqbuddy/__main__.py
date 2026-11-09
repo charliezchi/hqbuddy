@@ -38,6 +38,7 @@ from .eco import run_eco
 from .gatesim import run_gatesim
 from .serv import run_serv
 from .tinysoc import cmd_tinysoc
+from .docdl import cmd_doc
 from .regression import run_regression
 from .device import run_device
 from .ipgen import run_ipgen
@@ -127,6 +128,8 @@ Project:
      [-o <file>] [-model SA30K] [-remap] [-dl]  (-dl: download; -remap: MCU remap)
   -tinysoc <sub> [options]             Tiny_SoC (RISC-V, SL2S-22E/25E) embedded software:
                                         new/fw/bin/sim/list/ocd (-tinysoc 无参数看详情)
+  -doclist [keyword ...]               官网技术文档目录(DocumentTracker 缓存;关键词过滤)
+  -docget <关键词> [-o <dir>]          下载文档/附件(isilicontech.com 直链,magic 校验)
   -vla -gen [-name VLA] [-dir <dir>] [-device <part>]
                                         Launch the VLA IP generator dialog (writes xsIP_VLA.v/hqip/cfg)
   -edf2v <a.edif> [-o <file>]          Convert a third-party EDIF netlist to Verilog
@@ -1902,6 +1905,11 @@ def main():
     # Tiny_SoC (RISC-V) embedded software support
     if first == '-tinysoc':
         cmd_tinysoc(args[1:])
+        return
+
+    # Official website document/attachment catalog + download
+    if first in ('-doclist', '-docget'):
+        cmd_doc([first[1:]] + args[1:])
         return
 
     # Third-party EDIF netlist -> Verilog

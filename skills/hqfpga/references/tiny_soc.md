@@ -134,7 +134,7 @@ nl.write {sim_plain.v}               # 明文 + 可选 nl.write {...} -sdf
 
 ## 8. 已知边界(截至 3.45.0 / FT110826)
 
-- debug_softTap.cfg 仅在厂商 UG00034 附件内,本机无——OpenOCD 在线调试
+- UG00034 附件(demo 工程/build_tools/toolchain/openocd+softTap)官方清单无上传——`hqbuddy -doclist/-docget` 可直链下载官网全部文档/附件(3.45.1),待厂商补传后一条命令取回。OpenOCD 在线调试
   待素材/实板校准(`-tinysoc ocd` 打印当前指引)。
 - ram_symbol 的 BRAM 仿真模型(xsBRAM8KTD)对 seal/sealion 家族同文件;
   xsLUT4 两家族不同,-simlib 家族分库后按器件族取用。
