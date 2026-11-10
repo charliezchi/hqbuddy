@@ -2,6 +2,8 @@
 
 # 下载调试（cable.exe）
 
+> 【实测 2026-11-10】`hqbuddy -dl -f <bin>` 只是拉起 hqdnload GUI,不会自动完成下载;脚本化下载用 `hqbuddy -cable --sealion <bin> --model <型号> --Burst`(型号先 `-cable --detect_model` 实测)。
+
 XiST 下载器（USB Cable）的命令行工具是 `cable.exe`，hqdnload GUI 底层也是调它。**所有下载/检测操作优先用 `hqbuddy -cable` 透传**（自动定位当前 HqFpga 版本的 cable.exe，参数原样转发）：
 
 ```bat

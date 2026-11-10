@@ -33,6 +33,7 @@ hqbuddy 是 HqFpga 的辅助工具集（Python 编写，发布为独立 `hqbuddy
 - `.hqprj` 是 INI 风格工程描述：器件（`FAMILY`/`DIE`/`PACKAGES`/`SPEEDS`/`CONDITION`）、`TOP_MODULE`、`FILE_SRC`（.v/.vh，各配一行 `FILE_TIME`）、`FILE_TC`（.sdc）、`FILE_PC`（.upc，各配 `FILE_TIME_CST`）
 - `hqbuddy -new_prj <name> [-device <part>]` — 从模板创建工程（无器件时交互选择）
 - `hqbuddy -add <files...> [<.hqprj>]` — 添加文件：`.v/.vh`→FILE_SRC，`.sdc`→FILE_TC，`.upc`→FILE_PC；支持 `.f` filelist；目标工程可显式指定，缺省探测 cwd
+  - 【实测】`-add` 同名文件返回 "Nothing to add"(不覆盖)——修改源文件内容后需 `hqbuddy -refresh_time <prj>` 刷新时间戳，否则流程仍用旧产物
 - `hqbuddy -set_top <name> [<.hqprj>]` — 修改 TOP_MODULE
 - `hqbuddy -get_device [<file>]` / `-set_device [<part>] [<file>]` — 查看/修改器件（交互选择+模糊搜索，自动同步 .hqip 的 device= 并校验 dv_list）
 - `hqbuddy -get_pin_bank <pin> [-device <part>]` — 查询引脚所属 IO bank（底层 `dv.get_pin_bank`；无工程时用 `-device` 绕过）

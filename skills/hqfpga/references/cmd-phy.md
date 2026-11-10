@@ -313,7 +313,7 @@ phycst.pin.set <pin> <location>
 phycst.pin.set data_in A10
 # 将顶层端口 data_in 放置到封装 A10 位置
 
-phycst.pin.set data_out K7 -attr{IO_TYPE=LVCMOS33 SLEWRATE=FAST}
+phycst.pin.set data_out K7 -attr {IO_TYPE=LVCMOS33 SLEWRATE=FAST}
 # 将顶层端口 data_out 放置到封装 K7 位置并设定 IO 属性
 
 phycst.pin.set video_data_out_p C5 -attr {IO_TYPE=LVDS25 BANK_VCCIO=3.3}
@@ -322,6 +322,13 @@ phycst.pin.set video_data_out_p C5 -attr {IO_TYPE=LVDS25 BANK_VCCIO=3.3}
 phycst.pin.set porta 211 -attr {IO_TYPE=SSTL18_I VREF=EXTERN}
 # 将顶层端口 porta 放置到封装 211 位置，设置其参考电压来自外部（同 BANK 中的 214）管脚
 ```
+
+> 【实测 2026-11-10】`-attr` 与 `{` 之间必须有空格（`-attr{...}` 连写报
+> `ERROR(ARGF017): Unexpected argument value`）；属性只做注解，输出电压由
+> bank VCCIO 物理决定。
+> 【UPC 坑】引脚约束残留已删端口的 `phycst.pin.set` 会使 build 报
+> `ERROR(CDEV008): Unable to find port matching name pattern`——改顶层端口后
+> 同步清理 UPC。
 
 > 疑点：本示例段中混入了一条与 phycst.pin.set 无关、应属 §15.69 的内容：`phycst.extvref.set porta 211 1.8V` 以及 `phycst.region.check {R33C33 R33C33}`（"这是 Sealion 器件一个合法的矩形区域定义，返回字符串 1"），系原文格式碎裂/串节（原文如此）。
 

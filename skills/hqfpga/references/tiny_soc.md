@@ -58,6 +58,7 @@ meta_file=.../ipdepot/Tiny_SoC/Tiny_SoC/Tiny_SOC.xml
   BIN2→[23:16]、BIN3→[31:24](实测:常数填充定 bank 映射,递增地址定行序)。
 - 固件超 RAM_SIZE 报错;不足补 0x00。**格式含非 0/1 字符会在综合期报
   SFE-E-126**(readmemb 语法错)——这是此前误传"bin 格式"的真相。
+- **BIN 路径必须纯正斜杠**: 混合分隔符(如 `C:/x\y/lane0.bin`)综合期 $readmemb 失败且无明确报错(ipgen 只报 "error rtl dump");hqbuddy -tinysoc fw 写入的路径已规范化。
 - 物理地址有 XOR 扰码(综合器↔仿真模型两侧一致),对固件制作无影响。
 
 ## 4. 裸机固件三坑(全部实测踩过)
@@ -177,6 +178,9 @@ TB 需 tie-off 才能仿(真机引脚有拉载不受影响)。**中断功能级�
 - ram_symbol 的 BRAM 仿真模型(xsBRAM8KTD)对 seal/sealion 家族同文件;
   xsLUT4 两家族不同,-simlib 家族分库后按器件族取用。
 - IP 生成内部 rtlsyn 约 40s/次;改固件 = `-tinysoc fw` 一条命令重生成。
+- ipgen 收尾清理临时目录偶发 `WinError 32`(杀软/索引服务瞬时锁文件)
+  → 退出码 1 但产物已生成;重跑即可。另有僵留 hqfpga 进程持锁导致
+  批量 ipgen 连环失败——先 `Get-Process hqfpga | Stop-Process -Force`。
 - OpenOCD 在线调试:`-tinysoc ocd` 打印完整指引。官方 debug_softTap.cfg
   关键参数(实录):TAP `irlen 4 / expected-id 0x10001fff`,
   `target vexriscv dbgbase 0xF00F0000`,readWaitCycles 12,启动即
