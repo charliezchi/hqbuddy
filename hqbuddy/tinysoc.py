@@ -60,6 +60,8 @@ def _usage() -> None:
     print("        列出工程关联的 Tiny_SoC .hqip 及其 RAM_SIZE/BIN/外设配置")
     print("  ocd")
     print("        探测 OpenOCD 并打印在线调试(软 JTAG)接入指引")
+    print("  boardtest --detect|--loopback [--tx L23 --rx K26 --clk D19]")
+    print("        板测封装: detect_model 器件核对 / 环回小工程 build+下载+串口回显自检")
     print("")
     print("实测定音: BIN_k=固件字第k字节(readmemb 8bit/行); UART0=0x81000000;")
     print("Config[2:0]=DataLength(实际位=值+1); 波特率=clk/((div+1)*(DL+1))")
@@ -205,6 +207,7 @@ def _cmd_new(rest: list) -> None:
     device = None
     ram_size = None
     hqip_arg = None
+    prj_arg = None
     sets = []
     i = 0
     while i < len(rest):
@@ -223,6 +226,9 @@ def _cmd_new(rest: list) -> None:
             i += 1
         elif a.startswith("--set") and i + 1 < len(rest):
             sets.append(rest[i + 1])
+            i += 2
+        elif a == "--prj" and i + 1 < len(rest):
+            prj_arg = rest[i + 1]
             i += 2
         elif a.startswith("-"):
             print(f"Error: unknown -tinysoc new option: {a}")
@@ -256,8 +262,78 @@ def _cmd_new(rest: list) -> None:
     _run_ipgen_quiet(out)
     netlist = os.path.splitext(out)[0] + ".v"
     print(f"[OK] netlist: {netlist}")
-    print("Next: hqbuddy -add <netlist> <proj.hqprj> 挂进工程;"
-          " 固件就绪后 hqbuddy -tinysoc fw <fw.bin|fw.elf> 更新 OnChipRAM 初值。")
+
+    # 约束模板(SDC/UPC)与端口清单——落在工程根, 供 wrapper 设计时直接改用
+    tpl = _write_constraint_templates(os.getcwd(), netlist)
+
+    # 可选: 自动挂进工程
+    if prj_arg:
+        prj = os.path.abspath(prj_arg)
+        if not os.path.isfile(prj):
+            print(f"Error: --prj not found: {prj}")
+            sys.exit(1)
+        run = subprocess.run(
+            [sys.executable, "-m", "hqbuddy", "-add", netlist, prj],
+            capture_output=True, text=True)
+        ok = run.returncode == 0 and "FILE_SRC" in (run.stdout or "")
+        print(f"[{'OK' if ok else 'FAIL'}] -add netlist -> {os.path.basename(prj)}")
+        if not ok:
+            print((run.stdout or "") + (run.stderr or ""))
+    else:
+        print("Next: hqbuddy -add <netlist> <proj.hqprj> 挂进工程"
+              "（或重跑本命令带 --prj <proj.hqprj> 自动挂载）；"
+              " 固件就绪后 hqbuddy -tinysoc fw <fw.bin|fw.elf> 更新 OnChipRAM 初值。")
+
+
+def _desc_ports(netlist: str) -> list:
+    """从 ipgen 产物 _DESC.TXT 提取端口 (name, direction) 列表。"""
+    desc = os.path.splitext(netlist)[0] + ".txt"
+    if os.path.basename(desc) == desc:  # no dir part change; keep .txt next to .v
+        desc = os.path.splitext(netlist)[0] + ".txt"
+    ports = []
+    if not os.path.isfile(desc):
+        desc = os.path.join(os.path.dirname(netlist), "_DESC.TXT")
+    if os.path.isfile(desc):
+        for ln in open(desc, encoding="utf-8", errors="replace"):
+            m = re.match(r"\s*(input|output|inout)\s+(\w+)\s*;", ln)
+            if m:
+                ports.append((m.group(2), m.group(1)))
+    if not ports:  # fall back to netlist module header
+        for ln in open(netlist, encoding="utf-8", errors="replace"):
+            m = re.match(r"\s*(input|output|inout)\s+(\w+)\s*;", ln)
+            if m:
+                ports.append((m.group(2), m.group(1)))
+    return ports
+
+
+def _write_constraint_templates(out_dir: str, netlist: str) -> dict:
+    """生成 SDC/UPC 模板与端口清单(板测验证过的骨架, 引脚留 TODO)。"""
+    ports = _desc_ports(netlist)
+    sdc = os.path.join(out_dir, "tinysoc_template.sdc")
+    with open(sdc, "w", newline="\n", encoding="utf-8") as f:
+        f.write(
+            "# Tiny_SoC 约束模板(hqbuddy -tinysoc new 生成)\n"
+            "# 注意: 端口名以你的 wrapper 顶层为准(下面按 IP 原名 io_* 书写)。\n"
+            "# io_sys_clk 按实际频率改 period; io_jtag_tck 必须 <= 10MHz;\n"
+            "# jtag_tck 落普通脚时编译报 PHY-CHK-030, 需注入:\n"
+            "#   hqbuddy -flow <prj> --hook \"BeforePlace=phyrule.set -chk_clkio off\"\n"
+            "create_clock -name sys_clk -period 40.0 [get_ports io_sys_clk]  ;# TODO 25MHz 例\n"
+            "create_clock -name jtag_tck -period 1000.0 [get_ports io_jtag_tck]\n")
+    upc = os.path.join(out_dir, "tinysoc_template.upc")
+    with open(upc, "w", newline="\n", encoding="utf-8") as f:
+        f.write("# Tiny_SoC 引脚模板(hqbuddy -tinysoc 生成)——球号 TODO 填写\n"
+                "# 引脚表以板卡官方参考设计 UPC 为权威(板卡文档有漂移先例)。\n"
+                "phycst.start\n")
+        for name, _dir in ports:
+            f.write(f'# phycst.pin.set {{{name}}} <PIN> -attr "IO_TYPE=LVCMOS33"\n')
+        f.write("phycst.end\n")
+    ports_txt = os.path.join(out_dir, "tinysoc_ports.txt")
+    with open(ports_txt, "w", newline="\n", encoding="utf-8") as f:
+        for name, direction in ports:
+            f.write(f"{direction:>6}  {name}\n")
+    print(f"[OK] templates: {os.path.basename(sdc)}, {os.path.basename(upc)}, "
+          f"{os.path.basename(ports_txt)} ({len(ports)} ports)")
+    return {"sdc": sdc, "upc": upc, "ports": ports_txt}
 
 
 def _cmd_fw(rest: list) -> None:
@@ -591,14 +667,195 @@ def _cmd_ocd(rest: list) -> None:
         print("  openocd -f cmsis-dap.cfg -f debug_softTap.cfg(见厂商 openocd.zip)")
     print("  关键参数(官方 cfg 实录): TAP irlen=4 expected-id 0x10001fff;")
     print("    target vexriscv dbgbase 0xF00F0000; 需环境变量 workspace_loc 且")
-    print("    workspace/software/cpu0.yaml 存在(vexriscv cpuConfigFile——")
-    print("    在官方 demo 参考工程内, 该工程暂未随附件发布, 待补)")
+    print("    workspace/software/cpu0.yaml 存在——最小可用 yaml(2026-11-10 实测")
+    print("    被厂商 OpenOCD 接受, demo 工程缺失时可替代):")
+    print("      debug:")
+    print("        - hardwareBreakpointCount: 4")
+    print("")
+    print("  适配器: 厂商 OpenOCD 无 XiST 线缆驱动, 仅支持 CMSIS-DAP(原版另含")
+    print("  jlink/ftdi 驱动)——探针需物理接到软 TAP 引脚(本次板测约束:")
+    print("  J14=TDO J15=TDI K15=TMS J16=TCK, FMC LA02-LA03)。")
     print("")
     print("  GDB: riscv-none-embed-gdb fw.elf")
     print("    target extended-remote :3333")
     print("    set remotetimeout 60 / set arch riscv:rv32 / set mem inaccessible-by-default off")
     print("")
-    print("Note: 实板连通性(SA5T/SA5Z + CMSIS-DAP 下载桥)待板卡批验证。")
+    print("Note: 有 CMSIS-DAP/J-Link 探针并可接到 FMC 时即可联调; 否则仅 BIN 固化链路。")
+
+
+# ---------------------------------------------------------------
+# boardtest: 板测流程封装(detect → 器件核对 → 环回 → 串口自检)
+# ---------------------------------------------------------------
+def _cmd_boardtest(rest: list) -> None:
+    """hqbuddy -tinysoc boardtest — 串口链路自检(引脚考古三步的自动化)。
+
+    --detect   只做 detect_model + 器件名核对(不建工程)
+    --loopback 建环回小工程(txd=rxd)→ build → 下载 → COM 回显自检
+    选项: --tx/--rx/--clk 引脚(缺省 L23/K26/D19 = SA5T-100 D0A2 官方 demo),
+          --model <detect 报的型号> --port COMx --baud N --device <part>
+    """
+    import time as _time
+
+    mode = None
+    tx_pin, rx_pin, clk_pin = "L23", "K26", "D19"
+    model = None
+    port = None
+    baud = 115200
+    device = None
+    i = 0
+    while i < len(rest):
+        a = rest[i]
+        if a in ("--detect", "--loopback"):
+            mode = a[2:]
+            i += 1
+        elif a == "--tx" and i + 1 < len(rest):
+            tx_pin = rest[i + 1]; i += 2
+        elif a == "--rx" and i + 1 < len(rest):
+            rx_pin = rest[i + 1]; i += 2
+        elif a == "--clk" and i + 1 < len(rest):
+            clk_pin = rest[i + 1]; i += 2
+        elif a == "--model" and i + 1 < len(rest):
+            model = rest[i + 1]; i += 2
+        elif a == "--port" and i + 1 < len(rest):
+            port = rest[i + 1]; i += 2
+        elif a == "--baud" and i + 1 < len(rest):
+            baud = int(rest[i + 1]); i += 2
+        elif a == "--device" and i + 1 < len(rest):
+            device = rest[i + 1]; i += 2
+        else:
+            print(f"Error: unknown -tinysoc boardtest option: {a}")
+            _usage()
+    if not mode:
+        print("Usage: hqbuddy -tinysoc boardtest --detect|--loopback [options]")
+        print("  --detect   detect_model + 器件名核对")
+        print("  --loopback 环回自检: 建最小工程(txd=rxd)→ build → 下载 → COM 回显")
+        print("  缺省引脚 tx=L23 rx=K26 clk=D19(SA5T-100 D0A2 官方 demo)")
+        sys.exit(1)
+
+    version = launcher.require_hqfpga_version()
+    cable = version.get("cable_path")
+    if not version.get("has_cable") or not os.path.isfile(cable):
+        print("Error: cable.exe not found in this HqFpga installation.")
+        sys.exit(1)
+
+    # 1) detect_model
+    if not model:
+        proc = subprocess.run([cable, "--detect_model"], capture_output=True,
+                              timeout=120)
+        out = (proc.stdout or b"").decode("gbk", errors="replace")
+        m = re.search(r"Device Model\s*:\s*(\S+)", out)
+        mp = re.search(r"Package\s*:\s*(\S+)", out)
+        if not m:
+            print("Error: detect_model 未报出 Device Model(先确认下载器接线)。")
+            print(out[-300:])
+            sys.exit(1)
+        model = m.group(1)
+        pkg = mp.group(1) if mp else "?"
+        print(f"[OK] detect_model: {model}  package={pkg}")
+        if device and pkg != "?" and not pkg.upper().startswith(
+                device.upper().rsplit("-", 1)[0][:10]):
+            print(f"Warning: 工程 device={device} 与实测 package={pkg} 前缀不一致"
+                  f"——确认是否要用实测器件重建工程。")
+    if mode == "detect":
+        return
+
+    # 2) 环回小工程
+    root = os.path.join(tempfile.gettempdir(), "hqbuddy_boardtest",
+                        _time.strftime("%Y%m%d_%H%M%S"))
+    os.makedirs(root)
+    if not device:
+        # 由 package 反推工程器件名失败时要求显式 --device
+        print("Error: --device required for --loopback(detect 的 package 名不能"
+              "直接当工程器件名,请在 dv_list 中选精确封装名)。")
+        sys.exit(1)
+    print(f"[i] loopback workdir: {root}")
+
+    def _run(cmd, **kw):
+        env = dict(os.environ)
+        env["PYTHONPATH"] = os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))) + os.pathsep + env.get("PYTHONPATH", "")
+        return subprocess.run(cmd, capture_output=True, timeout=kw.pop(
+            "timeout", 1800), cwd=kw.pop("cwd", root), env=env, **kw)
+
+    prj = os.path.join(root, "loopback.hqprj")
+    r = _run([sys.executable, "-m", "hqbuddy", "-new_prj", "loopback",
+              "-device", device])
+    if not os.path.isfile(prj):
+        print("Error: new_prj failed:\n" + (r.stdout + r.stderr)[-300:])
+        sys.exit(1)
+
+    top_v = os.path.join(root, "top.v")
+    with open(top_v, "w", newline="\n", encoding="utf-8") as f:
+        f.write(f"""// hqbuddy -tinysoc boardtest 环回自检(txd=rxd 纯 IO 路径)
+module top (
+    input  sys_clk,
+    output uart0_txd,
+    input  uart0_rxd
+);
+    assign uart0_txd = uart0_rxd;
+endmodule
+""")
+    upc = os.path.join(root, "loopback.upc")
+    with open(upc, "w", newline="\n", encoding="utf-8") as f:
+        f.write(f"phycst.start\n"
+                f"phycst.pin.set {{sys_clk}} {clk_pin} -attr \"IO_TYPE=LVCMOS33\"\n"
+                f"phycst.pin.set {{uart0_txd}} {tx_pin} -attr \"IO_TYPE=LVCMOS33\"\n"
+                f"phycst.pin.set {{uart0_rxd}} {rx_pin} -attr \"IO_TYPE=LVCMOS33\"\n"
+                f"phycst.end\n")
+    sdc = os.path.join(root, "loopback.sdc")
+    with open(sdc, "w", newline="\n", encoding="utf-8") as f:
+        f.write("create_clock -period 40.0 [get_ports sys_clk]\n")
+
+    r = _run([sys.executable, "-m", "hqbuddy", "-add", top_v, upc, sdc, prj])
+    r = _run([sys.executable, "-m", "hqbuddy", "-set_top", "top", prj])
+    print("[i] building loopback bit (2~4 分钟)...")
+    r = _run([sys.executable, "-m", "hqbuddy", "-build", prj], timeout=2400)
+    binf = os.path.join(root, "loopback.bin")
+    if not os.path.isfile(binf):
+        print("Error: build failed(详见工作目录 run 日志)。")
+        sys.exit(1)
+    print(f"[OK] bit: {binf}")
+
+    # 3) 下载
+    r = _run([cable, "--sealion", binf, "--model", model, "--Burst"],
+             timeout=300)
+    out = (r.stdout or b"").decode("gbk", errors="replace")
+    if "Task completed" not in out:
+        print("Error: download failed:\n" + out[-300:])
+        sys.exit(1)
+    print("[OK] downloaded")
+
+    # 4) 串口回显自检
+    try:
+        import serial
+    except ImportError:
+        print("Warning: 未装 pyserial——请手动开串口终端发任意字符验证回显。")
+        return
+    ports = [port] if port else [f"COM{n}" for n in range(1, 33)]
+    opened = None
+    for p in ports:
+        try:
+            opened = serial.Serial(p, baud, timeout=1)
+            break
+        except Exception:
+            continue
+    if not opened:
+        print("Error: 未找到可打开的串口(--port 指定或装好 CH340 驱动)。")
+        sys.exit(1)
+    print(f"[i] serial: {opened.port} @ {baud}")
+    _time.sleep(0.5)
+    opened.reset_input_buffer()
+    opened.write(b"LOOPBACK-OK-12345")
+    opened.flush()
+    _time.sleep(1)
+    buf = opened.read(4096)
+    opened.close()
+    if b"LOOPBACK-OK" in buf:
+        print("[PASS] loopback echo OK -> 串口链路(tx/rx 引脚+CH340)完好")
+    else:
+        print(f"[FAIL] 无回显(收到 {buf!r})——tx/rx 引脚或接线不对;"
+              f"对照板卡官方参考设计 UPC 核对。")
+        sys.exit(1)
 
 
 def cmd_tinysoc(args: list) -> None:
@@ -618,6 +875,8 @@ def cmd_tinysoc(args: list) -> None:
         _cmd_list(rest)
     elif sub == "ocd":
         _cmd_ocd(rest)
+    elif sub == "boardtest":
+        _cmd_boardtest(rest)
     else:
         print(f"Error: unknown -tinysoc subcommand: {sub}")
         _usage()

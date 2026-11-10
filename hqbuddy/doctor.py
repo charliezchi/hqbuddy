@@ -320,6 +320,45 @@ def run_doctor(args: list) -> None:
         warns.append("尚无 HqInsight 工程（hqins_run 不存在）——需要在线调试时先 "
                      "-insight -init")
 
+    # -- 5c. Tiny_SoC pre-checks (3.46.0) -------------------------------------
+    ts_src = [p for p in file_src
+              if "tinysoc" in os.path.basename(p).lower().replace("_", "")]
+    if ts_src:
+        oks.append(f"Tiny_SoC netlist: {os.path.basename(ts_src[0])}")
+        sdc_text = ""
+        for p in file_tc:
+            if os.path.isfile(p):
+                sdc_text += open(p, encoding="utf-8", errors="replace").read()
+        upc_text = ""
+        for p in file_pc:
+            if os.path.isfile(p):
+                upc_text += open(p, encoding="utf-8", errors="replace").read()
+        if not file_tc:
+            warns.append("Tiny_SoC: 工程无 SDC——io_sys_clk 需要 create_clock,"
+                         "io_jtag_tck 需 <=10MHz 约束(模板: -tinysoc new 生成 "
+                         "tinysoc_template.sdc)")
+        else:
+            if not re.search(r"sys_?clk", sdc_text, re.I):
+                warns.append("Tiny_SoC: SDC 未约束 sys_clk(wrapper 顶层时钟端口)"
+                             "——CPU 时序无保障")
+            mtck = re.search(r"jtag_?tck.*?period\s+(\d+\.?\d*)", sdc_text,
+                             re.I | re.S)
+            if mtck:
+                period = float(mtck.group(1))
+                if period < 100.0:
+                    warns.append(f"Tiny_SoC: jtag_tck 周期 {period}ns >10MHz——"
+                                 f"超 IP 上限, 放宽到 >=100ns")
+                else:
+                    oks.append(f"jtag_tck 约束 {period}ns (<=10MHz)")
+            if re.search(r"jtag_?tck", upc_text, re.I):
+                if "chk_clkio" not in sdc_text and "chk_clkio" not in upc_text:
+                    warns.append("Tiny_SoC: jtag_tck 已引出引脚——若不在时钟专用"
+                                 "脚, 编译会报 PHY-CHK-030; 预防: -flow --hook "
+                                 "\"BeforePlace=phyrule.set -chk_clkio off\"")
+        if file_pc and not re.search(r"uart0_txd|uart_?txd", upc_text, re.I):
+            warns.append("Tiny_SoC: UPC 未约束 uart0_txd——串口输出脚悬空随机"
+                         "(引脚以板卡官方参考设计 UPC 为权威, 板卡文档有漂移先例)")
+
     # -- report ---------------------------------------------------------------
     if as_json:
         import json

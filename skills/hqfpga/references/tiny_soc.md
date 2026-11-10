@@ -148,7 +148,26 @@ nl.write {sim_plain.v}               # 明文 + 可选 nl.write {...} -sdf
   ②`assign txd = rxd` 纯环回 bit,PC 发什么回什么,排除 SoC/固件变量;
   ③对照官方参考设计 UPC。
 
-## 9. 已知边界(截至 3.45.4 / FT110826)
+## 9. 外设组合覆盖(3.46.0 批量仿真,SL2S-25E+固件启动仿真)
+
+7/8 配置启动仿真通过(固件 Hello 全文解出):gpio/spi0/i2c0/timer0/
+plic+clint/apb0/ram128k(148s)。**usr_axi0 仿真挂起是 TB 伪象**:使能后
+IP 多出 29 个 io_axi0_* 端口,TB 悬空→X 态灌入 AXI 交叉开关→CPU 总线挂;
+TB 需 tie-off 才能仿(真机引脚有拉载不受影响)。**中断功能级验证**
+(PLIC/CLINT 真实触发)仍需外设驱动固件,未覆盖。
+
+## 10. OpenOCD 联调状态(A1,2026-11-10)
+
+- **cpu0.yaml 阻塞已解除**:最小 yaml(workspace/software/cpu0.yaml,
+  内容 `debug:`+`  - hardwareBreakpointCount: 4` 两行)被厂商 OpenOCD
+  接受,demo 工程缺失不再阻塞配置解析(参数以官方原件为准仍建议补齐)。
+- **硬件阻塞**:厂商 OpenOCD **无 XiST 线缆驱动**(binary 内无 xist
+  adapter,原版含 cmsis-dap/jlink/ftdi)——需 CMSIS-DAP/J-Link/FTDI 探针
+  物理接软 TAP(本次约束: J14=TDO J15=TDI K15=TMS J16=TCK,FMC
+  LA02-LA03)。OpenOCD 报 "unable to find a matching CMSIS-DAP device"
+  即卡在此。
+
+## 11. 已知边界(截至 3.46.0 / FT110826)
 
 - **UG00034 官方附件已获取**(2026-11-10,开放目录 http://211.157.136.83/hqfpga_xist/IP_manage/UG00034_Tiny_SoC_IP/):
   bin_regen.zip(与逆向格式逐条对照一致——定音获官方证实)/build_tools.zip
@@ -162,4 +181,4 @@ nl.write {sim_plain.v}               # 明文 + 可选 nl.write {...} -sdf
   关键参数(实录):TAP `irlen 4 / expected-id 0x10001fff`,
   `target vexriscv dbgbase 0xF00F0000`,readWaitCycles 12,启动即
   soft_reset_halt;需环境变量 workspace_loc + workspace/software/cpu0.yaml
-  (cpu0.yaml 在未发布的 demo 参考工程内,待厂商补)。
+  (最小可用 yaml 见 §10,官方原件仍待厂商补)。
