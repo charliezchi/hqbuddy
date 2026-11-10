@@ -134,7 +134,21 @@ nl.write {sim_plain.v}               # 明文 + 可选 nl.write {...} -sdf
 - 资源(4KB RAM 基准):默认配置(1×UART)1580 LUT/4 RAMB18K;每开一个
   AXI+165、APB+99、SPI/I2C/TIMER 若干;PLIC/CLINT 另计(UG 表 1)。
 
-## 8. 已知边界(截至 3.45.2 / FT110826)
+## 8. 板卡实测(SA5T-100-D0A2,2026-11-10 通过)
+
+- 全链:`-tinysoc fw`(固件进 IP)→ `-build` → `-cable --sealion <bin>
+  --model SA100K_A2 --Burst` 下载 → CPU 从 EBR 初值启动 → UART 115200 实收
+  `Hello TinySoC!`。**EBR init 随 bit 上电加载已实板证实**。
+- 注意 `-dl -f` 只拉起 GUI 下载器;脚本化下载用 `-cable --sealion <bin>
+  --model <型号> --Burst`(型号先 `-cable --detect_model` 实测)。
+- 引脚坑:实际板载器件可能是 D0A2 变体(boards.md 记的是 8F676C)——
+  先 `--detect_model` 定器件;UART tx 脚以官方 DG05303 demo UPC 为准
+  (tx=L23, boards.md 的 K25 对 D0A2 板不适用)。
+- 引脚考古法(引脚存疑时 10 分钟定位):①顶层 LED 心跳证时钟/逻辑活;
+  ②`assign txd = rxd` 纯环回 bit,PC 发什么回什么,排除 SoC/固件变量;
+  ③对照官方参考设计 UPC。
+
+## 9. 已知边界(截至 3.45.4 / FT110826)
 
 - **UG00034 官方附件已获取**(2026-11-10,开放目录 http://211.157.136.83/hqfpga_xist/IP_manage/UG00034_Tiny_SoC_IP/):
   bin_regen.zip(与逆向格式逐条对照一致——定音获官方证实)/build_tools.zip
