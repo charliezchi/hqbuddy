@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.46.1
+3.46.2
 
 ## 功能特点
 
@@ -344,7 +344,7 @@ hqbuddy -udev SA5Z-30-D0-8U324C -o out_dir      # 指定输出目录（默认当
 | 选择 | 文件 | 内容 |
 | --- | --- | --- |
 | `--arch`（默认含） | `_arch.txt` / `_arch.html` / `_arch_tiles.csv` + `_arch_sites.csv` | tile 架构图：`--fmt html`（默认）出着色网格地图（tile 类型配色 + site 名称图 + 资源 Count 表），`csv` 出 36×N 网格两份，`text` 为原生全量文本 |
-| `--iotype`（默认含） | `_iotype.txt` | 各 bank 支持的 IO 电气标准表 |
+| `--iotype`（默认含） | `_iotype.txt` | 各 bank 支持的 IO 电气标准表（表格同时回显到终端） |
 | `--pkg`（默认含） | `_pkg.txt` + `_pkg.csv` | 封装管脚：IO/site/tile/bank/desc（CSV 供 Excel 筛选） |
 
 ### 编译 XiST 仿真库

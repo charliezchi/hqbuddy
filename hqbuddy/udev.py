@@ -6,7 +6,8 @@ throwaway hqfpga session and post-processes the output:
 - arch   : tile-grid map (two 36xN grids: tile types and site names), resource
            Count summary.  Rendered as colored HTML (default), CSV, or the raw
            native text.
-- iotype : IO electrical-standard support table (native text).
+- iotype : IO electrical-standard support table (native text), echoed to
+           the terminal as well as written to file.
 - pkg    : package pins (IO/site/tile/bank/desc), native text + a CSV for
            spreadsheet filtering.
 """
@@ -307,6 +308,9 @@ def run_udev(target: str | None, sections: list, out_dir: str | None = None,
         p = base + "_iotype.txt"
         open(p, "w", encoding="utf-8").write(sections_out["iotype"].strip("\n") + "\n")
         written.append(p)
+        # 表格同时回显到终端（写文件之外的即时可读输出）
+        print("")
+        print(sections_out["iotype"])
     if "pkg" in sections_out:
         # <base>_pkg.txt was written natively via 'udev.pkg.report -file
         written.append(base + "_pkg.txt")
