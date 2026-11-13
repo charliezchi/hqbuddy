@@ -37,7 +37,7 @@ description: Use when working with XiST HqFpga FPGA development - .hqprj project
 - `references/families.md` — 产品族命名对照(Sealion 2000=SL2*/SEALION、Seal 5000=SA5*/SEAL、Shark 7000=SK7*/SHARK;查器件归属/家族用法时读)
 - `references/boards.md` — 开发板板卡资料查阅（`references/boards/` 下各开发板的 FPGA 引脚分配；做引脚约束、对接开发板外设时先读这个）
 - `references/hqbuddy.md` — hqbuddy 封装工具完整用法（操作 HqFpga 前先读这个，优先用 hqbuddy 而非原生命令）
-- `references/ipdepot.md` — IP 库（ipdepot）结构与 .hqip 配置修改方法（要配置/修改 IP 时读这个）
+- `references/ipdepot.md` — IP 库（ipdepot）结构与 .hqip 配置修改方法（要配置/修改 IP 时读这个）。生成网表、排查后端或封装自有 RTL 时使用 `ipcreator` skill
 - `references/commands.md` — U 命令分类地图（先查这里定位命令，再读对应详情文件）
 - `references/tcl_commands_curated.md` — 精选实用命令（约束体检、CDC/扇出/层次/功耗报告、交互式 SDC、综合选项、ECO、管脚查询等，手册未覆盖的都在这）
 - `references/tcl_commands_help.md` — 全量 1055 个 TCL 命令的实测 help dump（含手册未载的隐藏命令；查命令语法先试 `help <命令名>`）

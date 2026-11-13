@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the hqfpga skill for Kimi Code CLI, Claude Code, ZCode and/or Codex.
+"""Install the hqfpga and ipcreator skills for Kimi Code CLI, Claude Code, ZCode and/or Codex.
 
 Usage:
     python install_skill.py              # install to all targets (default)
@@ -9,7 +9,7 @@ Usage:
     python install_skill.py --codex      # only Codex (~/.agents/skills/)
     python install_skill.py --kimi --claude --zcode --codex
 
-Copies skills/hqfpga/ from this repository to the selected user-level skills
+Copies the bundled skills from this repository to the selected user-level skills
 directories, replacing any previous version.
 """
 
@@ -19,52 +19,54 @@ import shutil
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SKILL_NAME = "hqfpga"
-SRC = os.path.join(SCRIPT_DIR, "skills", SKILL_NAME)
+SKILL_NAMES = ("hqfpga", "ipcreator")
+SKILLS_DIR = os.path.join(SCRIPT_DIR, "skills")
 
 TARGETS = {
     "kimi": {
         "label": "Kimi Code",
-        "dst": os.path.join(os.path.expanduser("~"), ".kimi-code", "skills", SKILL_NAME),
+        "dst": os.path.join(os.path.expanduser("~"), ".kimi-code", "skills"),
         "restart_hint": "Restart Kimi Code CLI (or start a new session) to pick it up.",
     },
     "claude": {
         "label": "Claude Code",
-        "dst": os.path.join(os.path.expanduser("~"), ".claude", "skills", SKILL_NAME),
+        "dst": os.path.join(os.path.expanduser("~"), ".claude", "skills"),
         "restart_hint": "Start a new Claude Code session to pick it up.",
     },
     "zcode": {
         "label": "ZCode",
-        "dst": os.path.join(os.path.expanduser("~"), ".zcode", "skills", SKILL_NAME),
+        "dst": os.path.join(os.path.expanduser("~"), ".zcode", "skills"),
         "restart_hint": "Restart ZCode CLI (or start a new session) to pick it up.",
     },
     "codex": {
         "label": "Codex",
-        "dst": os.path.join(os.path.expanduser("~"), ".agents", "skills", SKILL_NAME),
+        "dst": os.path.join(os.path.expanduser("~"), ".agents", "skills"),
         "restart_hint": "Codex detects skill changes automatically; restart Codex if it does not appear.",
     },
 }
 
 
 def install_to(target_key):
-    """Install the skill to one target. Returns True on success."""
+    """Install the bundled skills to one target."""
     target = TARGETS[target_key]
     label = target["label"]
-    dst = target["dst"]
+    skills_dir = os.path.realpath(target["dst"])
+    os.makedirs(skills_dir, exist_ok=True)
 
-    if os.path.isdir(dst):
-        shutil.rmtree(dst)
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
-    shutil.copytree(SRC, dst)
-
-    print(f"[OK] Installed {SKILL_NAME} skill to {dst} ({label})")
+    for name in SKILL_NAMES:
+        dst = os.path.join(skills_dir, name)
+        if os.path.realpath(dst) != dst:
+            raise OSError(f"Skill destination redirects outside its intended path: {dst}")
+        if os.path.isdir(dst):
+            shutil.rmtree(dst)
+        shutil.copytree(os.path.join(SKILLS_DIR, name), dst)
+        print(f"[OK] Installed {name} skill to {dst} ({label})")
     print(f"     {target['restart_hint']}")
-    return True
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Install the hqfpga skill to Kimi Code, Claude Code, ZCode and/or Codex.",
+        description="Install the hqfpga and ipcreator skills to Kimi Code, Claude Code, ZCode and/or Codex.",
     )
     parser.add_argument(
         "--kimi",
@@ -90,9 +92,11 @@ def parse_args(argv=None):
 
 
 def main(argv=None):
-    if not os.path.isdir(SRC):
-        print(f"[FAIL] Skill source not found: {SRC}")
-        sys.exit(1)
+    for name in SKILL_NAMES:
+        source = os.path.join(SKILLS_DIR, name)
+        if not os.path.isfile(os.path.join(source, "SKILL.md")):
+            print(f"[FAIL] Skill source not found: {source}")
+            sys.exit(1)
 
     args = parse_args(argv)
     selected = [key for key in TARGETS if getattr(args, key)]

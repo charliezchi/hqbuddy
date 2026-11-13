@@ -9,7 +9,7 @@ Usage:
     build.py            一键构建脚本（收件人运行 python build.py 自行出 exe）
     hqbuddy/            Python 源码包（需 Python 3.10+）
     templates/          工程模板（-new_prj / -new_soc 等所需，已内嵌进 exe）
-    skills/hqfpga/      AI Agent skill 文件
+    skills/             AI Agent skill 文件
     install_skill.py    skill 安装脚本
     README.md           使用说明
     LICENSE             许可证
@@ -34,7 +34,7 @@ BUNDLED = [
     ("install_skill.py", "install_skill.py"),
 ]
 
-TREES = ["hqbuddy", "templates", os.path.join("skills", "hqfpga")]
+TREES = ["hqbuddy", "templates", "skills"]
 
 
 def get_version() -> str:
@@ -97,7 +97,7 @@ def main():
     print(f"[OK] 导出完成: {zip_path}")
     print(f"     {n_files} 个文件, {size_mb:.1f} MB")
     print(f"     内容: build.py / hqbuddy/ 源码 / templates/ / README.md / "
-          f"LICENSE / install_skill.py / skills/hqfpga/")
+          f"LICENSE / install_skill.py / skills/")
     print("     收件人解压后在目录内运行 python build.py 自行构建 "
           "hqbuddy.exe（需 Python 3.10+，PyInstaller 会自动安装）。")
 

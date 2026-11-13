@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.46.2
+3.47.0
 
 ## 功能特点
 
@@ -58,7 +58,7 @@ python export.py                 # 打包到仓库根目录
 python export.py -o <dir>        # 指定输出目录
 ```
 
-产出 `hqbuddy_v<版本>_src.zip`（约 2 MB），解压为 `hqbuddy_v<版本>/` 目录，内含 `build.py`、`hqbuddy/` 源码包、`templates/` 工程模板、`skills/hqfpga/`、`install_skill.py`、`README.md` 与 `LICENSE`。**包内不含 exe**——收件人在解压目录运行 `python build.py` 自行构建（需 Python 3.10+，PyInstaller 自动安装，构建后自动注册 PATH 并可选安装 AI skill），之后的首次使用配置与在线用户一致。
+产出 `hqbuddy_v<版本>_src.zip`（约 2 MB），解压为 `hqbuddy_v<版本>/` 目录，内含 `build.py`、`hqbuddy/` 源码包、`templates/` 工程模板、`skills/`、`install_skill.py`、`README.md` 与 `LICENSE`。**包内不含 exe**——收件人在解压目录运行 `python build.py` 自行构建（需 Python 3.10+，PyInstaller 自动安装，构建后自动注册 PATH 并可选安装 AI skill），之后的首次使用配置与在线用户一致。
 
 ## ⚠️ 首次使用：配置 HqFPGA 安装路径（必读）
 
@@ -683,7 +683,7 @@ hqbuddy/
 │   └── user_manual/      # HqFpga 官方用户手册（md / pdf）
 ├── hqbuddy.bat           # 开发入口（调用 Python 源码）
 ├── build.py              # 构建 / 清理统一管理，build 成功后自动注册 PATH 并安装 Skill
-├── install_skill.py      # 安装 hqfpga Skill 到 Kimi Code / Claude Code / ZCode / Codex 用户级 skills 目录
+├── install_skill.py      # 安装 hqfpga 和 ipcreator Skill 到 Kimi Code / Claude Code / ZCode / Codex 用户级 skills 目录
 ├── .gitignore
 ├── .gitattributes
 ├── AGENTS.md
@@ -691,18 +691,18 @@ hqbuddy/
 └── README.md
 ```
 
-## AI Agent Skill：hqfpga
+## AI Agent Skills
 
-仓库内置一个面向 AI agent 的 Skill，让 agent 理解 HqFpga 的操作流程与 U 命令体系（设计流程、99 个命令参考、UDM、SDC/物理约束），由官方用户手册蒸馏而来。
+仓库内置两个 Skill。 [hqfpga](skills/hqfpga/SKILL.md) 覆盖 HqFpga 工程、U 命令和实现流程。 [ipcreator](skills/ipcreator/SKILL.md) 覆盖已有 IP 的无界面生成和自有 RTL 的通用 HDL IP 封装。
 
 支持安装到：
 
-| 目标 | 目录 | 生效方式 |
+| 目标 | Skills 目录 | 生效方式 |
 | --- | --- | --- |
-| Kimi Code | `~/.kimi-code/skills/hqfpga/` | 重启 Kimi Code CLI 或新开会话 |
-| Claude Code | `~/.claude/skills/hqfpga/` | 新开 Claude Code 会话 |
-| ZCode | `~/.zcode/skills/hqfpga/` | 重启 ZCode 或新开会话 |
-| Codex | `~/.agents/skills/hqfpga/` | 自动检测 skill 变化；未出现时重启 Codex |
+| Kimi Code | `~/.kimi-code/skills/` | 重启 Kimi Code CLI 或新开会话 |
+| Claude Code | `~/.claude/skills/` | 新开 Claude Code 会话 |
+| ZCode | `~/.zcode/skills/` | 重启 ZCode 或新开会话 |
+| Codex | `~/.agents/skills/` | 自动检测 skill 变化；未出现时重启 Codex |
 
 运行 `python build.py` 打包时会自动安装到上述四个目标；也可单独手动安装：
 
@@ -714,9 +714,9 @@ python install_skill.py --zcode      # 仅 ZCode
 python install_skill.py --codex      # 仅 Codex
 ```
 
-可组合多个选项，例如 `python install_skill.py --kimi --codex`。Codex 使用官方文档列出的用户级目录 `~/.agents/skills/`（Windows 下为 `%USERPROFILE%\.agents\skills\`），参见 [Codex skills 文档](https://learn.chatgpt.com/docs/build-skills)。重复安装会替换所选目标目录中的旧版 hqfpga skill。
+可组合多个选项，例如 `python install_skill.py --kimi --codex`。Codex 使用官方文档列出的用户级目录 `~/.agents/skills/`（Windows 下为 `%USERPROFILE%\.agents\skills\`），参见 [Codex skills 文档](https://learn.chatgpt.com/docs/build-skills)。重复安装会替换所选目标目录中的同名 skill。
 
-Skill 源文件在 `skills/hqfpga/`，随仓库版本管理；开发板板卡资料（`skills/hqfpga/references/boards/`）也随 skill 一起安装，安装后 agent 可直接查阅。
+Skill 源文件和参考资料随仓库版本管理。安装会在目标目录中分别创建 `hqfpga/` 和 `ipcreator/`。
 
 ## License
 

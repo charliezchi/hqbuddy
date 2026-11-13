@@ -41,7 +41,7 @@ ipdepot/
 </cfg_group>
 ```
 
-- **cfg 属性**：`name`（短名）、`hide="1"`（不写入 .hqip）、`disp_only="1"`（派生只读量，不可改）
+- **cfg 属性**：`name`（短名）、`hide="1"`（在 GUI 隐藏，组内隐藏项仍可能写入 .hqip）、`disp_only="1"`（派生只读量，不可改）
 - **values 块**（合法值的关键）：`type`（bool/int/double/enum/text）、`range`（数值上下限，冒号或空格分隔）、`default`；枚举型用 `<value desc="显示名">实际值</value>` 列出合法值——**写入 .hqip 的是 value 文本，不是 desc**
 - **desc 与 {%MSGID%}**：`desc` 中的 `{%xxx%}` 是翻译 ID，在同目录 `trans_lang.chs` 的 `TRANS_TABLE` 中查中文含义。例如 pll 的 `{%freq%}` → "频率(兆赫兹)"
 
