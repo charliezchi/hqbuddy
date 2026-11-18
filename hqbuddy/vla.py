@@ -1253,20 +1253,25 @@ def _hier_derive_top(proj: dict, bscan_path: str, la_sel: dict,
 
 def _check_session_tree(proj: dict) -> None:
     """A copied project carries the ORIGINAL tree's absolute paths inside
-    hqins_run (.hqins PROJECT FILES / import tcls) — refresh and hier-build
-    would silently read the ORIGINAL sources (R6-D2: edits in the copy
-    build the old logic).  Refuse with the recovery path."""
-    hqins = os.path.join(proj["hqins_dir"], "hq_import.hqins")
-    if not os.path.isfile(hqins):
-        return
+    hqins_run (.hqins PROJECT FILES / hq_srcfile.f / import tcls) — refresh
+    and hier-build would silently read the ORIGINAL sources (R6-D2: edits
+    in the copy build the old logic).  Refuse with the recovery path."""
+    import glob as _g
+    scans = [os.path.join(proj["hqins_dir"], "hq_import.hqins")]
+    scans += [f for f in _g.glob(os.path.join(proj["hqins_dir"], "**", "*"))
+              if os.path.isfile(f) and f.endswith((".f", ".tcl", ".json"))]
     work = os.path.normcase(os.path.normpath(proj["work_dir"]))
     bad = []
-    for ln in open(hqins, "r", encoding="utf-8", errors="replace"):
-        ln = ln.strip()
-        if re.match(r"^[A-Za-z]:[/\\]", ln):
+    seen = set()
+    for fp in scans:
+        for ln in open(fp, "r", encoding="utf-8", errors="replace"):
+            ln = ln.strip()
+            if not re.match(r"^[A-Za-z]:[/\\]", ln):
+                continue
             p_ = os.path.normcase(os.path.normpath(ln))
-            if not p_.startswith(work):
-                bad.append(ln)
+            if not p_.startswith(work) and p_ not in seen:
+                seen.add(p_)
+                bad.append(f"{os.path.basename(fp)}: {ln}")
     if bad:
         print("Error: hqins_run 内嵌了另一棵目录树的源文件路径（工程被复制过？）——")
         print("       refresh/hier-build 会静默读原树的源文件，本目录的改动不可见。")
@@ -1419,6 +1424,7 @@ def cmd_hier_build(args: list) -> None:
         print("Error: 无 -refresh 内容指纹基线（hqins_run/hq_import/.refresh_fingerprint.json 缺失）——")
         print("       3.51.2 起的刷新会写入指纹；删除 hqins_run/ 重 -init/-add 后 -refresh 一次，")
         print("       再 -vla -hier-build。")
+        sys.exit(1)
 
     derived, endpoint_map = _hier_derive_top(proj, bscan, la_sel, vio_sel, c)
     print(f"[OK] 派生顶层已生成: {derived}")

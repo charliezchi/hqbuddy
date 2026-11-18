@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.51.3
+3.51.4
 
 ## 功能特点
 
@@ -743,7 +743,7 @@ Skill 源文件和参考资料随仓库版本管理。安装会在目标目录�
 
 [LICENSE](LICENSE)## 当前版本
 
-3.51.3
+3.51.4
 
 ## 功能特点
 

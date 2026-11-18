@@ -160,13 +160,22 @@ def inputs_match(old: dict | None, new: dict) -> tuple:
     diffs: list = []
 
     def entry_map(entries):
-        return {e["path"]: e for e in entries}
+        # older manifests recorded double-slash $WORK_DIR expansions —
+        # normalize keys or a copied project shows up as a remove+add pair
+        # of the same file (R7-D3)
+        return {os.path.normpath(e["path"]).replace(os.sep, "/"): e
+                for e in entries}
 
     # sources: order matters (file list order affects elaboration)
     if old.get("project") != new["project"]:
         diffs.append("工程配置 (.hqprj 字段)")
 
-    os_, ns_ = old.get("sources", []), new["sources"]
+    # path keys normalized: older manifests recorded double-slash $WORK_DIR
+    # expansions which would read as remove+add of the same file (R7-D3)
+    os_ = [{**e, "path": os.path.normpath(e["path"]).replace(os.sep, "/")}
+           for e in old.get("sources", [])]
+    ns_ = [{**e, "path": os.path.normpath(e["path"]).replace(os.sep, "/")}
+           for e in new["sources"]]
     if [e["path"] for e in os_] != [e["path"] for e in ns_]:
         oldp, newp = {e["path"] for e in os_}, {e["path"] for e in ns_}
         removed, added = sorted(oldp - newp), sorted(newp - oldp)
