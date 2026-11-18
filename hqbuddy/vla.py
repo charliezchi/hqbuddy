@@ -363,8 +363,11 @@ def cmd_status(args: list) -> None:
             inputs_now = buildman.compute_inputs(proj, version, [], {})
             fresh, diffs = buildman.inputs_match(m, inputs_now)
             stale = "" if fresh else                 f"  [WARN] 输入已变化（清单过期）: {'; '.join(diffs)}"
+            binp = m.get("outputs", {}).get("bin")
+            if (not binp) or (not os.path.isfile(binp)):
+                stale += "  [WARN] 已验收位流文件不存在——重新 -vla -build"
             print(f"Build   : {m.get('build_id')}（{'已验收' if fresh else '已过期'}，bin "
-                  f"{(m.get('outputs', {}).get('bin') or '?').rsplit('/', 1)[-1]}）{stale}")
+                  f"{(binp or '?').rsplit('/', 1)[-1]}）{stale}")
             print(f"  insight.check has_vla={vc.get('vla')} has_vio={vc.get('vio')}"
                   "   (has_vio=0 是 FT111526 已知行为——联合 VIO 判据看"
                   " .hqip VIO 段与 vio_flag)")
@@ -857,8 +860,74 @@ def cmd_vio_write(args: list) -> None:
     ]
     _ins._run_hqfpga_cmds(version["hqfpga_path"], cmds, cwd=session["hqins_dir"])
     _ins._play_svf(version["cable_path"], svf)
+    _record_vio_drive(session, outs, values)
     print("[OK] VIO 输出已写入（联合模式 is_vla_mode=True）: " +
           ", ".join(f"{pp['name']}=0x{values[pp['name']]:X}" for pp in outs))
+
+
+def _record_vio_drive(session: dict, outs: list, values: dict) -> None:
+    """Record the last driven VIO output vector — board-verified (R6-D1):
+    every LA capture shifts the shared JTAG chain and DESTROYS the on-board
+    VIO output registers, so -capture replays the vector afterwards."""
+    rec = {"outputs": [{"name": pp["name"], "width": pp["width"],
+                        "value": values.get(pp["name"], 0)} for pp in outs]}
+    path = os.path.join(session["hqins_dir"], ".vio_drive.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(rec, f, indent=2)
+
+
+def _replay_vio_drive(proj: dict, c: dict, session: dict) -> None:
+    """Replay the last driven VIO vector (or the contract init) after a
+    capture — restores the 'drive VIO then watch LA' workflow (R6-D1)."""
+    vio = c.get("vio")
+    if not vio or not vio["outputs"]:
+        return
+    drv = None
+    path = os.path.join(session["hqins_dir"], ".vio_drive.json")
+    if os.path.isfile(path):
+        try:
+            drv = json.load(open(path, "r", encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            drv = None
+    if drv:
+        vals = {p["name"]: p["value"] for p in drv.get("outputs", [])}
+        label = "上次驱动值"
+    else:
+        vals = {}
+        for pp in vio["outputs"]:
+            init = pp.get("init") or "0"
+            m = re.match(r"^(\d+)'([hbd])([0-9a-fA-FxX_]+)$", init)
+            if m:
+                base = {"h": 16, "b": 2, "d": 10}[m.group(2).lower()]
+                core = m.group(3).replace("_", "")
+                iv = 0 if "x" in core.lower() else int(core, base)
+            else:
+                try:
+                    iv = int(init, 0)
+                except ValueError:
+                    iv = 0
+            vals[pp["name"]] = iv
+        label = "契约初值"
+    out_str = ""
+    for pp in vio["outputs"]:
+        v = vals.get(pp["name"], 0)
+        out_str = format(v, f"0{pp['width']}b") + out_str
+    total = len(out_str)
+    version = _combined_version()
+    from . import insight as _ins
+    svf = os.path.join(session["hqins_dir"], "vio_restore.svf")
+    cmds = [
+        f"insight.svf_generator.start -svf_file_path {{{_ins._tcl_path(svf)}}} "
+        f"-device_die {proj['die']}",
+        f"insight.svf_generator.vio_write -value {total}'b{out_str} "
+        f"-radix_type Binary -is_vla_mode True -is_multi_window False",
+        "insight.svf_generator.write",
+    ]
+    _ins._run_hqfpga_cmds(version["hqfpga_path"], cmds, cwd=session["hqins_dir"])
+    _ins._play_svf(version["cable_path"], svf)
+    print(f"[i] capture 后已重放 VIO 输出（{label}: " +
+          ", ".join(f"{pp['name']}=0x{vals.get(pp['name'], 0):X}" for pp in vio["outputs"]) +
+          "）——LA 布防序列会重置板上 VIO 输出寄存器（R6-D1 板测定标）。")
 
 
 def cmd_trig(args: list) -> None:
@@ -911,6 +980,11 @@ def cmd_capture(args: list) -> None:
         print(f"Error: -timeout 必须为正整数，得到: {timeout}")
         sys.exit(1)
     _ins.run_capture(session, timeout, force, out_prefix)
+    # board-verified (R6-D1): the LA arm/capture sequence shifts the shared
+    # JTAG chain and destroys the on-board VIO output registers — restore
+    # the user's driven vector (or contract init) so the 'drive VIO -> watch
+    # LA' workflow survives a capture
+    _replay_vio_drive(proj, c, session)
 
 
 def cmd_program(args: list) -> None:
@@ -1177,6 +1251,31 @@ def _hier_derive_top(proj: dict, bscan_path: str, la_sel: dict,
     return out_path, endpoint_map
 
 
+def _check_session_tree(proj: dict) -> None:
+    """A copied project carries the ORIGINAL tree's absolute paths inside
+    hqins_run (.hqins PROJECT FILES / import tcls) — refresh and hier-build
+    would silently read the ORIGINAL sources (R6-D2: edits in the copy
+    build the old logic).  Refuse with the recovery path."""
+    hqins = os.path.join(proj["hqins_dir"], "hq_import.hqins")
+    if not os.path.isfile(hqins):
+        return
+    work = os.path.normcase(os.path.normpath(proj["work_dir"]))
+    bad = []
+    for ln in open(hqins, "r", encoding="utf-8", errors="replace"):
+        ln = ln.strip()
+        if re.match(r"^[A-Za-z]:[/\\]", ln):
+            p_ = os.path.normcase(os.path.normpath(ln))
+            if not p_.startswith(work):
+                bad.append(ln)
+    if bad:
+        print("Error: hqins_run 内嵌了另一棵目录树的源文件路径（工程被复制过？）——")
+        print("       refresh/hier-build 会静默读原树的源文件，本目录的改动不可见。")
+        print("       恢复：删除 hqins_run/ 后重新 -insight -init/-add/-refresh。")
+        for ln in bad[:3]:
+            print(f"       例: {ln}")
+        sys.exit(1)
+
+
 def cmd_hier_build(args: list) -> None:
     """Handle 'hqbuddy -vla -hier-build --la <inst_path> [--vio-in <inst_path>[:hi:lo]]
     [<.hqprj>]': per-instance cross-hierarchy probing (P2 release gate).
@@ -1252,6 +1351,11 @@ def cmd_hier_build(args: list) -> None:
                       "（应为 <实例路径>:<msb>:<lsb>，如 layer_top/u_a:3:0）")
                 sys.exit(1)
             vio_sel["msb"], vio_sel["lsb"] = int(parts[0]), int(parts[1])
+            if vio_sel["msb"] < vio_sel["lsb"]:
+                print(f"Error: --vio-in 切片 msb < lsb: :{rng}")
+                sys.exit(1)
+
+    _check_session_tree(proj)
 
     # freshness: the bscan netlist must be newer than every elaborated source
     bscan = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
@@ -1312,8 +1416,9 @@ def cmd_hier_build(args: list) -> None:
             print("Error: 有源文件比 bscan 网表新——先 -insight -refresh 再 -hier-build: "
                   + ", ".join(os.path.basename(f) for f in stale))
             sys.exit(1)
-        print("[WARN] 无 -refresh 内容指纹基线（旧版刷新产物）——陈旧检测退化为 mtime，"
-              "建议重跑 -insight -refresh。")
+        print("Error: 无 -refresh 内容指纹基线（hqins_run/hq_import/.refresh_fingerprint.json 缺失）——")
+        print("       3.51.2 起的刷新会写入指纹；删除 hqins_run/ 重 -init/-add 后 -refresh 一次，")
+        print("       再 -vla -hier-build。")
 
     derived, endpoint_map = _hier_derive_top(proj, bscan, la_sel, vio_sel, c)
     print(f"[OK] 派生顶层已生成: {derived}")

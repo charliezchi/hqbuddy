@@ -1197,14 +1197,10 @@ def _verify_vcd(vcd_path: str, offset: int, force: bool,
         # free-running design, trigger position is only derivable from the
         # pointer).  Report marker semantics honestly.
         verdict["marker_semantics"] = "writer-synthesized (overflow tail window)"
-        pos = ""
-        if pointer is not None:
-            verdict["hardware_trigger_pos_est"] = (offset - pointer) % len(times) \
-                if len(times) else None
-            pos = f"，触发样本位置估算 (offset-pointer)%N = {verdict['hardware_trigger_pos_est']}"
         print(f"[OK] VCD verified: {len(times)} samples (offset {offset}), 时间戳连续")
-        print(f"     [NOTE] overflow 尾窗：trigger_event 标记为写出端按布防偏移注入"
-              f"{pos}——标记位置不等于硬件触发样本位置。")
+        print("     [NOTE] overflow 尾窗：trigger_event 标记为写出端按布防偏移注入——")
+        print("     标记位置不等于硬件触发样本位置（自由计数器下布防值按固有周期重复出现，")
+        print("     硬件触发样本位置无法从尾窗唯一推断）。")
     else:
         where = f", trigger @{trig_idx[0]}" if trig_idx else ""
         print(f"[OK] VCD verified: {len(times)} samples{where} (offset {offset}), "
@@ -2348,7 +2344,9 @@ def _preflight_check(proj: dict) -> None:
             for line in open(h, encoding="utf-8", errors="replace"):
                 if line.startswith("device="):
                     dev = line.split("=", 1)[1].strip()
-                    if dev and die and dev != die:
+                    # .hqip device carries the full part (package/speed suffix)
+                    # while DIE is the bare die — match either direction
+                    if dev and die and dev != die and dev not in die and die not in dev:
                         warns.append(f"IP 器件不匹配: {os.path.basename(h)} device={dev} != DIE={die}")
                     break
         except OSError:
