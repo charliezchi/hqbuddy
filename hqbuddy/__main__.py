@@ -225,7 +225,18 @@ Debug:
                                         Arm trigger and capture waveform to VCD
                                         (-force: capture immediately; default timeout 60s;
                                         -o: output prefix, default <top>_insight → <prefix>_0_ww.vcd)
-  -insight -run                         Run the instrumented implementation flow
+  -insight -run [--reuse-only|--legacy] Instrument-if-stale + staged implementation:
+                                        build-manifest freshness (sources/includes/IP/device/tool/
+                                        probes/storage fingerprints), private build dir with per-stage
+                                        acceptance (synth/pack/place/route/bitgen), publish-or-rollback;
+                                        no downloader GUI. --reuse-only: strict reuse, nonzero on any
+                                        input change; --legacy: official flow wrapper fallback
+  -insight -program [--allow-violation] Download the accepted bin (hash-verified against the
+                                        build manifest; refuses on timing violation unless
+                                        --allow-violation) and record the programming stamp so
+                                        -capture can verify the board runs this build
+  -insight -sample-period <ns>          Explicitly set the sample-clock period (aligns ddf/hqins,
+                                        fixes VCD time axis; auto-synced from SDC at -run)
   -insight -init                        Init HqInsight project (no GUI needed)
   -insight -refresh                     Rebuild insight_ip.v + hq_import_with_bscan.v
                                         in place, keeping probe selections and trigger

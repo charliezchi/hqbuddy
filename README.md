@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.47.1
+3.48.0
 
 ## 功能特点
 
@@ -15,6 +15,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
 - **XPN 生成**：从布线后的设计生成 XPN 文件（生成后自动打开；`-no_open` 静默）。前置条件：**对应实现流的布线结果必须已存在，且两条流的库不通用**——普通模式读产品流 `hq_run`（先 `-build`），`-ins` 模式读 insight 流 `hqins_impl`（先 `-insight -run`）；`-ins -from_src` 源码直达：布线结果缺失时自动补跑 insight 实现（一条命令源码到 XPN）
 - **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；改 RTL/IP 后 `-refresh` 原地重建插桩产物（总是重插桩刷新信号库，RTL 逻辑/属性改动可靠带入；保留信号选择与触发条件，等价 GUI 保存）；`-capture` 支持自定义超时与输出前缀
+- **插桩实现可靠性（3.48.0）**：`-insight -run` 统一新鲜度入口——构建清单对源文件顺序/内容、include、IP 依赖、器件、工具版本、探针选择与采样参数做内容指纹，任一变化自动重插桩再实现；实现走私有构建目录分阶段验收（synth/pack/place/route/bitgen 逐段 `@STAGE` 标记 + 产物核对），全通过才发布到 `hqins_impl`，失败保留上次可用结果与失败现场；位流头与工程比对防旧/伪产物发布；全程不弹下载器窗口（旧官方流程用 `--legacy` 兜底）。`-program` 显式下载已验收位流（清单 hash 校验 + 时序违例门槛 + 编程记录）；`-capture` 校验 TDO 一致性并对 VCD 自证（样本连续、触发位置与布防偏移一致）；采样时钟周期自动从 SDC 对齐到 DDF/.hqins（VCD 时间轴按真实时钟标注，可用 `-sample-period` 显式指定）；探针端点表 `probe_map.json` 固化实例路径/位序/采样域
 - **XPN 转 BIN**：将 XPN 文件通过 `design.bitgen` 转换为 BIN 比特流文件，成功后自动探测板上型号并下载（cable.exe `--Burst`，`-no_dl` 只生成不下载）；不指定 xpn 时批量转换当前目录所有 `.xpn` 并输出结果报告，多个 xpn 时不逐个下载，而是转换完后唤起 `-dl` GUI 下载器
 - **布线热力图**：从布线后的 XPN 生成 rtheatmap 查看器的输入 JSON 并自动打开 GUI 热力图（`-heatmap`），等价 GUI 的 Routing Heatmap Viewer（布线资源使用率按 tile/线型展示）；`-no_open` 静默生成（agent 用），`-o` 自定义输出，`-lang chs|eng` 查看器语言
 - **布局图/布线图**：从 XPN 生成官方查看器输入并自动打开 GUI——`-floorplan` 走 `dconv.dev2chipedit`/`dconv.xpn2chipedit` + ChipEditor 布局查看器（读布局信息，无需等布线），`-routing` 走 `rt.genRoutingResult` + rtviewer 布线查看器（逐 net 走线路径，需布线后 XPN）；选项与 `-heatmap` 一致；均为 hqfpga 官方用法（xpn_util.tcl）
@@ -257,7 +258,11 @@ hqbuddy -insight -trig "state EQ 4 AND dq_err EQ 0 AND busy RISE"   # 多条件�
 hqbuddy -insight -capture                  # 布防并等待触发，抓取波形（默认超时 60s）
 hqbuddy -insight -capture -timeout 120     # 自定义超时
 hqbuddy -insight -capture -force           # 强制触发，立即抓取
-hqbuddy -insight -run                      # 重跑插桩实现流程（生成含 LA 的 .bin；自动关闭其拉起的 hqdnload 窗口）；源文件比插桩网表新时会警告
+hqbuddy -insight -run                      # 插桩新鲜度检查（清单指纹）→ 输入未变且已发布产物完好时全量跳过；需要时自动重插桩 → 私有目录分阶段实现（synth/pack/place/route/bitgen 逐段验收）→ 通过才发布 .bin；不弹下载器
+hqbuddy -insight -run --reuse-only         # 严格复用：输入有任何变化即非零退出，不重建
+hqbuddy -insight -run --legacy             # 旧官方流程兜底（run_hqprj2hqins_flow wrapper + 下载器窗口看护）
+hqbuddy -insight -program                  # 下载已验收位流（清单 hash 校验；时序违例默认拒绝，--allow-violation 放行实验位流）
+hqbuddy -insight -sample-period 25         # 显式指定采样时钟周期（ns），对齐 ddf/hqins 并修正 VCD 时间轴
 hqbuddy -insight -selftest                 # 回归自测：布防 sig EQ 128 → 抓取 → 校验样本连续且 +1 递增
 hqbuddy -insight -selftest -signal cnt -value 200    # 指定信号与比较值
 ```
@@ -269,6 +274,12 @@ RANGE_C 4 6` → `RANGE_C 1 6`、`RISE OR FALL` → `BOTH`）；并集不连续�
 
 -selftest` 面向确定性计数器类设计（采样的信号每拍 +1），一条命令验证
 "下载 → 布防 → 触发 → 抓取 → VCD 样本完整性"整条链路；HqFPGA 升级后先跑它。
+
+`-capture` 输出中的 `pointer` 是触发后 LA 写指针位置、`overflow=True` 表示存储器
+写满后继续覆盖采集（此时导出的是环形缓冲整窗 1024 样本）；`-verify` 结论行给出
+样本数、触发索引（应等于布防偏移）与时间戳连续性判定。VCD 时间轴按采样时钟周期
+标注（自动从 SDC 对齐或 `-sample-period` 指定）；板上构建与当前不一致时会有
+明确警告且时间轴/触发索引可能失真，此时退出码仍为 0（波形可用但带警告）。
 
 ### VIO 虚拟 IO（运行时读/驱动设计信号，无需重编译）
 

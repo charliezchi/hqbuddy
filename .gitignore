@@ -50,3 +50,7 @@ gtkwave_0.tcl
 # local only, NEVER commit or push (user directive 2026-10-09)
 **/insight_re/
 **/decompiled/
+
+# Test/regression workspace (user directive 2026-11-18): all non-product
+# test assets live here, never versioned
+tmp/

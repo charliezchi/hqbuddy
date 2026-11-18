@@ -12,6 +12,10 @@ import time
 import xml.etree.ElementTree as ET
 
 
+from . import buildman
+from . import jtag
+from . import probes as probes_mod
+from . import stageflow
 from . import launcher
 from .hqprj_parser import extract_filelist, parse_hqprj
 from .utils import wait_process
@@ -108,7 +112,10 @@ def _load_signal_info(proj: dict) -> dict | None:
 
 
 def _collect_signals(info: dict) -> list:
-    """Flatten normal_signals from [SIGNAL JSON INFO] into a signal list."""
+    """Flatten normal_signals from [SIGNAL JSON INFO] into a signal list.
+
+    msb/lsb stay the RAW signal range (compare-unit compatibility); the
+    registered slice travels separately in slice_msb/slice_lsb."""
     signals = []
     for clk_mod in info.get("module_sample_list", []):
         clk = clk_mod.get("clk_signal_name", "")
@@ -120,6 +127,8 @@ def _collect_signals(info: dict) -> list:
                     "clk": clk,
                     "msb": sig.get("raw_msb", 0),
                     "lsb": sig.get("raw_lsb", 0),
+                    "slice_msb": sig.get("slice_msb"),
+                    "slice_lsb": sig.get("slice_lsb"),
                     "sample_type": sig.get("sample_type", 2),
                 })
     return signals
@@ -964,49 +973,15 @@ def _run_hqfpga_cmds(hqfpga_exe: str, cmds: list, cwd: str,
         sys.exit(1)
 
 
-def _play_svf(cable_exe: str, svf_path: str, timeout: int = 120) -> list:
-    """Play an SVF via cable.exe; return the Received:TDO values from svf.log.
-
-    cable.exe rewrites svf.log (next to itself) on every run. The log is
-    shared global state: if it was not refreshed by THIS play (read-only
-    install dir, or a concurrent cable user) the TDO would be stale/empty
-    and the capture would spin to a misleading timeout — abort instead.
-    """
-
-    log_path = os.path.join(os.path.dirname(cable_exe), "svf.log")
-    started = time.time()
-    try:
-        proc = subprocess.run([cable_exe, "--svf", _tcl_path(svf_path),
-                               "--outTDO", CAPTURE_OUT_TDO, "--debug"],
-                              capture_output=True, text=True,
-                              errors="replace", timeout=timeout)
-    except subprocess.TimeoutExpired:
-        print(f"Error: cable.exe 播放 SVF 超时（{timeout}s）——JTAG 连接或板卡状态异常。")
-        sys.exit(1)
-    if proc.returncode != 0:
-        print(f"Error: cable.exe 播放 SVF 失败（code {proc.returncode}）。")
-        _print_tail((proc.stdout or "") + (proc.stderr or ""))
-        sys.exit(1)
-    try:
-        log_mtime = os.path.getmtime(log_path)
-    except OSError:
-        log_mtime = 0
-    if log_mtime < started - 1:
-        print(f"Error: {log_path} 未随本次播放更新——")
-        print("       cable 安装目录只读，或有另一个 hqbuddy/GUI 正在并发使用 cable。")
-        print("       TDO 读数不可信，中止（排查占用后重试）。")
-        sys.exit(1)
-    values = []
-    try:
-        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-    except OSError:
-        lines = []
-    for line in lines:
-        line = line.strip()
-        if line.startswith("Received:TDO(") and line.endswith(")"):
-            values.append(line[len("Received:TDO("):-1])
-    return values
+def _play_svf(cable_exe: str, svf_path: str, timeout: int = 120,
+              session: str | None = None, label: str = "play") -> list:
+    """Play an SVF via cable.exe under the machine-global JTAG lock; return
+    the Received:TDO values.  Delegates to jtag.play_svf, which aborts when
+    the shared svf.log was not refreshed by THIS play (read-only install dir,
+    or a concurrent cable user) — stale TDO would otherwise spin to a
+    misleading timeout.  session: optional transaction-log directory."""
+    return jtag.play_svf(cable_exe, svf_path, out_tdo=CAPTURE_OUT_TDO,
+                         timeout=timeout, session=session, label=label)
 
 
 def _capture_expr_op(cond_path: str) -> str:
@@ -1055,6 +1030,126 @@ def _write_force_ddf(proj: dict) -> str:
     return force_ddf
 
 
+def _verify_vcd(vcd_path: str, offset: int, force: bool,
+                session: str | None) -> dict:
+    """Self-check a captured VCD (P0-A7 decode stage): sample timestamps
+    contiguous, exactly one trigger_event pulse at the expected pre-trigger
+    offset (skipped in -force mode), clock present.  Returns the verdict
+    dict; decode failures print [FAIL] and exit."""
+    try:
+        with open(vcd_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError as e:
+        print(f"Error: VCD 无法读取: {e}")
+        sys.exit(1)
+
+    codes = {}
+    i = 0
+    while i < len(lines):
+        parts = lines[i].split()
+        if len(parts) >= 5 and parts[0] == "$var":
+            codes[parts[3]] = " ".join(parts[4:-1])
+        if parts and parts[0] == "$enddefinitions":
+            break
+        i += 1
+
+    def code_of(name):
+        return next((c for c, n in codes.items() if n == name), None)
+
+    clk_code = code_of("clock_cycle")
+    trig_code = code_of("trigger_event")
+
+    # walk value changes; sample k = the changes emitted at timestamp #k
+    # (real dump_vcd layout: $dumpvars at #0 carries the first sample).
+    # Snapshot k is appended when the NEXT # line (or EOF) is reached.
+    times: list = []
+    clk_vals: list = []
+    trig_vals: list = []
+    values: dict = {}
+    cur_t = 0
+    pending = False
+
+    def _snap():
+        times.append(cur_t)
+        clk_vals.append(values.get(clk_code) if clk_code else None)
+        trig_vals.append(values.get(trig_code) if trig_code else None)
+
+    for line in lines[i:]:
+        line = line.strip()
+        if not line or line.startswith("$"):
+            continue
+        if line.startswith("#"):
+            if pending:
+                _snap()
+                pending = False
+            cur_t = int(line[1:])
+        elif line.startswith("b"):
+            b, _, code = line.partition(" ")
+            values[code] = b[1:]
+            pending = True
+        elif line[0] in "01xz":
+            values[line[1:]] = line[0]
+            pending = True
+    if pending:
+        _snap()
+
+    verdict = {"vcd": vcd_path, "samples": len(times),
+               "trigger_offset_expected": offset, "force": force,
+               "verified": False, "reason": None}
+
+    if len(times) < 2:
+        verdict["reason"] = f"样本数不足 ({len(times)})"
+        print(f"Warning: VCD 未验证: {verdict['reason']}（标记为未验证）")
+        jtag.write_report(session, "vcd_verify.json", verdict)
+        return verdict
+
+    gaps = [b - a for a, b in zip(times, times[1:])]
+    if not all(g == 1 for g in gaps):
+        bad = [(k, gaps[k]) for k in range(len(gaps)) if gaps[k] != 1][:5]
+        verdict["reason"] = f"时间戳不连续: {bad}（采样丢失或解码错位）"
+        print(f"Error: VCD 解码校验失败——{verdict['reason']}。")
+        jtag.write_report(session, "vcd_verify.json", verdict)
+        print("[FAIL] decode")
+        sys.exit(1)
+
+    trig_idx = [k for k, v in enumerate(trig_vals) if v == "1"] if trig_code else []
+    verdict["trigger_idx"] = trig_idx
+    if not force and trig_code is not None:
+        # real LA semantics (board-verified): trigger_event is 0 for the
+        # pre-trigger window, then HELD at 1 from the trigger sample (== the
+        # armed offset) to the end of the window; the trailing re-dump
+        # artifact re-emits the same value at the last timestamp.
+        if not trig_idx:
+            verdict["reason"] = "trigger_event 从未置 1（板上可能不是本次构建或条件未布防）"
+            print(f"Error: VCD 解码校验失败——{verdict['reason']}。")
+            jtag.write_report(session, "vcd_verify.json", verdict)
+            print("[FAIL] decode")
+            sys.exit(1)
+        if trig_idx[0] != offset:
+            verdict["reason"] = (f"触发位置 {trig_idx[0]} != 布防偏移 {offset}"
+                                 "（采样顺序或 offset 解码错位）")
+            print(f"Error: VCD 解码校验失败——{verdict['reason']}。")
+            jtag.write_report(session, "vcd_verify.json", verdict)
+            print("[FAIL] decode")
+            sys.exit(1)
+        dropped = [k for k in range(trig_idx[0], len(trig_vals))
+                   if trig_vals[k] != "1"]
+        if dropped:
+            verdict["reason"] = (f"trigger_event 在触发后回落（首个回落样本 {dropped[0]}）"
+                                 "——采样顺序或解码错位")
+            print(f"Error: VCD 解码校验失败——{verdict['reason']}。")
+            jtag.write_report(session, "vcd_verify.json", verdict)
+            print("[FAIL] decode")
+            sys.exit(1)
+
+    verdict["verified"] = True
+    where = f", trigger @{trig_idx[0]}" if trig_idx else ""
+    print(f"[OK] VCD verified: {len(times)} samples{where} (offset {offset}), "
+          "时间戳连续")
+    jtag.write_report(session, "vcd_verify.json", verdict)
+    return verdict
+
+
 def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = None) -> None:
     """Handle 'hqbuddy -insight -capture': arm trigger, wait, read waveform, dump VCD."""
 
@@ -1065,6 +1160,10 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
     if not version.get("has_cable") or not os.path.isfile(cable_exe):
         print(f"Error: cable.exe not found in {version['path']}")
         sys.exit(1)
+
+    # every capture is a logged JTAG session (arm/status/dump SVFs, cable
+    # output, TDO values, verification verdicts all preserved for reproduction)
+    session = jtag.session_dir(proj, "capture")
 
     import_dir = os.path.join(proj["hqins_dir"], "hq_import")
     prefix = out_prefix or os.path.join(import_dir, f"{proj['top']}_insight")
@@ -1087,19 +1186,44 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         print(f"Error: .ddf not found: {proj['ddf']}")
         sys.exit(1)
 
+    # Programmed-build identity check (P0-A7): -program records what was
+    # downloaded; a capture on a board running a DIFFERENT build is garbage.
+    stamp_path_prog = os.path.join(import_dir, ".programmed_stamp")
+    bit_paths = glob.glob(os.path.join(import_dir, "hqins_impl", "*.bin"))
+    prog_match = False
+    if os.path.isfile(stamp_path_prog) and bit_paths:
+        try:
+            prog = json.load(open(stamp_path_prog, "r", encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            prog = None
+        if prog:
+            import hashlib
+            newest_bit_path2 = max(bit_paths, key=os.path.getmtime)
+            h_now = hashlib.sha256(open(newest_bit_path2, "rb").read()).hexdigest()
+            prog_match = (h_now == prog.get("bin_sha256"))
+            if not prog_match:
+                print(f"Warning: 板上编程记录是 build {prog.get('build_id')}，"
+                      f"但当前 hqins_impl 最新 bin 与其不符（可能已重新 -run 未重新 -program）。")
+                print("         板上运行的很可能不是本工程当前位流，触发/抓波结果不可信；"
+                      "先 -insight -program 重新下载。")
+                print("         注意：布防/抓波使用的是当前 ddf 的采样周期与触发位置——")
+                print("         若与板上旧构建不一致，VCD 时间轴与触发索引都会失真。")
+
     # Bit-freshness warning (stamp-file based): -trig/-capture also rewrite
     # .hqins, so raw mtime comparison against .hqins false-positives.  -run
     # records the newest impl-bin mtime in .bit_stamp; -capture compares it
     # with the newest bin now on disk (stale bin => warn) .
     stamp_path = os.path.join(import_dir, ".bit_stamp")
-    bit_paths = glob.glob(os.path.join(import_dir, "hqins_impl", "*.bin"))
     if bit_paths and os.path.isfile(stamp_path):
         try:
             stamp_bit_mtime = float(open(stamp_path).read().strip() or 0)
         except ValueError:
             stamp_bit_mtime = 0
         newest_bit = max(os.path.getmtime(b) for b in bit_paths)
-        if newest_bit > stamp_bit_mtime + 1:
+        # -program recorded the exact downloaded hash: when it still matches
+        # the newest bin, the board runs THIS build and the mtime heuristic
+        # (which cannot know about -program) must not cry stale.
+        if newest_bit > stamp_bit_mtime + 1 and not prog_match:
             print("Warning: hqins_impl 里有比上次下载更新的 bin——先重新 -cable 下载再验收。")
         # Bit identity check (C6 finding): a wrong/stale bit on the board
         # silently never fires; compare the bitstream header design name
@@ -1114,7 +1238,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
             print(f"Warning: 位流头 design={hdr['design']} 与工程顶层 "
                   f"{proj.get('top')} 不符——板上可能不是本工程的位流，"
                   f"触发/抓波结果不可信。先重新 -run + 下载。")
-    elif bit_paths:
+    elif bit_paths and not os.path.isfile(stamp_path_prog):
         print("Note: 无 .bit_stamp 基线（本工程尚未用新版 hqbuddy 跑过 -run），")
         print("      位流过期预警未启用。跑一次 -insight -run 即可建立基线。")
 
@@ -1200,7 +1324,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         f"{gen}.la_reset {common}",
         f"{gen}.write",
     ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
-    _play_svf(cable_exe, svf("arm.svf"))
+    _play_svf(cable_exe, svf("arm.svf"), session=session, label="arm")
     print("[OK] Trigger armed.")
 
     # 2. Wait for the trigger (status done bit), unless -force
@@ -1219,7 +1343,8 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         deadline = time.time() + timeout
         while True:
             time.sleep(0.5)
-            tdo = _play_svf(cable_exe, svf("status.svf"))
+            tdo = _play_svf(cable_exe, svf("status.svf"), session=session,
+                            label="status")
             if len(tdo) >= 2:
                 overflow, done, pointer = _parse_status(tdo[1], status_bits)
                 if done:
@@ -1239,7 +1364,7 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         f"{gen}.la_waveform {common} -limit {limit}",
         f"{gen}.write",
     ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
-    tdo = _play_svf(cable_exe, svf("dump.svf"))
+    tdo = _play_svf(cable_exe, svf("dump.svf"), session=session, label="dump")
 
     # TDO lines: the first two are status words (short hex), the rest are
     # waveform words whose hex length depends on the LA data width (do NOT
@@ -1248,6 +1373,15 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         return bool(v) and all(c in "0123456789abcdefABCDEF" for c in v)
     header = list(tdo[:2])
     data = [v for v in tdo[2:] if _is_hex(v)]
+    if len(set(len(v) for v in data)) > 1:
+        widths = sorted({len(v) for v in data})
+        print(f"Error: 波形字位宽不一致（出现 {widths} 多种十六进制长度）——"
+              f"JTAG 帧错位或 TDO 数量不符（期望 {limit}，实际 {len(data)}）。")
+        jtag._log(session, "transactions.log",
+                  f"WAVEFORM WIDTH MIX: {widths} expected_count={limit} got={len(data)}")
+        print(f"       会话日志: {session}")
+        print("[FAIL] tdo")
+        sys.exit(1)
     if not force and len(tdo) >= 2:
         overflow, done, pointer = _parse_status(tdo[1], status_bits)
     if len(data) < limit:
@@ -1271,8 +1405,11 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
     vcd = f"{prefix}_0_ww.vcd"
     if not os.path.isfile(vcd):
         print("Error: VCD 未生成（dump_vcd 静默失败）。")
+        print(f"       会话日志: {session}")
+        print("[FAIL] decode")
         sys.exit(1)
     print(f"[OK] Waveform captured: {vcd}")
+    _verify_vcd(vcd, offset, force, session)
     summarize_vcd(vcd)
 
 
@@ -1343,11 +1480,382 @@ def summarize_vcd(vcd_path: str) -> None:
         print("Error: VCD 中未找到触发时刻。")
 
 
-def run_flow(proj: dict, require_bin: bool = True) -> None:
-    """Handle 'hqbuddy -insight -run': run the instrumented implementation flow.
+# --- Instrumented implementation (-run) ---
 
-    require_bin=False (-xpn -ins -from_src) tolerates a missing instrumented
-    bitstream: only the route result is needed for XPN export."""
+def _storage_params(proj: dict) -> dict:
+    """Collect storage-architecture params from .hqins (manifest inputs)."""
+    sections = read_hqins(proj["hqins"])
+    freq_raw = _section_value(sections.get("CLOCK FREQUENCY", []), la="")
+    return {
+        "depth": int(_section_value(sections.get("MEMORY DEPTH INFO", [])) or 1024),
+        "windows": int(_section_value(sections.get("TRIGGER MULTI-WINDOW", [])) or 1),
+        "offset": int(_section_value(sections.get("TRIGGER POSITION", [])) or 0),
+        "level": int(_section_value(sections.get("TRIGGER LEVEL", [])) or 1),
+        "freq_mhz": float(freq_raw) if freq_raw else None,
+    }
+
+
+def _probe_fp_list(proj: dict) -> list:
+    """Ordered probe selection fingerprint (manifest inputs)."""
+    info = _load_signal_info(proj)
+    sigs = _collect_signals(info) if info else []
+    return [{"name": s["name"], "module": s["module"], "msb": s["msb"],
+             "lsb": s["lsb"], "sample_type": s["sample_type"], "clk": s["clk"]}
+            for s in sigs]
+
+
+def _rewrite_hqins_section_value(proj: dict, section: str, value: str) -> None:
+    sections = read_hqins(proj["hqins"])
+    sections[section] = [value]
+    parts = []
+    for name, lines in sections.items():
+        parts.append(f"[{name}]")
+        parts.extend(lines)
+        parts.append("")
+    with open(proj["hqins"], "w", encoding="utf-8") as f:
+        f.write("\n".join(parts))
+
+
+def _extract_sdc_periods(sdc_files: list) -> dict:
+    """Parse create_clock periods (ns) from SDC files -> {clock_name: period}.
+
+    Matches both '-name X -period P' and '-period P -name X'; also accepts a
+    bare period with get_ports target (clock named after the port)."""
+    periods: dict = {}
+    for f in sdc_files:
+        if not os.path.isfile(f):
+            continue
+        txt = open(f, "r", encoding="utf-8", errors="replace").read()
+        for m in re.finditer(
+                r"create_clock\s+([^#\n]*)", txt):
+            spec = m.group(1)
+            name = None
+            period = None
+            port = None
+            mn = re.search(r"-name\s+(\S+)", spec)
+            mp = re.search(r"-period\s+([\d.]+)", spec)
+            mport = re.search(r"\[get_ports\s+\{?([^\}\]]+)\}?\]", spec)
+            if mn:
+                name = mn.group(1).strip("{}")
+            if mp:
+                period = float(mp.group(1))
+            if mport:
+                port = mport.group(1).strip("{} ")
+            if period is None:
+                continue
+            key = name or port
+            if key:
+                periods.setdefault(key, period)
+    return periods
+
+
+def sync_sample_freq(proj: dict, explicit_period: float | None = None) -> str | None:
+    """Align the sample-clock period across SDC/DDF/.hqins (P0-A6).
+
+    The DDF <period> drives dump_vcd's waveform time axis; leaving it at the
+    .hqins default (100 MHz -> 10 ns) while the real clock runs at another
+    rate mislabels every VCD timestamp.  Returns the applied period (ns) or
+    None when nothing could be determined."""
+    info = _load_signal_info(proj)
+    clk_name = ""
+    msl = (info or {}).get("module_sample_list", [])
+    if msl:
+        clk_name = msl[0].get("clk_signal_name", "")
+
+    period = explicit_period
+    source = "explicit"
+    if period is None:
+        sdc_files = parse_hqprj(proj["hqprj"])["tc"]
+        periods = _extract_sdc_periods(sdc_files)
+        if clk_name and clk_name in periods:
+            period = periods[clk_name]
+            source = "sdc"
+        elif len(periods) == 1:
+            period = next(iter(periods.values()))
+            other = next(iter(periods))
+            source = "sdc"
+            if clk_name and other != clk_name:
+                print(f"Note: SDC 时钟名 {other} 与采样时钟 {clk_name} 不同，"
+                      f"按唯一 create_clock（{period} ns）对齐采样周期。")
+        elif periods:
+            print(f"Warning: SDC 有多个时钟 {sorted(periods)}，无法确定采样时钟 "
+                  f"{clk_name or '(未登记)'} 的周期——VCD 时间轴保持现状。"
+                  f"可用 -insight -sample-period <ns> 显式指定。")
+            return None
+        else:
+            print("[WARN] 无法确定采样时钟周期（工程无 FILE_TC，或 SDC 中无 create_clock）——")
+            print("       DDF/VCD 时间轴按 .hqins CLOCK FREQUENCY 标注（GUI 默认 100MHz=10ns，")
+            print("       与真实时钟不一致时波形时间轴会失真）。配置 FILE_TC 后 -run 自动对齐，")
+            print("       或用 -insight -sample-period <ns> 显式指定。")
+            return None
+
+    # rewrite ddf <period> and .hqins [CLOCK FREQUENCY]
+    freq = round(1000.0 / period, 4)
+    # integer periods are written without a decimal point: dump_vcd renders
+    # "<period>40.0ns</period>" as a malformed "$timescale 40 .0ns" in the VCD
+    period_txt = int(period) if abs(period - int(period)) < 1e-9 else period
+    canonical = f"<period>{period_txt}ns</period>"
+    ddf_changed = False
+    if os.path.isfile(proj["ddf"]):
+        ddf_txt = open(proj["ddf"], encoding="utf-8", errors="replace").read()
+        m = re.search(r"<period>([\d.]+)(ns|ps)</period>", ddf_txt)
+        if m:
+            cur_ns = float(m.group(1)) * (1000 if m.group(2) == "ps" else 1)
+            # rewrite on value change OR formatting drift (normalizes e.g.
+            # "40.0ns" left by an older version)
+            if abs(cur_ns - period) > 1e-6 or m.group(0) != canonical:
+                ddf_txt = re.sub(r"<period>[\d.]+(?:ns|ps)</period>",
+                                 canonical, ddf_txt, count=1)
+                with open(proj["ddf"], "w", encoding="utf-8", newline="") as f:
+                    f.write(ddf_txt)
+                ddf_changed = True
+    sections = read_hqins(proj["hqins"])
+    cur_freq = _section_value(sections.get("CLOCK FREQUENCY", []), la="")
+    freq_changed = cur_freq is None or abs(float(cur_freq or 0) - freq) > 1e-6
+    if freq_changed:
+        _rewrite_hqins_section_value(proj, "CLOCK FREQUENCY", f"0_LA:{freq}")
+
+    if ddf_changed or freq_changed:
+        print(f"[OK] 采样时钟周期已对齐: {period} ns ({freq} MHz, 来源 {source}"
+              f"{' '+clk_name if clk_name else ''})——ddf{'+hqins' if freq_changed else ''} 已更新，"
+              "VCD 时间轴将按真实时钟标注。")
+    else:
+        print(f"[skip] 采样时钟周期已一致: {period} ns (来源 {source})")
+    return period
+
+
+def _write_legacy_stamps(proj: dict) -> None:
+    """Pre-manifest freshness stamps (.bit_stamp/.bit_signals) still consumed
+    by -capture's mtime/signal-set warnings; kept in sync on every -run."""
+    stamp_dir = os.path.join(proj["hqins_dir"], "hq_import")
+    bins = glob.glob(os.path.join(stamp_dir, "hqins_impl", "*.bin"))
+    if not bins:
+        return
+    with open(os.path.join(stamp_dir, ".bit_stamp"), "w") as sf:
+        sf.write(str(max(os.path.getmtime(b) for b in bins)))
+    with open(os.path.join(stamp_dir, ".bit_signals"), "w") as sf:
+        sf.write("\n".join(f"{s['name']}:{s['msb']}:{s['lsb']}"
+                           for s in _collect_signals(_load_signal_info(proj))))
+
+
+def run_flow(proj: dict, require_bin: bool = True, reuse_only: bool = False,
+             legacy: bool = False) -> None:
+    """Handle 'hqbuddy -insight -run': instrument-if-stale + staged implement.
+
+    Unified freshness entry (P0-A1): every input (project fields, source
+    order+content, includes, IP deps, device, tool, probe selection, storage
+    params, ddf) is fingerprinted against the manifest of the last accepted
+    build; anything changed re-instruments via -refresh before implementing.
+    The implementation runs in a private build directory with per-stage
+    acceptance and publish-or-rollback (P0-A3/A4, stageflow), so a failed or
+    fake-successful flow can never replace the last good artifacts, and the
+    downloader GUI is never spawned.  --legacy falls back to the official
+    run_hqprj2hqins_flow wrapper."""
+    if legacy:
+        return run_flow_legacy(proj, require_bin)
+
+    version = launcher.require_hqfpga_version()
+    hqfpga_exe = version["hqfpga_path"]
+
+    with jtag.build_lock(proj):
+        # 0. loud configuration warnings: a build without timing constraints
+        #    produces an unverifiable timing verdict and a dead violation gate
+        prj_info = parse_hqprj(proj["hqprj"])
+        if not prj_info["tc"]:
+            print("[WARN] 工程未配置 FILE_TC（时序约束）——实现能成功，但时序未验证，")
+            print("       -program 的违例门槛不会生效，采样时钟周期也无法从 SDC 对齐。")
+            print("       在 .hqprj 中设置 FILE_TC=$WORK_DIR$<x.sdc> 后重跑。")
+
+        # 1. freshness against the last accepted build
+        storage = _storage_params(proj)
+        old_manifest = buildman.load(proj)
+        inputs = buildman.compute_inputs(proj, version, _probe_fp_list(proj), storage)
+        fresh, diffs = buildman.inputs_match(old_manifest, inputs)
+        netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
+        insight_ip = os.path.join(proj["hqins_dir"], "hq_import", "insight_ip.v")
+        artifacts_ok = os.path.isfile(netlist) and os.path.isfile(insight_ip)
+
+        # fully reusable = inputs unchanged AND the published, accepted
+        # artifacts (bin) still match the manifest hash.  Re-running -run
+        # then changes nothing (a rebuilt bin would even invalidate the
+        # programmed stamp), so the whole build is skipped.
+        import hashlib as _hashlib
+        published_ok = False
+        if old_manifest and artifacts_ok:
+            out0 = old_manifest.get("outputs", {})
+            b0 = out0.get("bin")
+            if b0 and os.path.isfile(b0) and out0.get("bin_sha256"):
+                try:
+                    published_ok = (_hashlib.sha256(open(b0, "rb").read()).hexdigest()
+                                    == out0["bin_sha256"])
+                except OSError:
+                    published_ok = False
+        if fresh and artifacts_ok and published_ok:
+            print(f"[skip] 全部输入未变化且已验收产物完好（build {old_manifest.get('build_id')}，"
+                  f"bin sha256 {old_manifest['outputs']['bin_sha256'][:12]}...）——"
+                  "无需重建，直接使用。")
+            print("Tip: 强制重建请改动任一输入或删除 hqins_run/hq_import/.build_manifest.json。")
+            _write_legacy_stamps(proj)
+            return
+
+        if fresh and artifacts_ok:
+            print(f"[skip] 插桩输入未变化（沿用清单 build "
+                  f"{(old_manifest or {}).get('build_id', '?')}）")
+        else:
+            constraint_only = bool(diffs) and all("约束" in d for d in diffs)
+            if reuse_only:
+                print("Error: --reuse-only 要求严格复用，但检测到输入变化：")
+                for d in diffs:
+                    print(f"       - {d}")
+                print("       直接执行 -insight -run 重建，或去掉 --reuse-only。")
+                sys.exit(1)
+            for d in diffs:
+                print(f"[i] 输入变化: {d}")
+            if not diffs and not artifacts_ok:
+                print("[i] 插桩产物缺失（hq_import_with_bscan.v / insight_ip.v）")
+            if constraint_only:
+                # constraints steer implementation/timing only — the
+                # instrumented netlist is unaffected, skip the re-elaborate
+                print("[i] 仅约束文件变化——跳过重插桩，直接重新实现。")
+            else:
+                run_refresh(proj)
+
+        # 2. probe endpoint model: validate the selection against the (fresh)
+        #    elaboration database and publish the probe map (P0-A2)
+        pmap = probes_mod.build_probe_map(proj)
+        pmap["build_id"] = None  # filled after the build
+        pm_path = probes_mod.write_probe_map(proj, pmap)
+        print(f"[OK] Probe map: {len(pmap['probes'])} probe(s) -> {pm_path}")
+
+        # 3. sample-clock period alignment (P0-A6)
+        sync_sample_freq(proj)
+
+        # 4. staged implementation (P0-A3/A4)
+        build_id = buildman.new_build_id()
+        outputs = stageflow.run_stage_build(proj, hqfpga_exe, build_id,
+                                            require_bin=require_bin)
+
+        # 5. manifest: inputs (recomputed post-refresh) + accepted outputs
+        storage = _storage_params(proj)
+        inputs = buildman.compute_inputs(proj, version, _probe_fp_list(proj), storage)
+        manifest = {"version": 1, "build_id": build_id, "time": time.time(),
+                    "inputs": inputs, "outputs": outputs}
+        buildman.save(proj, manifest)
+        pmap["build_id"] = build_id
+        probes_mod.write_probe_map(proj, pmap)
+
+        # legacy freshness stamps (pre-manifest consumers: -capture's mtime
+        # warning and .bit_signals signal-set check)
+        if outputs.get("bin"):
+            _write_legacy_stamps(proj)
+
+        print(f"[OK] Instrumented flow done (build {build_id}, "
+              f"{outputs['elapsed_s']}s, stages: {'/'.join(outputs['stages'])})")
+        if outputs.get("bin"):
+            print(f"     bin: {outputs['bin']}")
+            print(f"     sha256: {outputs['bin_sha256']}")
+        print("Tip: 下载用 -insight -program（消费已验收 bin 并登记编程记录）；"
+              "抓波用 -insight -capture。")
+
+
+def run_program(proj: dict, allow_violation: bool = False) -> None:
+    """Handle 'hqbuddy -insight -program': download the ACCEPTED bitstream.
+
+    Consumes the manifest-recorded bin (hash-verified), refuses when the
+    timing verdict is violated unless --allow-violation, and records the
+    programmed hash in .programmed_stamp so -capture can verify the board
+    runs this build.  The JTAG lock serializes with any concurrent cable
+    user; every transaction is logged to a session directory."""
+    version = launcher.require_hqfpga_version()
+    cable_exe = version.get("cable_path")
+    if not version.get("has_cable") or not os.path.isfile(cable_exe):
+        print(f"Error: cable.exe not found in {version['path']}")
+        sys.exit(1)
+
+    manifest = buildman.load(proj)
+    outputs = (manifest or {}).get("outputs", {})
+    if not manifest or not outputs.get("bin"):
+        print("Error: 没有已验收的构建清单——先执行 -insight -run。")
+        sys.exit(1)
+    bin_path = outputs["bin"]
+    if not os.path.isfile(bin_path):
+        print(f"Error: 已验收的位流不存在: {bin_path}（被删除或移动）——重新 -run。")
+        sys.exit(1)
+    import hashlib
+    h = hashlib.sha256(open(bin_path, "rb").read()).hexdigest()
+    if h != outputs.get("bin_sha256"):
+        print(f"Error: 位流内容与构建清单不符（{bin_path}）——")
+        print(f"       清单 sha256={outputs.get('bin_sha256')}, 文件 sha256={h}。")
+        print("       下载被拒绝：重新 -insight -run 生成并验收新位流。")
+        sys.exit(1)
+
+    timing = outputs.get("timing", {})
+    violated = not (timing.get("setup_met", True) and timing.get("hold_met", True))
+    if violated and not allow_violation:
+        print("Error: 该构建时序未收敛"
+              f"（setup WNS {timing.get('wns_setup_ps')} ps / hold WNS {timing.get('wns_hold_ps')} ps）——")
+        print("       带违例下载请显式加 --allow-violation（实验位流）。")
+        sys.exit(1)
+    if violated:
+        print("[WARN] 时序违例位流，--allow-violation 已确认（实验用途）。")
+
+    session = jtag.session_dir(proj, "program")
+    with jtag.jtag_lock(version):
+        # board model detection (per download: the board may have been swapped)
+        try:
+            r = subprocess.run([cable_exe, "--detect_model"],
+                               capture_output=True, text=True, errors="replace",
+                               timeout=60)
+        except subprocess.TimeoutExpired:
+            print("Error: cable.exe --detect_model 超时（60s）——板卡/JTAG 未连接？")
+            sys.exit(1)
+        m = re.search(r"Device Model\s*:\s*(\S+)", r.stdout or "")
+        if not m:
+            jtag._log(session, "transactions.log",
+                      "detect_model failed: " + (r.stdout or "") + (r.stderr or ""))
+            print("[FAIL] 未能探测到板上型号，下载中止。cable 输出：")
+            print((r.stdout or "").strip() or "(无输出)")
+            sys.exit(1)
+        model = m.group(1)
+        print(f"[OK] 板上型号: {model}")
+        jtag._log(session, "transactions.log", f"model={model}")
+
+        # cable.exe prints errors but still exits 0 — scan the output
+        cmd = [cable_exe, "--sealion", bin_path, "--model", model, "--Burst"]
+        jtag._log(session, "transactions.log", "cmd: " + " ".join(cmd))
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  errors="replace", timeout=300)
+        except subprocess.TimeoutExpired:
+            print("Error: 下载超时（300s）——JTAG 连接异常，中止。")
+            sys.exit(1)
+        out = (proc.stdout or "") + (proc.stderr or "")
+        jtag._log(session, "cable_output.txt", out)
+        has_error = any(re.search(r"\b(error|fail(?:ed)?)\b\s*[:：]", ln, re.I)
+                        for ln in out.splitlines())
+        if proc.returncode != 0 or has_error:
+            print(f"[FAIL] 下载失败 (exit {proc.returncode})。cable 输出尾部：")
+            for ln in out.splitlines()[-15:]:
+                print("  " + ln)
+            print(f"       会话日志: {session}")
+            sys.exit(1)
+
+    stamp = {"bin": bin_path, "bin_sha256": h, "build_id": manifest["build_id"],
+             "model": model, "time": time.time(), "violation_ok": violated}
+    stamp_path = os.path.join(proj["hqins_dir"], "hq_import", ".programmed_stamp")
+    with open(stamp_path, "w", encoding="utf-8") as f:
+        json.dump(stamp, f, indent=2)
+    jtag.write_report(session, "program.json", stamp)
+    print(f"[OK] Programmed build {manifest['build_id']} -> {os.path.basename(bin_path)} "
+          f"(sha256 {h[:12]}..., model {model})")
+    print(f"     会话日志: {session}")
+
+
+def run_flow_legacy(proj: dict, require_bin: bool = True) -> None:
+    """Legacy -run: the official run_hqprj2hqins_flow wrapper with the
+    hqdnload watcher (-run --legacy).  Kept as an escape hatch in case the
+    hqprj2tcl-derived staged flow diverges on some project shape; it does NOT
+    provide manifest freshness, staged acceptance or publish isolation."""
 
     version = launcher.require_hqfpga_version()
     hqfpga_exe = version["hqfpga_path"]
@@ -1506,7 +2014,7 @@ def run_flow(proj: dict, require_bin: bool = True) -> None:
 
 def run_refresh(proj: dict) -> None:
     """Handle 'hqbuddy -insight -refresh': in-place rebuild of insight_ip.v and
-    hq_import_with_bsan.v while keeping every probe selection and armed trigger
+    hq_import_with_bscan.v while keeping every probe selection and armed trigger
     condition (CLI equivalent of clicking 保存 in the HqInsight GUI).
 
     ALWAYS re-runs hq_impor_t.tcl (rtl.elaborate -insight) first to refresh the
@@ -1532,11 +2040,13 @@ def run_refresh(proj: dict) -> None:
     wait_process(proc)
     if proc.returncode != 0:
         print("Error: signal-database re-elaborate failed.")
+        print("[FAIL] refresh")
         sys.exit(1)
     dump = os.path.join(proj["hqins_dir"], "hq_import",
                         "hq_import_parser_staticelab_dump.json")
     if not os.path.isfile(dump):
         print("Error: re-elaborate produced no signal database.")
+        print("[FAIL] refresh")
         sys.exit(1)
     # hqfpga may rewrite .hqins during -insight elaborate; restore the probe
     # selections and re-seed the JSON metadata keys from the fresh dump.
@@ -1549,7 +2059,7 @@ def run_refresh(proj: dict) -> None:
     if not os.path.isfile(proj["ddf"]):
         print("[i] .ddf 缺失——按 .hqins 重建（触发条件已重置，稍后请重新 -trig）。")
         _write_ddf_from_la(proj, la_info)
-    print("[2/2] Rebuilding insight_ip.v + hq_import_with_bsan.v ...")
+    print("[2/2] Rebuilding insight_ip.v + hq_import_with_bscan.v ...")
     _rebuild_instrumented(proj, sig_new, la_info)
     netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
     la = la_info["la_list"][0]
@@ -1771,8 +2281,18 @@ def _preflight_check(proj: dict) -> None:
             print(f"  ⚠ {w}")
 
 
-def run_init(proj: dict) -> None:
+def run_init(proj: dict, force: bool = False) -> None:
     """Handle 'hqbuddy -insight -init': create hqins_run skeleton and elaborate."""
+
+    # -init writes a fresh .hqins skeleton over any existing one — with probe
+    # selections inside.  Refuse unless explicitly forced (GUI-equivalent is
+    # deleting the HqInsight project first).
+    if os.path.isfile(proj["hqins"]) and not force:
+        print(f"Error: HqInsight 工程已存在: {proj['hqins']}——重复 -init 会清空已登记的"
+              "信号选择与触发条件。")
+        print("       改了 RTL/IP 请用 -insight -refresh；确认要清空重来请删除 hqins_run/"
+              " 或加 --force。")
+        sys.exit(1)
 
     _preflight_check(proj)
 
@@ -1867,15 +2387,26 @@ def _signal_catalog(proj: dict) -> list:
 def list_signals(proj: dict, keyword: str | None) -> None:
     """Handle 'hqbuddy -insight -ls [keyword]'."""
     catalog = _signal_catalog(proj)
-    selected = {s["name"] for s in _collect_signals(_load_signal_info(proj) or {})}
+    # selected may carry slice info (slice_msb/lsb) — mark by raw name but
+    # show the exact registered slice so a bus slice isn't displayed as the
+    # whole bus
+    sel = {}
+    info = _load_signal_info(proj)
+    for s in (_collect_signals(info) if info else []):
+        sel.setdefault(s["name"], s)
     if keyword:
         kw = keyword.lower()
         catalog = [c for c in catalog if kw in c["name"].lower()]
     print(f"Signals ({len(catalog)}): (* = selected)")
     for c in catalog:
         width = c["msb"] - c["lsb"] + 1
-        mark = "*" if c["name"] in selected else " "
-        print(f" {mark} {c['name']}[{width}b]  module={c['module']}  {c['hier']}")
+        mark = " " if c["name"] not in sel else "*"
+        note = ""
+        s = sel.get(c["name"])
+        if s and s.get("slice_msb") is not None \
+                and (s["slice_msb"], s["slice_lsb"]) != (c["msb"], c["lsb"]):
+            note = f"  (已选切片 [{s['slice_msb']}:{s['slice_lsb']}])"
+        print(f" {mark} {c['name']}[{width}b]  module={c['module']}  {c['hier']}{note}")
 
 
 def _ip_name(name: str, module: str) -> str:
@@ -2139,6 +2670,19 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
             sys.exit(1)
         sig = {**sig, "msb": hi, "lsb": lo}
 
+    # per-module instrumentation: a module with several instances cannot be
+    # distinguished per instance yet — say so up front instead of silently
+    # binding the trigger to one of them later
+    try:
+        insts = probes_mod._instance_paths(_load_dump_json(proj),
+                                           proj["top"]).get(sig["module"], [])
+        if len(insts) > 1:
+            print(f"Warning: 信号 {name} 所在模块 {sig['module']} 有 {len(insts)} 个实例"
+                  f"（{'/'.join(insts)}）——当前插桩按模块粒度，触发表达式按信号名绑定，"
+                  "无法按实例区分；跨层次按实例选择将在后续版本交付。")
+    except (OSError, json.JSONDecodeError):
+        pass
+
     catalog_names = {c["name"] for c in catalog}
     if clk and clk not in catalog_names:
         print(f"Error: 采样时钟 {clk} 不在信号数据库中（assign 中转线/派生网不会被 elaborate 收录）。")
@@ -2223,7 +2767,10 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
 
     _rewrite_hqins_sections(proj, sig_info, la_info)
     _regenerate_ddf(proj, sig_info, la_info)
-    print(f"[OK] Signal added: {name} (type={stype}, clk={clk_name})")
+    shown = f"{name}[{sig['msb']}:{sig['lsb']}]" if (sig['msb'] != sig['lsb']
+                                                     or slice_rng) else name
+    stype_name = {2: "sample", 3: "trigger", 4: "sample+trigger"}[stype]
+    print(f"[OK] Signal added: {shown} (type={stype_name}, clk={clk_name})")
     print("Tip: run -insight -run to rebuild the instrumented bitstream.")
 
 
@@ -2490,8 +3037,9 @@ def run_insight(args: list) -> None:
             rest.append(a)
 
     if rest and rest[0] == "-init":
+        force = "--force" in rest[1:]
         proj = resolve_insight_project(hqprj_arg, require_hqins=False)
-        run_init(proj)
+        run_init(proj, force=force)
         return
 
     proj = resolve_insight_project(hqprj_arg)
@@ -2586,7 +3134,42 @@ def run_insight(args: list) -> None:
         return
 
     if rest[0] == "-run":
-        run_flow(proj)
+        reuse_only = False
+        legacy = False
+        for a in rest[1:]:
+            if a == "--reuse-only":
+                reuse_only = True
+            elif a == "--legacy":
+                legacy = True
+            else:
+                print(f"Error: unknown -run option: {a} (supported: --reuse-only, --legacy)")
+                sys.exit(1)
+        run_flow(proj, reuse_only=reuse_only, legacy=legacy)
+        return
+
+    if rest[0] == "-program":
+        allow_violation = "--allow-violation" in rest[1:]
+        unknown = [a for a in rest[1:] if a != "--allow-violation"]
+        if unknown:
+            print(f"Error: unknown -program option: {' '.join(unknown)}")
+            sys.exit(1)
+        run_program(proj, allow_violation)
+        return
+
+    if rest[0] == "-sample-period":
+        if len(rest) < 2:
+            print("Usage: -insight -sample-period <ns>   (显式指定采样时钟周期，"
+                  "对齐 ddf/hqins 并修正 VCD 时间轴)")
+            sys.exit(1)
+        try:
+            period = float(rest[1])
+        except ValueError:
+            print(f"Error: -sample-period expects a number (ns), got: {rest[1]}")
+            sys.exit(1)
+        if period <= 0:
+            print("Error: -sample-period must be > 0")
+            sys.exit(1)
+        sync_sample_freq(proj, explicit_period=period)
         return
 
     if rest[0] == "-selftest":
