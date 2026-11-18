@@ -1445,6 +1445,13 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         overflow, done, pointer = _parse_status(tdo[1], status_bits)
     if len(data) < limit:
         print(f"Error: 波形字数不符：期望 {limit}，实际 {len(data)}。")
+        if len(data) == 0:
+            print("       常见原因：另一 hq_ins.exe / 调试 GUI 正占用 JTAG（其会话")
+            print("       会让本工具的 dump 全空）——taskkill hq_ins.exe 后重试；")
+            print("       或板卡被重编程过，LA 链路未就绪——重新布防再抓。")
+        else:
+            print("       其余不足部分多为 JTAG 时序竞争——直接重试一次。")
+        print("[FAIL] tdo")
         sys.exit(1)
     while len(header) < 2:
         header.insert(0, "0")
@@ -2876,10 +2883,23 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
         la["trig_in_order"].append(entry["ip_signal_name"])
 
     _rewrite_hqins_sections(proj, sig_info, la_info)
-    _regenerate_ddf(proj, sig_info, la_info)
     shown = f"{name}[{sig['msb']}:{sig['lsb']}]" if (sig['msb'] != sig['lsb']
                                                      or slice_rng) else name
     stype_name = {2: "sample", 3: "trigger", 4: "sample+trigger"}[stype]
+    # vendor crash guard (R9-D2, deterministic 2/2): insight.debugip.create
+    # segfaults (0xC0000005) when the TRIGGER set is empty — a fresh -init
+    # whose first -add is sample-only hits exactly that.  Defer the ddf +
+    # netlist rebuild until a trigger-capable signal joins.
+    trig_empty = not (la["t_list"] or la["st_list"])
+    if trig_empty and stype == 2:
+        print("[WARN] 当前触发信号集为空——厂商工具在空触发集上生成插桩网表会崩溃")
+        print("       （INSIGHT::Trigger::getTotalCtrlLength 0xC0000005，确定性复现）。")
+        print("       本次登记已保存但插桩产物未重建：先追加一个 -type both/trigger 的")
+        print("       信号（任意 1 位信号即可），触发集非空后 -insight -run 才可用。")
+        print(f"[OK] Signal added: {shown} (type={stype_name}, clk={clk_name})——延迟重建")
+        print("Tip: run -insight -run to rebuild the instrumented bitstream.")
+        return
+    _regenerate_ddf(proj, sig_info, la_info)
     print(f"[OK] Signal added: {shown} (type={stype_name}, clk={clk_name})")
     print("Tip: run -insight -run to rebuild the instrumented bitstream.")
 

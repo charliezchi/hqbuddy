@@ -979,6 +979,13 @@ def cmd_capture(args: list) -> None:
     if timeout <= 0:
         print(f"Error: -timeout 必须为正整数，得到: {timeout}")
         sys.exit(1)
+    # O2 (R9): an empty armed condition would behave like a force capture —
+    # refuse unless the user explicitly forces
+    cond = os.path.join(session["hqins_dir"], "hq_import", "trigger_cond.json")
+    if not os.path.isfile(cond) and not force:
+        print("Error: 联合会话尚未布防触发条件（hq_vla_vio 会话新建/重建后已清空）——")
+        print("       先 -vla -trig <probe> EQ <val>，或加 -force 立即抓当前波形。")
+        sys.exit(1)
     _ins.run_capture(session, timeout, force, out_prefix)
     # board-verified (R6-D1): the LA arm/capture sequence shifts the shared
     # JTAG chain and destroys the on-board VIO output registers — restore
