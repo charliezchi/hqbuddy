@@ -671,7 +671,16 @@ def _ensure_session(proj: dict, c: dict, force_ddf: bool = False) -> dict:
     if force_ddf or not os.path.isfile(sproj["ddf"]):
         from . import insight
         insight._write_ddf_from_la(sproj, la_info)
-        print("[i] 会话 ddf 已重建（触发条件已重置，需重新 -vla -trig）")
+        # a rebuilt ddf has inert trigger placeholders: the stale
+        # trigger_cond.json from an earlier -trig no longer matches the ddf
+        # and would silently arm nothing (R4-D3) — remove the pair
+        import glob as _g
+        for stale in _g.glob(os.path.join(import_dir, "trigger_*.json")):
+            try:
+                os.unlink(stale)
+            except OSError:
+                pass
+        print("[i] 会话 ddf 已重建（触发条件已重置——先 -vla -trig 再 -capture）")
 
     # sample-clock period: real SDC value (40ns board evidence), not the
     # .hqins default 10ns
@@ -853,6 +862,22 @@ def cmd_trig(args: list) -> None:
     if not tokens:
         print("Usage: -vla -trig <sig> EQ <val>  （信号为 .hqip 契约的 LA 探针名，如 probe0）")
         sys.exit(1)
+    # combined-mode signal names come from the .hqip contract, not -insight
+    # -add — validate up front with the right guidance (R4-D4)
+    known = {s["name"] for s in _session_probe_signals(c)}
+    for tok in tokens:
+        if tok.upper() in ("EQ", "NE", "GT", "LT", "LE", "GE", "AND", "OR",
+                           "RANGE", "RANGE_C", "RANGE_LC", "RANGE_RC",
+                           "RISE", "FALL", "BOTH", "X", "NOT", "--NEGATE"):
+            continue
+        # value tokens (0x50, 8, 0b101, 5'd3 …) are not signal names
+        if re.match(r"^\d", tok) or re.match(r"^0[xbo]", tok, re.I):
+            continue
+        cand = re.match(r"^([A-Za-z_]\w*)", tok)
+        if cand and cand.group(1) not in known:
+            print(f"Error: 信号不在联合 IP 契约中: {cand.group(1)}"
+                  f"（契约 LA 探针: {', '.join(sorted(known))}——用 -vla -status 查看）")
+            sys.exit(1)
     parsed = _ins.write_trigger_files(session, _ins.parse_trig_expr(tokens))
     print(f"[OK] 触发布防: {len(parsed['conds'])} 条件（relocated ddf + trigger_cond.json）")
     print("Tip: 下载用 -vla -program，抓波用 -vla -capture。")
@@ -948,15 +973,10 @@ def cmd_program(args: list) -> None:
     # init (e.g. 5'h13) right after programming.
     vio = c["vio"]
     if vio and vio["outputs"]:
-        stamp2 = os.path.join(session["hqins_dir"], "hq_import",
-                              ".vio_init_stamp")
-        init_ok = True
-        try:
-            prev = json.load(open(stamp2, "r", encoding="utf-8"))
-            init_ok = (prev.get("bin_sha256") == h)
-        except (OSError, json.JSONDecodeError):
-            init_ok = False
-        if not init_ok:
+        # every -program re-arms the init values: the board's output
+        # registers reset to 0 on each download, so this MUST run every time
+        # (R4-D2: a stamp-based skip left silent zeros after re-programming)
+        if True:
             def _parse_init(init: str) -> int:
                 """Contract init literal: 5'h13 / 8'b101 / decimal."""
                 m = re.match(r"^(\d+)'([hbd])([0-9a-fA-FxX_]+)$", init or "")

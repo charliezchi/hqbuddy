@@ -149,7 +149,9 @@ Project:
                                         ALL outputs required, chain shifts as a whole)
   -vla -trig <probe> EQ <val>           Arm the combined LA trigger (relocated ddf)
   -vla -capture [-force] [-timeout N] [-o prefix]
-                                        Capture the combined LA waveform (VCD verified)
+                                        Capture the combined LA waveform (VCD verified;
+                                        default timeout 60s; overflow tail-window dumps
+                                        report writer-synthesized trigger marker semantics)
                                         Launch the VLA IP generator dialog (writes xsIP_VLA.v/hqip/cfg)
   -edf2v <a.edif> [-o <file>]          Convert a third-party EDIF netlist to Verilog
      [-device <part>]                   (family SEAL, for gate-level sim)

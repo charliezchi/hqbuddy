@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.50.0
+3.50.1
 
 ## 功能特点
 
@@ -612,7 +612,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-vla -program [--allow-violation]` | 下载已验收联合位流（清单 hash 门 + 时序门）；下载后自动写 VIO 输出初值（对齐原生 GUI 启动行为，板测：下载后寄存器为 0，GUI 启动即写初值） |
 | `-vla -vio-read [-loop N] [-interval s]` | 实时读联合 VIO 输入探针（`vio_read -bit_length <契约位宽>`；板测校准：读回位序与 RTL 拼接一致） |
 | `-vla -vio-write <probe>=<val>[,...]` | 联合写 VIO 输出（`-is_vla_mode True`，板测：5 位输出 → 15 位 SDR，由生成器内部扩展）；必须覆盖全部输出探针（联合链整链移位，拒绝独立 VIO 的静默清零行为） |
-| `-vla -trig <probe> EQ <val>` / `-vla -capture [...]` | 联合 LA 布防与抓波：会话目录 `hqvla_vio/`（重定位 ddf 由 .hqip 契约生成，采样周期从 SDC 对齐），复用 -insight 的三文件布防与全链 VCD 自证（板测：probe0 EQ 0x96 触发@128 精确命中） |
+| `-vla -trig <probe> EQ <val>` / `-vla -capture [...]` | 联合 LA 布防与抓波：会话目录 `hqvla_vio/`（重定位 ddf 由 .hqip 契约生成，采样周期从 SDC 对齐），复用 -insight 的三文件布防与全链 VCD 自证（板测：probe0 EQ 0x96 触发@128 精确命中）；overflow 尾窗下触发标记为写出端按布防偏移注入（R4 板测定标），自证结论如实区分标记位置与硬件触发样本位置 |
 | `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族；`-o` 目录不存在时自动创建） |
 | `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11；报告/日志统一落 `netlist_run/`，不散落在 .edif 目录） |
 | `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测） |

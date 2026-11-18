@@ -1031,11 +1031,18 @@ def _write_force_ddf(proj: dict) -> str:
 
 
 def _verify_vcd(vcd_path: str, offset: int, force: bool,
-                session: str | None) -> dict:
+                session: str | None, overflow: bool = False,
+                pointer: int | None = None) -> dict:
     """Self-check a captured VCD (P0-A7 decode stage): sample timestamps
-    contiguous, exactly one trigger_event pulse at the expected pre-trigger
-    offset (skipped in -force mode), clock present.  Returns the verdict
-    dict; decode failures print [FAIL] and exit."""
+    contiguous, trigger_event marker at the armed offset (skipped in -force
+    mode), clock present.  Returns the verdict dict; decode failures print
+    [FAIL] and exit.
+
+    Board-calibrated semantics (R4-D1): the trigger_event marker is WRITER-
+    SYNTHESIZED at the armed offset — in overflow (tail-window) dumps its
+    position does NOT identify the hardware trigger sample, so overflow
+    verdicts report the marker semantics explicitly instead of claiming
+    'trigger @128' as hardware truth."""
     try:
         with open(vcd_path, "r", encoding="utf-8", errors="replace") as f:
             lines = f.read().splitlines()
@@ -1143,9 +1150,25 @@ def _verify_vcd(vcd_path: str, offset: int, force: bool,
             sys.exit(1)
 
     verdict["verified"] = True
-    where = f", trigger @{trig_idx[0]}" if trig_idx else ""
-    print(f"[OK] VCD verified: {len(times)} samples{where} (offset {offset}), "
-          "时间戳连续")
+    if overflow:
+        # the marker is writer-synthesized at the armed offset; in an
+        # overflow tail-window it does NOT identify the hardware trigger
+        # sample (R4-D1 board finding: armed-value occurrences depend on the
+        # free-running design, trigger position is only derivable from the
+        # pointer).  Report marker semantics honestly.
+        verdict["marker_semantics"] = "writer-synthesized (overflow tail window)"
+        pos = ""
+        if pointer is not None:
+            verdict["hardware_trigger_pos_est"] = (offset - pointer) % len(times) \
+                if len(times) else None
+            pos = f"，触发样本位置估算 (offset-pointer)%N = {verdict['hardware_trigger_pos_est']}"
+        print(f"[OK] VCD verified: {len(times)} samples (offset {offset}), 时间戳连续")
+        print(f"     [NOTE] overflow 尾窗：trigger_event 标记为写出端按布防偏移注入"
+              f"{pos}——标记位置不等于硬件触发样本位置。")
+    else:
+        where = f", trigger @{trig_idx[0]}" if trig_idx else ""
+        print(f"[OK] VCD verified: {len(times)} samples{where} (offset {offset}), "
+              "时间戳连续")
     jtag.write_report(session, "vcd_verify.json", verdict)
     return verdict
 
@@ -1409,7 +1432,8 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         print("[FAIL] decode")
         sys.exit(1)
     print(f"[OK] Waveform captured: {vcd}")
-    _verify_vcd(vcd, offset, force, session)
+    _verify_vcd(vcd, offset, force, session, overflow=overflow,
+                pointer=pointer if overflow else None)
     summarize_vcd(vcd)
 
 
