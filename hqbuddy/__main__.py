@@ -135,7 +135,7 @@ Project:
                                         existing .hqip contract in an isolated dir)
   -vla -status [<.hqprj>] [-export]     Combined-IP discovery: .hqip contract,
                                         RTL instantiation cross-check, insight.check
-                                        verdict on routed XPN, native -vlas export
+                                        verdict from the accepted build, native -vlas export
   -vla -build [<.hqprj>]                Combined implementation: staged acceptance
                                         into OUT_DIR, insight.check captured,
                                         accepted-build manifest gates -gui
@@ -157,7 +157,6 @@ Project:
                                         Capture the combined LA waveform (VCD verified;
                                         default timeout 60s; overflow tail-window dumps
                                         report writer-synthesized trigger marker semantics)
-                                        Launch the VLA IP generator dialog (writes xsIP_VLA.v/hqip/cfg)
   -edf2v <a.edif> [-o <file>]          Convert a third-party EDIF netlist to Verilog
      [-device <part>]                   (family SEAL, for gate-level sim)
   -netlist_build <a.edif> --upc <u.upc> --sdc <s.sdc>

@@ -361,6 +361,25 @@ def _check_trigger_signals(proj: dict, parsed: dict) -> list:
             if lo > hi:
                 print(f"Error: 范围下界 {lo} 大于上界 {hi}。")
                 sys.exit(1)
+        # vacuous constant conditions on an unsigned compare unit (R5-D10):
+        # hardware "GT max"/"LT 0" never fire and "GE 0"/"LE max" always fire
+        # — the arming looks fine and the capture misleads
+        if cond["kind"] == "arith" and not cond.get("wild"):
+            op, v = cond["op"], cond["value"]
+            vmax = (1 << width) - 1
+            if op == "GT" and v >= vmax:
+                print(f"Warning: 布防条件恒假——{cond['signal']} {op} {v} 在 "
+                      f"{width} 位无符号比较上永不可能为真（最大 {vmax}），"
+                      "布防将不会命中；仍写入。")
+            if op == "LT" and v <= 0:
+                print(f"Warning: 布防条件恒假——{cond['signal']} {op} {v} "
+                      "（无符号最小 0），布防将不会命中；仍写入。")
+            if op == "GE" and v <= 0:
+                print(f"Warning: 布防条件恒真——{cond['signal']} {op} {v} "
+                      "（恒成立，布防立即命中）。")
+            if op == "LE" and v >= vmax:
+                print(f"Warning: 布防条件恒真——{cond['signal']} {op} {v} "
+                      "（恒成立，布防立即命中）。")
         result.append(sig)
     return result
 
@@ -1076,10 +1095,19 @@ def _verify_vcd(vcd_path: str, offset: int, force: bool,
     cur_t = 0
     pending = False
 
+    xsnap = 0
+
     def _snap():
+        nonlocal xsnap
         times.append(cur_t)
         clk_vals.append(values.get(clk_code) if clk_code else None)
         trig_vals.append(values.get(trig_code) if trig_code else None)
+        # R5-D4: a capture whose sampled scalars read x for most samples means
+        # the JTAG frame was not ready (or a first-dump race) — the waveform
+        # is garbage even though the timestamps look fine
+        if any(v is not None and "x" in v.lower() for v in
+               (values.get(clk_code), values.get(trig_code))):
+            xsnap += 1
 
     for line in lines[i:]:
         line = line.strip()
@@ -1115,6 +1143,18 @@ def _verify_vcd(vcd_path: str, offset: int, force: bool,
         bad = [(k, gaps[k]) for k in range(len(gaps)) if gaps[k] != 1][:5]
         verdict["reason"] = f"时间戳不连续: {bad}（采样丢失或解码错位）"
         print(f"Error: VCD 解码校验失败——{verdict['reason']}。")
+        jtag.write_report(session, "vcd_verify.json", verdict)
+        print("[FAIL] decode")
+        sys.exit(1)
+
+    # R5-D4: garbage-data detection BEFORE trigger semantics — a capture
+    # whose sampled scalars read x for most samples means the JTAG frame
+    # was not ready (or a first-dump race); the waveform is unusable
+    if len(times) >= 10 and xsnap > len(times) * 0.5:
+        verdict["verified"] = False
+        verdict["reason"] = (f"采样标量大量为 x（{xsnap}/{len(times)} 样本）——"
+                             "JTAG 帧未就绪或首次抓取时序竞争，波形不可信；重试一次。")
+        print(f"Error: VCD 解码校验失败——{verdict['reason']}")
         jtag.write_report(session, "vcd_verify.json", verdict)
         print("[FAIL] decode")
         sys.exit(1)
@@ -2088,6 +2128,26 @@ def run_refresh(proj: dict) -> None:
     netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
     la = la_info["la_list"][0]
     n_probes = len(la["s_list"]) + len(la["t_list"]) + len(la["st_list"])
+    # content fingerprint of the elaborated sources at refresh time —
+    # hier-build reuses this netlist, and an mtime guard alone is defeated
+    # by timestamp rollback (R5-D6)
+    try:
+        import hashlib as _h
+        fp = []
+        for vf in _vfiles_from_hqins(proj):
+            if os.path.isfile(vf):
+                h = _h.sha256()
+                with open(vf, "rb") as _f:
+                    for chunk in iter(lambda: _f.read(1 << 20), b""):
+                        h.update(chunk)
+                fp.append({"path": os.path.normpath(vf).replace(os.sep, "/"),
+                           "sha256": h.hexdigest()})
+        with open(os.path.join(proj["hqins_dir"], "hq_import",
+                               ".refresh_fingerprint.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"sources": fp}, f, indent=2)
+    except OSError:
+        pass
     print(f"[OK] Instrumented artifacts rebuilt ({n_probes} probe signal(s) preserved): {netlist}")
     print("Tip: 板上生效需 -insight -run 重新实现并下载（-run 只实现网表，不会重新探针插入）。")
 
@@ -2681,6 +2741,7 @@ def add_signal(proj: dict, name: str, clk: str | None, stype: int, module: str |
             print(f"       -module 应为模块名（可带 [N] 实例后缀），不能用实例路径片段（如 u_xxx）。")
             sys.exit(1)
         print(f"Error: 设计中找不到信号: {name}（用 -insight -ls 查看可用信号）")
+        print("       若该信号来自刚改过的 RTL：信号库还是旧的，先 -insight -refresh 刷新。")
         sys.exit(1)
     if len(matches) > 1:
         mods = ", ".join(c["module"] for c in matches)
@@ -3145,6 +3206,9 @@ def run_insight(args: list) -> None:
                     timeout = int(rest[i + 1])
                 except ValueError:
                     print(f"Error: invalid timeout: {rest[i + 1]}")
+                    sys.exit(1)
+                if timeout <= 0:
+                    print(f"Error: -timeout 必须为正整数，得到: {timeout}")
                     sys.exit(1)
                 i += 1
             elif rest[i] == "-o" and i + 1 < len(rest):

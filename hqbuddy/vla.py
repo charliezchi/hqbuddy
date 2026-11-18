@@ -280,6 +280,9 @@ def cmd_status(args: list) -> None:
         if not matches:
             print("Error: no .hqprj specified and none found in current directory.")
             sys.exit(1)
+        if len(matches) > 1:
+            print(f"[i] 当前目录有 {len(matches)} 个 .hqprj，选用: {matches[0]}"
+                  "（多工程时显式指定以消除歧义）")
         hqprj_arg = matches[0]
     if not os.path.isfile(hqprj_arg):
         print(f"Error: file not found: {hqprj_arg}")
@@ -904,6 +907,9 @@ def cmd_capture(args: list) -> None:
         elif rest[i] == "-o" and i + 1 < len(rest):
             out_prefix = os.path.abspath(rest[i + 1]); i += 1
         i += 1
+    if timeout <= 0:
+        print(f"Error: -timeout 必须为正整数，得到: {timeout}")
+        sys.exit(1)
     _ins.run_capture(session, timeout, force, out_prefix)
 
 
@@ -981,41 +987,43 @@ def cmd_program(args: list) -> None:
         # every -program re-arms the init values: the board's output
         # registers reset to 0 on each download, so this MUST run every time
         # (R4-D2: a stamp-based skip left silent zeros after re-programming)
-        if True:
-            def _parse_init(init: str) -> int:
-                """Contract init literal: 5'h13 / 8'b101 / decimal."""
-                m = re.match(r"^(\d+)'([hbd])([0-9a-fA-FxX_]+)$", init or "")
-                if m:
-                    base = {"h": 16, "b": 2, "d": 10}[m.group(2).lower()]
-                    core = m.group(3).replace("_", "")
-                    return 0 if "x" in core.lower() else int(core, base)
-                try:
-                    return int(init or "0", 0)
-                except ValueError:
-                    return 0
-            vals = [(pp, _parse_init(pp.get("init"))) for pp in vio["outputs"]]
-            out_str = ""
-            for pp, v in vals:
-                out_str = format(v, f"0{pp['width']}b") + out_str
-            total = len(out_str)
-            from . import insight as _ins
-            svf = os.path.join(session["hqins_dir"], "vio_init.svf")
-            cmds = [
-                f"insight.svf_generator.start -svf_file_path {{{_ins._tcl_path(svf)}}} "
-                f"-device_die {proj['die']}",
-                f"insight.svf_generator.vio_write -value {total}'b{out_str} "
-                f"-radix_type Binary -is_vla_mode True -is_multi_window False",
-                "insight.svf_generator.write",
-            ]
-            _ins._run_hqfpga_cmds(version["hqfpga_path"], cmds,
-                                  cwd=session["hqins_dir"])
-            _ins._play_svf(version["cable_path"], svf)
-            with open(stamp2, "w", encoding="utf-8") as f:
-                json.dump({"bin_sha256": h,
-                           "init": {pp["name"]: pp.get("init") for pp in vio["outputs"]}},
-                          f, indent=2)
-            print("[OK] VIO 输出初值已写入: " +
-                  ", ".join(f"{pp['name']}={pp.get('init')}" for pp in vio["outputs"]))
+
+        def _parse_init(init: str) -> int:
+            """Contract init literal: 5'h13 / 8'b101 / decimal."""
+            m = re.match(r"^(\d+)'([hbd])([0-9a-fA-FxX_]+)$", init or "")
+            if m:
+                base = {"h": 16, "b": 2, "d": 10}[m.group(2).lower()]
+                core = m.group(3).replace("_", "")
+                return 0 if "x" in core.lower() else int(core, base)
+            try:
+                return int(init or "0", 0)
+            except ValueError:
+                return 0
+
+        vals = [(pp, _parse_init(pp.get("init"))) for pp in vio["outputs"]]
+        out_str = ""
+        for pp, v in vals:
+            out_str = format(v, f"0{pp['width']}b") + out_str
+        total = len(out_str)
+        from . import insight as _ins
+        svf = os.path.join(session["hqins_dir"], "vio_init.svf")
+        cmds = [
+            f"insight.svf_generator.start -svf_file_path {{{_ins._tcl_path(svf)}}} "
+            f"-device_die {proj['die']}",
+            f"insight.svf_generator.vio_write -value {total}'b{out_str} "
+            f"-radix_type Binary -is_vla_mode True -is_multi_window False",
+            "insight.svf_generator.write",
+        ]
+        _ins._run_hqfpga_cmds(version["hqfpga_path"], cmds,
+                              cwd=session["hqins_dir"])
+        _ins._play_svf(version["cable_path"], svf)
+        stamp2 = os.path.join(session["hqins_dir"], "hq_import", ".vio_init_stamp")
+        with open(stamp2, "w", encoding="utf-8") as f:
+            json.dump({"bin_sha256": h,
+                       "init": {pp["name"]: pp.get("init") for pp in vio["outputs"]}},
+                      f, indent=2)
+        print("[OK] VIO 输出初值已写入: " +
+              ", ".join(f"{pp['name']}={pp.get('init')}" for pp in vio["outputs"]))
 
 
 def _session_ctx(args: list, need_vio: bool = False) -> tuple:
@@ -1238,21 +1246,74 @@ def cmd_hier_build(args: list) -> None:
         vio_sel = {"inst": vio_inst if "/" in vio_inst
                    else f"{proj['top']}/{vio_inst}", "signal": vio_sig}
         if rng:
-            hi, _, lo = rng.partition(":")
-            vio_sel["msb"], vio_sel["lsb"] = int(hi), int(lo)
+            parts = rng.split(":")
+            if len(parts) != 2 or not all(p.strip().isdigit() for p in parts):
+                print(f"Error: --vio-in 切片格式无效: ':{rng}'"
+                      "（应为 <实例路径>:<msb>:<lsb>，如 layer_top/u_a:3:0）")
+                sys.exit(1)
+            vio_sel["msb"], vio_sel["lsb"] = int(parts[0]), int(parts[1])
 
     # freshness: the bscan netlist must be newer than every elaborated source
     bscan = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
     if not os.path.isfile(bscan):
         print(f"Error: bscan 网表缺失: {bscan}——先 -insight -init/-add/-refresh。")
         sys.exit(1)
-    stale = [f for f in prj["sources"]
-             if f.endswith(".v") and f != bscan
-             and os.path.isfile(f) and os.path.getmtime(f) > os.path.getmtime(bscan)]
-    if stale:
-        print("Warning: 有源文件比 bscan 网表新——先 -insight -refresh 再 -hier-build: "
-              + ", ".join(os.path.basename(f) for f in stale))
-        sys.exit(1)
+    fp_path = os.path.join(proj["hqins_dir"], "hq_import",
+                           ".refresh_fingerprint.json")
+    stamp = None
+    if os.path.isfile(fp_path):
+        try:
+            stamp = json.load(open(fp_path, "r", encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            stamp = None
+    import hashlib as _h
+    if stamp and stamp.get("sources"):
+        def _sha(fp):
+            h = _h.sha256()
+            with open(fp, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        rec = {os.path.normpath(e["path"]): e["sha256"]
+               for e in stamp["sources"]}
+        combined_v = os.path.normpath(c["path"][:-5] + ".v")
+        changed = []
+        harmless_missing = []
+        for f in rec:
+            cur = _sha(f) if os.path.isfile(f) else None
+            if cur != rec[f]:
+                if cur is None and f == combined_v:
+                    # the combined IP .v is embedded in the bscan netlist —
+                    # deleting the source file does not affect the build
+                    harmless_missing.append(f)
+                else:
+                    changed.append(f)
+        # new files added after refresh (not in the fingerprint) count too
+        for f in prj["sources"]:
+            nf = os.path.normpath(f)
+            if f.endswith(".v") and nf not in rec and os.path.isfile(f):
+                changed.append(f + "  (refresh 后新增)")
+        if harmless_missing:
+            print("[i] 联合 IP .v 源文件已删（内容已内嵌于刷新网表，构建不受影响）。")
+        if changed:
+            print("Error: 设计输入与 -insight -refresh 时不一致（内容指纹）——")
+            for c_ in changed:
+                print(f"       - {c_}")
+            print("       hier-build 复用刷新网表，先 -insight -refresh 再重试。")
+            sys.exit(1)
+    else:
+        # fingerprint stamp missing (refreshed by an older version): fall
+        # back to mtime and say so
+        stale = [f for f in prj["sources"]
+                 if f.endswith(".v") and f != bscan
+                 and os.path.isfile(f)
+                 and os.path.getmtime(f) > os.path.getmtime(bscan)]
+        if stale:
+            print("Error: 有源文件比 bscan 网表新——先 -insight -refresh 再 -hier-build: "
+                  + ", ".join(os.path.basename(f) for f in stale))
+            sys.exit(1)
+        print("[WARN] 无 -refresh 内容指纹基线（旧版刷新产物）——陈旧检测退化为 mtime，"
+              "建议重跑 -insight -refresh。")
 
     derived, endpoint_map = _hier_derive_top(proj, bscan, la_sel, vio_sel, c)
     print(f"[OK] 派生顶层已生成: {derived}")
