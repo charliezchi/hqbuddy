@@ -141,6 +141,15 @@ Project:
                                         accepted-build manifest gates -gui
   -vla -gui [<.hqprj>]                  Native combined debugger (hq_ins --ipmode);
                                         gated on the accepted VLA build
+  -vla -program [--allow-violation]     Download the accepted combined bitstream
+                                        (hash gate + timing gate + init-value write)
+  -vla -vio-read [-loop N] [-interval s]
+                                        Read combined VIO input probes (live)
+  -vla -vio-write <probe>=<val>[,...]   Drive combined VIO outputs (-is_vla_mode True;
+                                        ALL outputs required, chain shifts as a whole)
+  -vla -trig <probe> EQ <val>           Arm the combined LA trigger (relocated ddf)
+  -vla -capture [-force] [-timeout N] [-o prefix]
+                                        Capture the combined LA waveform (VCD verified)
                                         Launch the VLA IP generator dialog (writes xsIP_VLA.v/hqip/cfg)
   -edf2v <a.edif> [-o <file>]          Convert a third-party EDIF netlist to Verilog
      [-device <part>]                   (family SEAL, for gate-level sim)

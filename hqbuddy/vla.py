@@ -546,6 +546,12 @@ def run_vla(args: list) -> None:
               "hq_run/.build_manifest.json 记账）")
         print("       hqbuddy -vla -gui [<.hqprj>]              原生联合调试 GUI"
               "（需已验收构建）")
+        print("       hqbuddy -vla -program [--allow-violation] 下载已验收联合位流")
+        print("       hqbuddy -vla -vio-read [-loop N] [-interval s]   读 VIO 输入探针")
+        print("       hqbuddy -vla -vio-write <probe>=<val>[,...]      驱动 VIO 输出探针"
+              "（须覆盖全部输出）")
+        print("       hqbuddy -vla -trig <probe> EQ <val>       布防联合 LA 触发")
+        print("       hqbuddy -vla -capture [-force] [-timeout N] [-o prefix] 抓取联合波形")
         sys.exit(1)
     first = args[0]
     if first == "-gen":
@@ -561,5 +567,451 @@ def run_vla(args: list) -> None:
     if first == "-gui":
         cmd_gui(args[1:])
         return
-    print(f"Error: unknown -vla option: {first} (supported: -gen/-status/-build/-gui)")
+    if first == "-program":
+        cmd_program(args[1:])
+        return
+    if first == "-vio-read":
+        cmd_vio_read(args[1:])
+        return
+    if first == "-vio-write":
+        cmd_vio_write(args[1:])
+        return
+    if first == "-trig":
+        cmd_trig(args[1:])
+        return
+    if first == "-capture":
+        cmd_capture(args[1:])
+        return
+    print(f"Error: unknown -vla option: {first} (supported: -gen/-status/-build/"
+          "-gui/-program/-vio-read/-vio-write/-trig/-capture)")
     sys.exit(1)
+
+
+# --- C: combined board session (relocated ddf + VIO + LA runtime) -----------
+
+def _combined_version():
+    from . import launcher
+    return launcher.require_hqfpga_version()
+
+
+def _session_probe_signals(c: dict) -> list:
+    """Ordered probe entries for the relocated ddf: LA probes (sample and/or
+    trigger) from the .hqip contract."""
+    out = []
+    for p in c["la"].get("probes", []):
+        stype = 4 if "Sample and Trigger" in p["type"] else \
+            (3 if "Trigger" in p["type"] else 2)
+        out.append({"name": f"probe{p['index']}", "msb": p["width"] - 1,
+                    "lsb": 0, "stype": stype})
+    return out
+
+
+def _ensure_session(proj: dict, c: dict, force_ddf: bool = False) -> dict:
+    """Bootstrap the combined session directory (hqvla_vio/): skeleton .hqins
+    + relocated ddf from the .hqip contract (GUI-equivalent of the native
+    combined debugger's _relocate_vla.ddf) + vio.cfg copy.  Returns a
+    proj-like dict the insight trigger/capture machinery operates on."""
+    work_dir = proj["work_dir"]
+    session_dir = os.path.join(work_dir, "hqvla_vio")
+    import_dir = os.path.join(session_dir, "hq_import")
+    os.makedirs(import_dir, exist_ok=True)
+    sproj = {"hqprj": proj["hqprj"], "work_dir": work_dir,
+             "hqins_dir": session_dir,
+             "hqins": os.path.join(session_dir, "hq_import.hqins"),
+             "ddf": os.path.join(import_dir, "_relocate_vla.ddf"),
+             "top": proj["top"], "die": proj["die"], "family": proj["family"]}
+    la_info = {"la_list": []}
+    la = {"clk_list": [], "data_in_order": [], "s_list": [], "st_list": [],
+          "t_list": [], "trig_in_order": []}
+    for s in _session_probe_signals(c):
+        entry = {"ip_signal_name": f"{s['name']}__INS_{proj['top']}__INS0",
+                 "lsb": s["lsb"], "msb": s["msb"],
+                 "module_name": proj["top"], "raw_signal_name": s["name"],
+                 "show_hier_name": f"{proj['top']}/{s['name']}[{s['msb']}:{s['lsb']}]",
+                 "show_name": s["name"]}
+        if s["stype"] == 2:
+            la["s_list"].append(entry)
+            la["data_in_order"].append(entry["ip_signal_name"])
+        elif s["stype"] == 3:
+            la["t_list"].append(entry)
+            la["trig_in_order"].append(entry["ip_signal_name"])
+        else:
+            la["st_list"].append(entry)
+            la["data_in_order"].append(entry["ip_signal_name"])
+            la["trig_in_order"].append(entry["ip_signal_name"])
+    # sampling clock: ref_clk (the combined IP's only clock port)
+    la["clk_list"].append({"ip_signal_name": f"ref_clk__INS_{proj['top']}__INS0",
+                           "lsb": 0, "msb": 0, "module_name": proj["top"],
+                           "raw_signal_name": "ref_clk",
+                           "show_hier_name": f"{proj['top']}/ref_clk",
+                           "show_name": "ref_clk"})
+    la_info["la_list"].append(la)
+
+    if not os.path.isfile(sproj["hqins"]):
+        from . import insight
+        with open(sproj["hqins"], "w", encoding="utf-8") as f:
+            f.write(insight._initial_hqins(sproj, []))
+        sig0 = {"version": "0.0.3", "module_sample_list": [
+            {"clk_module_name": proj["top"], "clk_signal_name": "ref_clk",
+             "modules_sample_data": [{
+                 "module_name": proj["top"],
+                 "sample_list": [s["name"] for s in _session_probe_signals(c)
+                                 if s["stype"] == 2],
+                 "trigger_list": [s["name"] for s in _session_probe_signals(c)
+                                  if s["stype"] == 3],
+                 "sample_and_trigger_list": [s["name"] for s in
+                                             _session_probe_signals(c)
+                                             if s["stype"] == 4],
+                 "normal_signals": [
+                     {"signal_name": s["name"], "sample_type": s["stype"],
+                      "raw_msb": s["msb"], "raw_lsb": s["lsb"],
+                      "slice_msb": s["msb"], "slice_lsb": s["lsb"]}
+                     for s in _session_probe_signals(c)]}]}]}
+        insight._rewrite_hqins_sections(sproj, sig0, la_info)
+    if force_ddf or not os.path.isfile(sproj["ddf"]):
+        from . import insight
+        insight._write_ddf_from_la(sproj, la_info)
+        print("[i] 会话 ddf 已重建（触发条件已重置，需重新 -vla -trig）")
+
+    # sample-clock period: real SDC value (40ns board evidence), not the
+    # .hqins default 10ns
+    from . import insight as _ins
+    _ins.sync_sample_freq(sproj)
+
+    # vio.cfg (GUI session layout parity)
+    vio_cfg = os.path.join(session_dir, "vio.cfg")
+    if c["vio"] and not os.path.isfile(vio_cfg):
+        lines = ["[SIGNAL INFO]"]
+        for p in c["vio"]["inputs"]:
+            lines.append(f"0={p['name']}=input={p['width']}")
+        for p in c["vio"]["outputs"]:
+            lines.append(f"0={p['name']}=output={p['width']}={p['init']}")
+        with open(vio_cfg, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+    return sproj
+
+
+def _vla_manifest_gate(proj: dict) -> dict:
+    """Combined build must be accepted (manifest) and the local bin intact."""
+    prj = parse_hqprj(proj["hqprj"])
+    mp = os.path.join(prj["out_dir_abs"], ".build_manifest.json")
+    if not os.path.isfile(mp):
+        print("Error: 没有已验收的联合构建（hq_run/.build_manifest.json）——先 -vla -build。")
+        sys.exit(1)
+    m = json.load(open(mp, "r", encoding="utf-8"))
+    out = m.get("outputs", {})
+    recorded = out.get("bin") or ""
+    import hashlib
+    expected = out.get("bin_sha256")
+    local = os.path.join(prj["out_dir_abs"], os.path.basename(recorded)) \
+        if recorded else None
+    if local and os.path.isfile(local):
+        h = hashlib.sha256(open(local, "rb").read()).hexdigest()
+        if h != expected:
+            print(f"Error: 位流内容与清单不符: {local}——重新 -vla -build。")
+            sys.exit(1)
+        m["_bin_local"] = local
+        return m
+    if recorded and os.path.isfile(recorded):
+        h = hashlib.sha256(open(recorded, "rb").read()).hexdigest()
+        if h != expected:
+            print(f"Error: 位流内容与清单不符: {recorded}——重新 -vla -build。")
+            sys.exit(1)
+        m["_bin_local"] = recorded
+        return m
+    print(f"Error: 已验收位流不存在: {local or recorded}——重新 -vla -build。")
+    sys.exit(1)
+
+
+def _find_contract(proj: dict) -> dict:
+    ips = find_combined_ips(proj["work_dir"])
+    usable = [c for c in ips if not c.get("broken")]
+    if not usable:
+        print("Error: 工程树内没有可解析的联合 VLA .hqip——先 -vla -gen。")
+        sys.exit(1)
+    return usable[0]
+
+
+def cmd_vio_read(args: list) -> None:
+    """Handle 'hqbuddy -vla -vio-read [<.hqprj>] [-loop N] [-interval s]':
+    read the combined VIO input probe chain (contract-level probes)."""
+    loop, interval = 1, 1.0
+    i = 0
+    while i < len(args):
+        if args[i] == "-loop" and i + 1 < len(args):
+            loop = int(args[i + 1]); i += 2
+        elif args[i] == "-interval" and i + 1 < len(args):
+            interval = float(args[i + 1]); i += 2
+        else:
+            i += 1
+    proj, c, session = _session_ctx(args, need_vio=True)
+    vio = c["vio"]
+    ins = vio["inputs"]
+    total = sum(p["width"] for p in ins)
+    version = _combined_version()
+    from . import insight as _ins
+    from . import jtag
+
+    def one_read():
+        svf = os.path.join(session["hqins_dir"], "vio_read.svf")
+        cmds = [
+            f"insight.svf_generator.start -svf_file_path {{{_ins._tcl_path(svf)}}} "
+            f"-device_die {proj['die']}",
+            f"insight.svf_generator.vio_read -bit_length {total}",
+            "insight.svf_generator.write",
+        ]
+        _ins._run_hqfpga_cmds(version["hqfpga_path"], cmds, cwd=session["hqins_dir"])
+        tdo = _ins._play_svf(version["cable_path"], svf)
+        vals = [v for v in tdo if v and all(ch in "0123456789abcdefABCDEF" for ch in v)]
+        if not vals:
+            print("Error: vio_read 无 TDO 数据（检查下载/JTAG）。")
+            sys.exit(1)
+
+        raw = int(vals[-1], 16)
+        s = format(raw, f"0{total}b")
+        start = 0
+        results = []
+        for pp in ins:
+            bits = s[start:start + pp["width"]][::-1]
+            start += pp["width"]
+            results.append((pp["name"], int(bits, 2), pp["width"]))
+        return results
+
+    def show():
+        for name, val, w in one_read():
+            hexw = max(1, (w + 3) // 4)
+            print(f"  {name:16s} = 0x{val:0{hexw}X}  ({val})  [{w}b]")
+    show()
+    for _ in range(loop - 1):
+        time.sleep(interval)
+        print("  ---")
+        show()
+
+
+def cmd_vio_write(args: list) -> None:
+    """Handle 'hqbuddy -vla -vio-write <probe>=<val>[,...]': drive the combined
+    VIO output chain.  Combined mode uses -is_vla_mode True (the generator
+    expands the frame internally, e.g. 5-bit out -> 15-bit SDR, board-verified).
+    Unassigned outputs are rejected: the chain shifts as a whole and the
+    'unassigned -> 0' behaviour of standalone VIO is a silent-write hazard."""
+    assigns = [a for a in args if "=" in a]
+    proj, c, session = _session_ctx(args, need_vio=True)
+    vio = c["vio"]
+    outs = vio["outputs"]
+    if not assigns:
+        print(f"Error: -vio-write 需要赋值，且必须覆盖全部输出探针: "
+              f"{', '.join(p['name'] for p in outs)}")
+        sys.exit(1)
+    values = {}
+    for a in assigns:
+        name, _, val = a.partition("=")
+        target = next((pp for pp in outs if pp["name"] == name), None)
+        if target is None:
+            print(f"Error: 未知输出探针 '{name}'（契约: "
+                  f"{', '.join(pp['name'] for pp in outs)}）")
+            sys.exit(1)
+        try:
+            v = int(val, 2) if val.startswith("0b") else int(val, 0)
+        except ValueError:
+            print(f"Error: {name} 的值无效: {val}（十进制/0x/0b）")
+            sys.exit(1)
+        if v < 0 or v >= (1 << target["width"]):
+            print(f"Error: 值 {val} 超出 {name}[{target['width']}b]")
+            sys.exit(1)
+        values[name] = v
+    missing = [pp["name"] for pp in outs if pp["name"] not in values]
+    if missing:
+        print(f"Error: 联合写必须提供全部输出探针的值（未提供: {', '.join(missing)}）——")
+        print("       联合 JTAG 链整链移位，未赋值探针会被清零（独立 VIO 的静默清零行为不可接受）。")
+        sys.exit(1)
+    out_str = ""
+    for pp in outs:
+        out_str = format(values[pp["name"]], f"0{pp['width']}b") + out_str
+    total = len(out_str)
+    version = _combined_version()
+    from . import insight as _ins
+    svf = os.path.join(session["hqins_dir"], "vio_write.svf")
+    cmds = [
+        f"insight.svf_generator.start -svf_file_path {{{_ins._tcl_path(svf)}}} "
+        f"-device_die {proj['die']}",
+        f"insight.svf_generator.vio_write -value {total}'b{out_str} "
+        f"-radix_type Binary -is_vla_mode True -is_multi_window False",
+        "insight.svf_generator.write",
+    ]
+    _ins._run_hqfpga_cmds(version["hqfpga_path"], cmds, cwd=session["hqins_dir"])
+    _ins._play_svf(version["cable_path"], svf)
+    print("[OK] VIO 输出已写入（联合模式 is_vla_mode=True）: " +
+          ", ".join(f"{pp['name']}=0x{values[pp['name']]:X}" for pp in outs))
+
+
+def cmd_trig(args: list) -> None:
+    """Handle 'hqbuddy -vla -trig <expr...>': arm the combined LA trigger
+    (same three-file discipline as -insight -trig, on the relocated ddf)."""
+    from . import insight as _ins
+    proj, c, session = _session_ctx(args)
+    tokens = [a for a in args if not a.endswith(".hqprj")]
+    if not tokens:
+        print("Usage: -vla -trig <sig> EQ <val>  （信号为 .hqip 契约的 LA 探针名，如 probe0）")
+        sys.exit(1)
+    parsed = _ins.write_trigger_files(session, _ins.parse_trig_expr(tokens))
+    print(f"[OK] 触发布防: {len(parsed['conds'])} 条件（relocated ddf + trigger_cond.json）")
+    print("Tip: 下载用 -vla -program，抓波用 -vla -capture。")
+
+
+def cmd_capture(args: list) -> None:
+    """Handle 'hqbuddy -vla -capture [-force] [-timeout N] [-o prefix]':
+    capture the combined LA waveform (full A-package verification chain)."""
+    from . import insight as _ins
+    proj, c, session = _session_ctx(args)
+    timeout, force, out_prefix = 60, False, None
+    rest = [a for a in args if not a.endswith(".hqprj")]
+    i = 0
+    while i < len(rest):
+        if rest[i] == "-force":
+            force = True
+        elif rest[i] == "-timeout" and i + 1 < len(rest):
+            timeout = int(rest[i + 1]); i += 1
+        elif rest[i] == "-o" and i + 1 < len(rest):
+            out_prefix = os.path.abspath(rest[i + 1]); i += 1
+        i += 1
+    _ins.run_capture(session, timeout, force, out_prefix)
+
+
+def cmd_program(args: list) -> None:
+    """Handle 'hqbuddy -vla -program [--allow-violation]': download the
+    accepted combined bitstream (manifest hash gate, timing gate, programming
+    stamp in the session dir)."""
+    allow_violation = "--allow-violation" in args
+    proj, c, session = _session_ctx(args)
+    version = _combined_version()
+    cable_exe = version.get("cable_path")
+    if not version.get("has_cable") or not os.path.isfile(cable_exe):
+        print(f"Error: cable.exe not found in {version['path']}")
+        sys.exit(1)
+    m = _vla_manifest_gate(proj)
+    bin_path = m["_bin_local"]
+    timing = m.get("outputs", {}).get("timing", {})
+    violated = not (timing.get("setup_met", True) and timing.get("hold_met", True))
+    if violated and not allow_violation:
+        print("Error: 该构建时序未收敛"
+              f"（setup WNS {timing.get('wns_setup_ps')} ps / hold WNS {timing.get('wns_hold_ps')} ps）——")
+        print("       带违例下载请显式加 --allow-violation（实验位流）。")
+        sys.exit(1)
+    if violated:
+        print("[WARN] 时序违例位流，--allow-violation 已确认（实验用途）。")
+
+    from . import jtag
+    session_log = jtag.session_dir({"hqins_dir": session["hqins_dir"]}, "program")
+    import hashlib
+    h = hashlib.sha256(open(bin_path, "rb").read()).hexdigest()
+    with jtag.jtag_lock(version):
+        try:
+            r = subprocess.run([cable_exe, "--detect_model"],
+                               capture_output=True, text=True, errors="replace",
+                               timeout=60)
+        except subprocess.TimeoutExpired:
+            print("Error: cable.exe --detect_model 超时（60s）——板卡/JTAG 未连接？")
+            sys.exit(1)
+        mm = re.search(r"Device Model\s*:\s*(\S+)", r.stdout or "")
+        if not mm:
+            print("[FAIL] 未能探测到板上型号，下载中止。")
+            sys.exit(1)
+        model = mm.group(1)
+        print(f"[OK] 板上型号: {model}")
+        cmd = [cable_exe, "--sealion", bin_path, "--model", model, "--Burst"]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  errors="replace", timeout=300)
+        except subprocess.TimeoutExpired:
+            print("Error: 下载超时（300s）。")
+            sys.exit(1)
+        outtxt = (proc.stdout or "") + (proc.stderr or "")
+        has_error = any(re.search(r"\b(error|fail(?:ed)?)\b\s*[:：]", ln, re.I)
+                        for ln in outtxt.splitlines())
+        if proc.returncode != 0 or has_error:
+            print(f"[FAIL] 下载失败 (exit {proc.returncode})。")
+            for ln in outtxt.splitlines()[-10:]:
+                print("  " + ln)
+            sys.exit(1)
+    stamp_path = os.path.join(session["hqins_dir"], "hq_import",
+                              ".programmed_stamp")
+    with open(stamp_path, "w", encoding="utf-8") as f:
+        json.dump({"bin": bin_path, "bin_sha256": h,
+                   "build_id": m.get("build_id"), "model": model,
+                   "time": time.time(), "violation_ok": violated}, f, indent=2)
+    print(f"[OK] Programmed build {m.get('build_id')} -> "
+          f"{os.path.basename(bin_path)} (sha256 {h[:12]}..., model {model})")
+
+    # board-verified: a fresh download leaves the VIO output registers at 0 —
+    # the native GUI writes the contract initial values at startup ("GUI
+    # 初开会主动访问板卡").  Do the same so -vio-read shows the contract
+    # init (e.g. 5'h13) right after programming.
+    vio = c["vio"]
+    if vio and vio["outputs"]:
+        stamp2 = os.path.join(session["hqins_dir"], "hq_import",
+                              ".vio_init_stamp")
+        init_ok = True
+        try:
+            prev = json.load(open(stamp2, "r", encoding="utf-8"))
+            init_ok = (prev.get("bin_sha256") == h)
+        except (OSError, json.JSONDecodeError):
+            init_ok = False
+        if not init_ok:
+            def _parse_init(init: str) -> int:
+                """Contract init literal: 5'h13 / 8'b101 / decimal."""
+                m = re.match(r"^(\d+)'([hbd])([0-9a-fA-FxX_]+)$", init or "")
+                if m:
+                    base = {"h": 16, "b": 2, "d": 10}[m.group(2).lower()]
+                    core = m.group(3).replace("_", "")
+                    return 0 if "x" in core.lower() else int(core, base)
+                try:
+                    return int(init or "0", 0)
+                except ValueError:
+                    return 0
+            vals = [(pp, _parse_init(pp.get("init"))) for pp in vio["outputs"]]
+            out_str = ""
+            for pp, v in vals:
+                out_str = format(v, f"0{pp['width']}b") + out_str
+            total = len(out_str)
+            from . import insight as _ins
+            svf = os.path.join(session["hqins_dir"], "vio_init.svf")
+            cmds = [
+                f"insight.svf_generator.start -svf_file_path {{{_ins._tcl_path(svf)}}} "
+                f"-device_die {proj['die']}",
+                f"insight.svf_generator.vio_write -value {total}'b{out_str} "
+                f"-radix_type Binary -is_vla_mode True -is_multi_window False",
+                "insight.svf_generator.write",
+            ]
+            _ins._run_hqfpga_cmds(version["hqfpga_path"], cmds,
+                                  cwd=session["hqins_dir"])
+            _ins._play_svf(version["cable_path"], svf)
+            with open(stamp2, "w", encoding="utf-8") as f:
+                json.dump({"bin_sha256": h,
+                           "init": {pp["name"]: pp.get("init") for pp in vio["outputs"]}},
+                          f, indent=2)
+            print("[OK] VIO 输出初值已写入: " +
+                  ", ".join(f"{pp['name']}={pp.get('init')}" for pp in vio["outputs"]))
+
+
+def _session_ctx(args: list, need_vio: bool = False) -> tuple:
+    """Common context for runtime commands: project + contract + session."""
+    hqprj_arg = next((a for a in args if a.endswith(".hqprj")), None)
+    if hqprj_arg is None:
+        matches = sorted(glob.glob("*.hqprj"))
+        if not matches:
+            print("Error: no .hqprj specified and none found in current directory.")
+            sys.exit(1)
+        hqprj_arg = matches[0]
+    if not os.path.isfile(hqprj_arg):
+        print(f"Error: file not found: {hqprj_arg}")
+        sys.exit(1)
+    hqprj_abs = os.path.abspath(hqprj_arg)
+    prj = parse_hqprj(hqprj_abs)
+    proj = {"hqprj": hqprj_abs, "work_dir": prj["work_dir"],
+            "top": prj["top"], "die": prj["die"], "family": prj["family"]}
+    c = _find_contract(proj)
+    if need_vio and not c["vio"]:
+        print("Error: 该联合 IP 没有 VIO 段（纯 LA IP）——VIO 命令不适用。")
+        sys.exit(1)
+    session = _ensure_session(proj, c)
+    return proj, c, session
