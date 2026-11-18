@@ -1258,7 +1258,8 @@ def _check_session_tree(proj: dict) -> None:
     in the copy build the old logic).  Refuse with the recovery path."""
     import glob as _g
     scans = [os.path.join(proj["hqins_dir"], "hq_import.hqins")]
-    scans += [f for f in _g.glob(os.path.join(proj["hqins_dir"], "**", "*"))
+    scans += [f for f in _g.glob(os.path.join(proj["hqins_dir"], "**", "*"),
+                                 recursive=True)
               if os.path.isfile(f) and f.endswith((".f", ".tcl", ".json"))]
     work = os.path.normcase(os.path.normpath(proj["work_dir"]))
     bad = []

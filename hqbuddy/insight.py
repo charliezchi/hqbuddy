@@ -2094,6 +2094,33 @@ def run_refresh(proj: dict) -> None:
     tcl = os.path.join(proj["hqins_dir"], "hq_impor_t.tcl")
     if not os.path.isfile(tcl):
         _write_import_tcls(proj, _vfiles_from_hqins(proj))
+    # a copied project carries the ORIGINAL tree's absolute paths inside the
+    # import tcl / hq_srcfile.f — this refresh would elaborate the ORIGINAL
+    # sources and WRITE its artifacts through to the other tree (R8-D2).
+    # Precise check: every absolute vfile in the tcl must be present in the
+    # .hqins [PROJECT FILES] resolved against THIS project dir; a copy's tcl
+    # points at the original tree which the .hqins macros resolve elsewhere.
+    work = os.path.normcase(os.path.normpath(proj["work_dir"]))
+    prj_files = set()
+    for pf in _vfiles_from_hqins(proj):
+        prj_files.add(os.path.normcase(os.path.normpath(pf)))
+    outside = []
+    for ln in open(tcl, "r", encoding="utf-8", errors="replace"):
+        ln = ln.strip()
+        m = re.match(r'^lappend vfiles \{([A-Za-z]:[/\\][^}]*)\}$', ln)
+        if not m:
+            continue
+        p_ = os.path.normcase(os.path.normpath(m.group(1)))
+        if p_ not in prj_files:
+            outside.append(m.group(1))
+    if outside:
+        print("Error: hqins_run 的 import TCL 内嵌了本工程之外的源文件路径"
+              "（工程被复制过？）——")
+        print("       本次 refresh 会读原树源文件并把产物写穿过去，已拒绝。")
+        print("       恢复：删除 hqins_run/ 后重新 -insight -init/-add/-refresh。")
+        for ln in outside[:3]:
+            print(f"       例: {ln}")
+        sys.exit(1)
     print("[1/2] Refreshing signal database (rtl.elaborate -insight) ...")
     proc = subprocess.Popen([version["hqfpga_path"], "-cmd", tcl],
                             cwd=proj["work_dir"])
