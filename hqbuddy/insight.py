@@ -1238,8 +1238,11 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
             print(f"Error: -o 输出目录无法创建: {prefix_dir} ({e})")
             sys.exit(1)
     cond_path = os.path.join(import_dir, "trigger_cond.json")
-    if not os.path.isfile(cond_path):
-        print("Error: 尚未设置触发条件——先执行 -insight -trig。")
+    if not os.path.isfile(cond_path) and not force:
+        # -force runs with an all-ignore ddf (= trigger always fires) and is
+        # a legal way to grab the current waveform on a fresh session
+        print("Error: 尚未设置触发条件——先执行 -insight -trig（或 -vla -trig，按会话），")
+        print("       或加 -force 立即抓取当前波形。")
         sys.exit(1)
     if not os.path.isfile(proj["ddf"]):
         print(f"Error: .ddf not found: {proj['ddf']}")
@@ -3062,6 +3065,48 @@ def _rebuild_instrumented(proj: dict, sig_info: dict, la_info: dict) -> None:
         sys.exit(1)
     open(os.path.join(proj["hqins_dir"], ".hq_ins.chk_ok"), "w").close()
     la = la_info["la_list"][0]
+
+    # probe-order calibration (R10-D1, board-caused): the generated netlist's
+    # data_in_0 concatenation order does NOT follow la_info after a
+    # del->re-add (the vendor keeps its own first-registration order), while
+    # data_in_order/trig_in_order DO — the metadata would then describe a
+    # different physical bit order than the hardware, swapping VCD labels
+    # and killing armed triggers.  Read the ACTUAL order from the netlist
+    # and reconcile every metadata surface + the ddf storage section.
+    netlist = os.path.join(import_dir, "hq_import_with_bscan.v")
+    m = re.search(r"\.data_in_0\s*\(\s*\{([^}]*)\}", open(
+        netlist, "r", encoding="utf-8", errors="replace").read())
+    if m:
+        actual = [n.strip().lstrip("\\").strip() for n in m.group(1).split(",")]
+        actual = [n for n in actual if n]
+        pos = {n: k for k, n in enumerate(actual)}
+        sample_nets = {e["ip_signal_name"] for e in la["s_list"] + la["st_list"]}
+        trig_nets = {e["ip_signal_name"] for e in la["t_list"] + la["st_list"]}
+        declared = [e["ip_signal_name"] for e in
+                    la["s_list"] + la["st_list"] + la["t_list"]]
+        dio_ok = ([n for n in la["data_in_order"] if n in sample_nets]
+                  == [n for n in actual if n in sample_nets])
+        tio_ok = ([n for n in la["trig_in_order"] if n in trig_nets]
+                  == [n for n in actual if n in trig_nets])
+        if actual != declared or not dio_ok or not tio_ok:
+            def _by_pos(e):
+                return pos.get(e["ip_signal_name"], 0)
+            for key in ("s_list", "st_list", "t_list"):
+                la[key].sort(key=_by_pos)
+            la["data_in_order"] = [n for n in actual if n in sample_nets]
+            la["trig_in_order"] = [n for n in actual if n in trig_nets]
+            for entry in la["s_list"] + la["st_list"] + la["t_list"]:
+                entry["net_pos"] = pos.get(entry["ip_signal_name"], 0)
+            la_info["la_list"][0] = la
+            print("[i] 探针顺序已按网表实际位序校准（del→re-add 后厂商拼接序"
+                  "与登记顺序不一致）：" + " → ".join(
+                      n.split("__INS_")[0] for n in actual))
+            # the ddf <storage> order drives the VCD bit order — regenerate it
+            _rewrite_hqins_sections(proj, sig_info, la_info)
+            _write_ddf_from_la(proj, la_info)
+            print("Warning: ddf 已随顺序校准重建——已布防的触发条件被重置，"
+                  "重新 -insight -trig 后再 -capture。")
+
     # signal.inf: "<name>:<module>::<hier>" lines in s/t/st order.
     # Written AFTER -new_rtl, because elaborate rewrites it with an empty hier.
     def hier_of(e):
