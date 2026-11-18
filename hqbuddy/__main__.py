@@ -130,7 +130,17 @@ Project:
                                         new/fw/bin/sim/list/ocd (-tinysoc 无参数看详情)
   -doclist [keyword ...]               官网技术文档目录(DocumentTracker 缓存;关键词过滤)
   -docget <关键词> [-o <dir>]          下载文档/附件(isilicontech.com 直链,magic 校验)
-  -vla -gen [-name VLA] [-dir <dir>] [-device <part>]
+  -vla -gen [-name VLA] [-dir <dir>] [-device <part>] [--config x.hqip]
+                                        Official VLA wizard (--config: regenerate an
+                                        existing .hqip contract in an isolated dir)
+  -vla -status [<.hqprj>] [-export]     Combined-IP discovery: .hqip contract,
+                                        RTL instantiation cross-check, insight.check
+                                        verdict on routed XPN, native -vlas export
+  -vla -build [<.hqprj>] [--force]      Combined implementation: staged acceptance
+                                        into OUT_DIR, insight.check captured,
+                                        accepted-build manifest gates -gui
+  -vla -gui [<.hqprj>]                  Native combined debugger (hq_ins --ipmode);
+                                        gated on the accepted VLA build
                                         Launch the VLA IP generator dialog (writes xsIP_VLA.v/hqip/cfg)
   -edf2v <a.edif> [-o <file>]          Convert a third-party EDIF netlist to Verilog
      [-device <part>]                   (family SEAL, for gate-level sim)
@@ -1925,7 +1935,8 @@ def main():
 
     # Third-party EDIF netlist -> Verilog
     if first == '-vla':
-        run_vla_gen(args[1:])
+        from .vla import run_vla
+        run_vla(args[1:])
         return
 
     if first == '-edf2v':

@@ -87,12 +87,15 @@ def _first_word(cmd: str) -> str:
 
 
 def build_stage_tcl(flow_tcl: str, out_path: str, bin_target_abs: str | None,
-                    route_dump: str | None = None) -> tuple:
+                    route_dump: str | None = None,
+                    post_route_check: bool = False) -> tuple:
     """Rewrite an hqprj2tcl flow TCL into a staged TCL with per-stage catch
     wrappers and @STAGE markers.  bin_target_abs: rewrite the design.bitgen
     file target to this absolute path (keeps -compress/-bin style flags).
     route_dump: append `design.save <path>` to the route stage (the official
     insight flow saves the post-route design for `-xpn -ins`).
+    post_route_check: append insight.check has_vla/has_vio probes emitting
+    @CHECK markers (captured by run_stage_build for the VLA manifest).
 
     Returns (out_path, {stage: [expected artifact basenames]})."""
     with open(flow_tcl, "r", encoding="gbk", errors="replace") as f:
@@ -129,6 +132,11 @@ def build_stage_tcl(flow_tcl: str, out_path: str, bin_target_abs: str | None,
 
     if route_dump and "route" in stages:
         stages["route"].append(f"design.save {route_dump}")
+    if post_route_check and "route" in stages:
+        stages["route"].append('set hb_vla [insight.check has_vla]')
+        stages["route"].append('puts "@CHECK has_vla=$hb_vla"')
+        stages["route"].append('set hb_vio [insight.check has_vio]')
+        stages["route"].append('puts "@CHECK has_vio=$hb_vio"')
 
     expected = {}
     out = ["#[hqbuddy staged flow] generated from " + os.path.basename(flow_tcl),
@@ -182,28 +190,45 @@ def build_stage_tcl(flow_tcl: str, out_path: str, bin_target_abs: str | None,
     return out_path, expected
 
 
-def write_derived_project(proj: dict, build_dir: str) -> str:
-    """Generate hqins_impl.hqprj inside build_dir from the MAIN project.
+def write_derived_project(proj: dict, build_dir: str,
+                          main_mode: bool = False) -> str:
+    """Generate the build project (hqins_impl.hqprj / build.hqprj) inside
+    build_dir.
 
-    FILE_SRC is swapped to the two instrumented netlists; FILE_TC/FILE_PC and
-    RTL_9 are absolutized (the derived project lives in a different directory
-    than the main project, so $WORK_DIR$-relative paths would resolve wrong);
-    BGEN_1/BGEN_2 are forced on so a .bin is always produced.  The user's
-    original .hqprj is never written (P0 acceptance)."""
-    netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
-    insight_ip = os.path.join(proj["hqins_dir"], "hq_import", "insight_ip.v")
-    for f in (netlist, insight_ip):
-        if not os.path.isfile(f):
-            print(f"Error: 插桩产物缺失: {f}——先 -insight -refresh 重建。")
-            sys.exit(1)
+    insight mode (default): FILE_SRC is swapped to the two instrumented
+    netlists.  main mode (VLA combined build): FILE_SRC stays untouched —
+    the user's own RTL with the combined IP.  In BOTH modes FILE_TC/FILE_PC
+    and RTL_9 are absolutized (the build dir is not the project dir, so
+    $WORK_DIR$-relative paths would resolve wrong) and BGEN_1/BGEN_2 are
+    forced on so a .bin is always produced.  The user's original .hqprj is
+    never written (P0 acceptance)."""
+    if main_mode:
+        src_lines = open(proj["hqprj"], "r", encoding="utf-8",
+                         errors="replace").read().splitlines()
+    else:
+        netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
+        insight_ip = os.path.join(proj["hqins_dir"], "hq_import", "insight_ip.v")
+        for f in (netlist, insight_ip):
+            if not os.path.isfile(f):
+                print(f"Error: 插桩产物缺失: {f}——先 -insight -refresh 重建。")
+                sys.exit(1)
+        src_lines = []
+        for ln in open(proj["hqprj"], "r", encoding="utf-8",
+                       errors="replace").read().splitlines():
+            stripped = ln.strip()
+            if stripped.startswith(("FILE_SRC", "FILE_SRC_DISABLED", "FILE_TIME",
+                                    "FILE_TIME_CST")):
+                continue
+            src_lines.append(ln)
+        src_lines.append(f"FILE_SRC={_tcl_path(netlist)}")
+        src_lines.append(f"FILE_SRC={_tcl_path(insight_ip)}")
+        src_lines.append(f"FILE_TIME={int(os.path.getmtime(netlist))}")
+        src_lines.append(f"FILE_TIME={int(os.path.getmtime(insight_ip))}")
 
     prj = parse_hqprj(proj["hqprj"])
     out_lines = []
-    for ln in open(proj["hqprj"], "r", encoding="utf-8", errors="replace").read().splitlines():
+    for ln in src_lines:
         stripped = ln.strip()
-        if stripped.startswith(("FILE_SRC", "FILE_SRC_DISABLED", "FILE_TIME",
-                                "FILE_TIME_CST")):
-            continue
         if stripped.startswith("BGEN_1=false"):
             out_lines.append("BGEN_1=true")
             continue
@@ -223,31 +248,58 @@ def write_derived_project(proj: dict, build_dir: str) -> str:
                     resolved = os.path.join(proj["work_dir"], resolved)
                 out_lines.append(f"{key}={_tcl_path(resolved)}")
             continue
+        if stripped.startswith(("FILE_SRC=", "FILE_SRC_DISABLED=")) \
+                and not stripped.endswith("=NONE"):
+            # $WORK_DIR$/relative sources resolve against the BUILD project's
+            # directory, not the main project dir — absolutize
+            key, _, val = stripped.partition("=")
+            resolved = val.strip()
+            if resolved.startswith("$WORK_DIR$"):
+                resolved = resolved[len("$WORK_DIR$"):]
+            if not os.path.isabs(resolved):
+                resolved = os.path.join(proj["work_dir"], resolved)
+            out_lines.append(f"{key}={_tcl_path(resolved)}")
+            continue
         if stripped.startswith("RTL_9=") and prj["include_dir"]:
             out_lines.append(f"RTL_9={_tcl_path(prj['include_dir'])}")
             continue
         out_lines.append(ln)
-    out_lines.append(f"FILE_SRC={_tcl_path(netlist)}")
-    out_lines.append(f"FILE_SRC={_tcl_path(insight_ip)}")
-    out_lines.append(f"FILE_TIME={int(os.path.getmtime(netlist))}")
-    out_lines.append(f"FILE_TIME={int(os.path.getmtime(insight_ip))}")
-    for f in prj["tc"] + prj["pc"]:
-        out_lines.append(f"FILE_TIME_CST={int(os.path.getmtime(f))}" if os.path.isfile(f)
-                         else "FILE_TIME_CST=0")
+    if main_mode:
+        for f in prj["tc"] + prj["pc"]:
+            if os.path.isfile(f):
+                out_lines.append(f"FILE_TIME_CST={int(os.path.getmtime(f))}")
+    else:
+        for f in prj["tc"] + prj["pc"]:
+            out_lines.append(f"FILE_TIME_CST={int(os.path.getmtime(f))}" if os.path.isfile(f)
+                             else "FILE_TIME_CST=0")
 
-    path = os.path.join(build_dir, "hqins_impl.hqprj")
+    path = os.path.join(build_dir, "hqins_impl.hqprj" if not main_mode
+                        else "build.hqprj")
     with open(path, "w", encoding="utf-8", newline="") as f:
         f.write("\n".join(out_lines) + "\n")
     return path
 
 
 def run_stage_build(proj: dict, hqfpga_exe: str, build_id: str,
-                    require_bin: bool = True) -> dict:
+                    require_bin: bool = True, main_mode: bool = False,
+                    post_route_check: bool = False) -> dict:
     """Run the full staged build in a private directory.  Returns the outputs
     dict for the manifest.  Exits nonzero on any stage failure, preserving the
-    previous hqins_impl/ and leaving a failed_build_<id>/ reproduction dir."""
-    import_dir = os.path.join(proj["hqins_dir"], "hq_import")
-    impl_dir = os.path.join(import_dir, "hqins_impl")
+    previous artifacts and leaving a failed_build_<id>/ reproduction dir.
+
+    insight mode (default): builds the derived project and publishes into
+    hqins_impl/ (route-stage design.save kept for -xpn -ins).
+    main_mode: builds the MAIN project (combined VLA IP) and publishes into
+    its OUT_DIR; post_route_check appends insight.check has_vla/has_vio to
+    the route stage and records the verdicts in outputs['vla_check']."""
+    if main_mode:
+        import_dir = os.path.abspath(proj["work_dir"])
+        impl_dir = parse_hqprj(proj["hqprj"])["out_dir_abs"]
+        failed_root = import_dir
+    else:
+        import_dir = os.path.join(proj["hqins_dir"], "hq_import")
+        impl_dir = os.path.join(import_dir, "hqins_impl")
+        failed_root = import_dir
     build_dir = os.path.join(import_dir, f".build_{build_id}")
     if os.path.isdir(build_dir):
         shutil.rmtree(build_dir)
@@ -257,7 +309,7 @@ def run_stage_build(proj: dict, hqfpga_exe: str, build_id: str,
 
     def _fail(msg, tail=None):
         # preserve reproduction data; never publish
-        failed = os.path.join(import_dir, f"failed_build_{build_id}")
+        failed = os.path.join(failed_root, f"failed_build_{build_id}")
         if os.path.isdir(failed):
             shutil.rmtree(failed)
         try:
@@ -279,7 +331,7 @@ def run_stage_build(proj: dict, hqfpga_exe: str, build_id: str,
         print("[FAIL] staged build")
         sys.exit(1)
 
-    der_prj = write_derived_project(proj, build_dir)
+    der_prj = write_derived_project(proj, build_dir, main_mode=main_mode)
 
     # 1. official hqprj2tcl -> standard flow TCL (cwd=build_dir, output relative)
     gen_tcl = os.path.join(build_dir, "_gen.tcl")
@@ -290,15 +342,16 @@ def run_stage_build(proj: dict, hqfpga_exe: str, build_id: str,
                           timeout=300)
     flow_tcl = os.path.join(build_dir, "run_hqins.tcl")
     if proc.returncode != 0 or not os.path.isfile(flow_tcl):
-        _fail("hqprj2tcl 未能生成派生工程流程 TCL",
+        _fail("hqprj2tcl 未能生成流程 TCL",
               (proc.stdout or "").splitlines() + (proc.stderr or "").splitlines())
 
     # 2. staged TCL (bin target inside build dir)
     prj_stem = os.path.splitext(os.path.basename(proj["hqprj"]))[0]
     bin_target = os.path.join(build_dir, f"{prj_stem}.bin")
-    stage_tcl, expected = build_stage_tcl(flow_tcl, os.path.join(build_dir, "build_stage.tcl"),
-                                          bin_target,
-                                          route_dump="hq_temp/_step_run_route.dump")
+    stage_tcl, expected = build_stage_tcl(
+        flow_tcl, os.path.join(build_dir, "build_stage.tcl"), bin_target,
+        route_dump=None if main_mode else "hq_temp/_step_run_route.dump",
+        post_route_check=post_route_check)
     started = time.time()
     print(f"Staged build {build_id} in {os.path.basename(build_dir)} ...")
 
@@ -320,6 +373,13 @@ def run_stage_build(proj: dict, hqfpga_exe: str, build_id: str,
     with open(os.path.join(build_dir, "build.log"), "w", encoding="utf-8",
               errors="replace", newline="") as f:
         f.write("\n".join(log_lines) + "\n")
+
+    # insight.check verdicts (post_route_check mode)
+    vla_check: dict = {}
+    for ln in log_lines:
+        m = re.search(r"@CHECK has_(vla|vio)=(\S+)", ln)
+        if m:
+            vla_check[m.group(1)] = m.group(2)
 
     if proc.returncode != 0:
         stage = _failed_stage(seen)
@@ -398,8 +458,11 @@ def run_stage_build(proj: dict, hqfpga_exe: str, build_id: str,
             "dir": impl_dir.replace(os.sep, "/"),
             "stages": {s: "ok" for s in STAGE_ORDER},
             "timing": timing,
+            "vla_check": vla_check,
             "elapsed_s": round(time.time() - started, 1),
-            "derived_prj": os.path.join(impl_dir, "hqins_impl.hqprj").replace(os.sep, "/")}
+            "derived_prj": os.path.join(
+                impl_dir,
+                "build.hqprj" if main_mode else "hqins_impl.hqprj").replace(os.sep, "/")}
 
 
 def _failed_stage(seen: dict) -> str | None:

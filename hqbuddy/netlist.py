@@ -242,7 +242,7 @@ def run_vla_gen(args: list) -> None:
     if not args or args[0] != "-gen":
         print("Error: unknown -vla option (supported: -gen)")
         usage()
-    name, out_dir, device = "VLA", os.getcwd(), DEFAULT_DEVICE
+    name, out_dir, device, config = "VLA", os.getcwd(), DEFAULT_DEVICE, None
     i = 1
     while i < len(args):
         if args[i] == "-name" and i + 1 < len(args):
@@ -251,6 +251,8 @@ def run_vla_gen(args: list) -> None:
             out_dir = args[i + 1]; i += 2
         elif args[i] == "-device" and i + 1 < len(args):
             device = args[i + 1]; i += 2
+        elif args[i] == "--config" and i + 1 < len(args):
+            config = args[i + 1]; i += 2
         else:
             print(f"Error: unknown -vla option: {args[i]}")
             usage()
@@ -264,6 +266,48 @@ def run_vla_gen(args: list) -> None:
                                             "hq_vla_ins.exe"))
     if not os.path.isfile(gen_exe):
         print(f"Error: VLA IP generator not found: {gen_exe}")
+        sys.exit(1)
+
+    if config:
+        # regenerate from an existing .hqip: the wizard's -modify mode loads
+        # the saved contract into the dialog; the regenerated .v/.hqip pair
+        # lands BESIDE the .hqip, so copy it into an isolated dir first — a
+        # botched run must not scatter half-written artifacts over the source
+        config = os.path.abspath(config)
+        if not os.path.isfile(config):
+            print(f"Error: --config .hqip not found: {config}")
+            sys.exit(1)
+        src_dir = os.path.dirname(config)
+        if os.path.abspath(src_dir) != out_dir:
+            import shutil
+            dst = os.path.join(out_dir, os.path.basename(config))
+            shutil.copy2(config, dst)
+            config = dst
+        cmd = [gen_exe, "-lang", "chs", "-modify", config.replace(os.sep, "/"),
+               "-hq_exe", hqfpga_path]
+        print(f"[i] 从已有配置重生成: {config}")
+        print("[i] 向导会载入保存的参数——确认后点确定重新生成")
+        subprocess.Popen(cmd, cwd=out_dir)
+        target = config[:-2] + ".v"
+        started = time.time()
+        deadline = started + 600
+        while time.time() < deadline:
+            time.sleep(2)
+            if (os.path.isfile(target) and os.path.getsize(target) > 0
+                    and os.path.getmtime(target) >= started):
+                hqip = config
+                v_mtime = os.path.getmtime(target)
+                hqip_mtime = os.path.getmtime(hqip) if os.path.isfile(hqip) else 0
+                print(f"[OK] VLA IP regenerated: {target} "
+                      f"({os.path.getsize(target)} bytes)")
+                if hqip_mtime >= started:
+                    print(f"     config: {hqip}")
+                else:
+                    print(f"     config: {hqip}（.hqip 未被重写——沿用原契约）")
+                print("Next: 用 -vla -status 交叉核对例化端口与契约，再 -vla -build。")
+                return
+        print("Error: 600s 内未检测到重生成的 .v（向导被取消或生成失败）。")
+        print(f"       隔离目录: {out_dir}")
         sys.exit(1)
 
     cmd = [gen_exe, "-device", device, "-lang", "chs",

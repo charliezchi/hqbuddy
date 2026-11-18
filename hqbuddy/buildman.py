@@ -99,12 +99,11 @@ def compute_inputs(proj: dict, version: dict, probes: list, storage: dict) -> di
             "build": version.get("build"),
             "exe_mtime": os.path.getmtime(hqfpga_exe) if os.path.isfile(hqfpga_exe) else None}
 
-    # timing/pin constraint files: they steer implementation and the timing
-    # verdict (not the instrumented netlist) — fingerprinted so a tightened
-    # SDC cannot leave a stale timing verdict in the manifest
+    # constraints fingerprint (main-mode VLA builds carry no insight ddf)
     constraints = [_fentry(f) for f in (prj["tc"] + prj["pc"]) if os.path.isfile(f)]
 
-    ddf_sha = _sha256(proj["ddf"]) if os.path.isfile(proj["ddf"]) else None
+    ddf_sha = _sha256(proj["ddf"]) if proj.get("ddf") \
+        and os.path.isfile(proj["ddf"]) else None
 
     return {
         "project": _hqprj_fingerprint(proj["hqprj"]),
