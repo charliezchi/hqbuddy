@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.49.0
+3.49.1
 
 ## 功能特点
 
@@ -607,7 +607,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-merge_bin <fpga> <mcu>`           | 合并 FPGA+MCU bin（`-o`/`-model`/`-dl`）                             |
 | `-vla -gen [-name VLA] [-dir <dir>] [-device <part>] [--config x.hqip]` | 调起 VLA IP 生成向导（产出 xsIP_VLA.v/hqip/cfg，自动检测生成完成）；`--config` 从已有 .hqip 契约在隔离目录重生成（-modify 模式，产物配对校验） |
 | `-vla -status [<.hqprj>] [-export]` | 联合 IP 设计发现：.hqip 契约解析（LA 深度/窗口/触发位置、VIO 位宽/初值）、RTL 例化端口交叉核对、已验收构建的 insight.check 裁决（has_vio=0 为 FT111526 已知行为，联合 VIO 判据看 .hqip VIO 段）；`-export` 跑原生 `rtl.elaborate -vlas` 产出 vla.cfg/vio.cfg（vio_flag 与 .hqip 互证） |
-| `-vla -build [<.hqprj>] [--force]` | 联合实现：复用 A 包分阶段验收机制在主工程上构建（私有目录/@STAGE 标记/产物核对/位流头校验），发布进 OUT_DIR，布线后进程内 `insight.check has_vla` 采集；验收清单落 `hq_run/.build_manifest.json`，`-gui` 以此为准入门槛 |
+| `-vla -build [<.hqprj>]` | 联合实现：复用 A 包分阶段验收机制在主工程上构建（私有目录/@STAGE 标记/产物核对/位流头校验），发布进 OUT_DIR，布线后进程内 `insight.check has_vla` 采集；验收清单落 `hq_run/.build_manifest.json`，`-gui` 以此为准入门槛 |
 | `-vla -gui [<.hqprj>]` | 启动原生联合调试 GUI（`hq_ins --hqprj --hqexe --hqlang --ipmode`，左侧 LA 右侧 VIO）；仅接受清单 hash 校验通过的已验收位流，普通状态查询不弹窗 |
 | `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族；`-o` 目录不存在时自动创建） |
 | `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11；报告/日志统一落 `netlist_run/`，不散落在 .edif 目录） |

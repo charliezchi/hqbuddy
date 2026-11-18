@@ -136,7 +136,7 @@ Project:
   -vla -status [<.hqprj>] [-export]     Combined-IP discovery: .hqip contract,
                                         RTL instantiation cross-check, insight.check
                                         verdict on routed XPN, native -vlas export
-  -vla -build [<.hqprj>] [--force]      Combined implementation: staged acceptance
+  -vla -build [<.hqprj>]                Combined implementation: staged acceptance
                                         into OUT_DIR, insight.check captured,
                                         accepted-build manifest gates -gui
   -vla -gui [<.hqprj>]                  Native combined debugger (hq_ins --ipmode);

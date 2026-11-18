@@ -53,11 +53,15 @@ def parse_hqip_combined(path: str) -> dict:
         return {}
     if "VLA_0={" not in txt:
         return {}
-    out: dict = {"path": path.replace(os.sep, "/"), "la": {}, "vio": None}
+    out: dict = {"path": path.replace(os.sep, "/"), "la": {}, "vio": None,
+                 "broken": None}
     m = re.search(r"\[General\]\s*LA_NUM:(\d+)", txt)
-    out["la_num"] = int(m.group(1)) if m else 0
+    out["la_num"] = int(m.group(1)) if m else None
     m = re.search(r"\[File\]\s*output_module=(\S+)", txt)
     out["module"] = m.group(1) if m else None
+    if out["la_num"] is None or not out["module"]:
+        out["broken"] = ("缺少 LA_NUM 或 output_module——.hqip 损坏或格式变更"
+                         "（勿用 -vla -gen 新建，先修复该文件或从 wizard 重新 -modify 生成）")
     m = re.search(r"\[IP\]\s*device=(\S+)", txt)
     out["device"] = m.group(1) if m else None
     body = _extract_block(txt, "VLA_0")
@@ -125,6 +129,97 @@ def _scan_instantiation(prj: dict, module: str | None) -> dict:
     return result
 
 
+def _parse_module_contract(v_path: str, module: str) -> dict:
+    """Parse the wizard-generated module: declared port widths and the
+    HQ_VLA0/HQ_VIO synthesis attributes (the RTL-side copy of the contract).
+    The .v header is non-ANSI (names in the header, declarations after)."""
+    try:
+        txt = open(v_path, "r", encoding="utf-8", errors="replace").read()
+    except OSError:
+        return {}
+    m = re.search(rf"\bmodule\s+{re.escape(module)}\s*\(", txt)
+    if not m:
+        return {}
+    body = txt[m.start():]
+    m_end = re.search(r"\bendmodule\b", body)
+    if m_end:
+        body = body[:m_end.end()]
+    ports = {}
+    for pm in re.finditer(r"\b(input|output|inout)\s+(?:\[(\d+):(\d+)\]\s*)?(\w+)\s*;",
+                          body):
+        d, hi, lo, name = pm.group(1), pm.group(2), pm.group(3), pm.group(4)
+        width = (int(hi) - int(lo) + 1) if hi is not None else 1
+        ports[name] = (d, width)
+    attrs = {}
+    ma = re.search(r'HQ_VLA0="([^"]*)"', body)
+    if ma:
+        attrs["vla"] = ma.group(1)
+    mv = re.search(r'HQ_VIO="([^"]*)"', body)
+    if mv:
+        attrs["vio"] = mv.group(1)
+    return {"ports": ports, "attrs": attrs}
+
+
+def _crosscheck_rtl_contract(c: dict, v_path: str, inst: dict) -> list:
+    """Contract↔RTL cross-check (R3-D2): port widths, attribute numbers and
+    required connections.  Returns a list of human-readable drifts ([] = ok)."""
+    drifts: list = []
+    mod = _parse_module_contract(v_path, c["module"])
+    if not mod:
+        return [f"未找到模块 {c['module']} 的定义（{v_path}）——契约无法与 RTL 互证"]
+    # port widths vs contract
+    for p in c["la"].get("probes", []):
+        name = f"probe{p['index']}"
+        w = mod["ports"].get(name, (None, None))[1]
+        if w is None:
+            drifts.append(f"RTL 缺少端口 {name}（.hqip 声明 {p['width']}b）")
+        elif w != p["width"]:
+            drifts.append(f"端口 {name} 宽度不一致: RTL {w}b vs .hqip {p['width']}b")
+    vio = c["vio"]
+    if vio:
+        for p in vio["inputs"]:
+            w = mod["ports"].get(p["name"], (None, None))[1]
+            if w is None:
+                drifts.append(f"RTL 缺少端口 {p['name']}（.hqip 声明 {p['width']}b）")
+            elif w != p["width"]:
+                drifts.append(f"端口 {p['name']} 宽度不一致: RTL {w}b vs .hqip {p['width']}b")
+        for p in vio["outputs"]:
+            w = mod["ports"].get(p["name"], (None, None))[1]
+            if w is None:
+                drifts.append(f"RTL 缺少端口 {p['name']}（.hqip 声明 {p['width']}b）")
+            elif w != p["width"]:
+                drifts.append(f"端口 {p['name']} 宽度不一致: RTL {w}b vs .hqip {p['width']}b")
+    # attribute numbers vs contract (the RTL-side contract copy)
+    avla = mod["attrs"].get("vla", "")
+    for p in c["la"].get("probes", []):
+        m = re.search(rf"probe{p['index']}=(\d+)", avla)
+        if m and int(m.group(1)) != p["width"]:
+            drifts.append(f"属性 HQ_VLA0 probe{p['index']}={m.group(1)} 与 "
+                          f".hqip {p['width']}b 不一致（.v 与 .hqip 不同源？重新 -gen --config）")
+    avio = mod["attrs"].get("vio", "")
+    if vio:
+        for p in vio["inputs"]:
+            m = re.search(rf"{p['name']}=(\d+)", avio)
+            if m and int(m.group(1)) != p["width"]:
+                drifts.append(f"属性 HQ_VIO {p['name']}={m.group(1)} 与 "
+                              f".hqip {p['width']}b 不一致")
+        for p in vio["outputs"]:
+            m = re.search(rf"{p['name']}=(\d+):([^ \"]+)", avio)
+            if m and (int(m.group(1)) != p["width"]
+                      or m.group(2).strip("'hH") != p["init"].strip("'hH")):
+                drifts.append(f"属性 HQ_VIO {p['name']}={m.group(1)}:{m.group(2)} 与 "
+                              f".hqip {p['width']}b init={p['init']} 不一致")
+    # required connections at the instantiation site
+    ports_needed = ["ref_clk", "probe0"]
+    if vio:
+        ports_needed += [p["name"] for p in vio["inputs"]] \
+            + [p["name"] for p in vio["outputs"]]
+    missing = [p for p in ports_needed if p not in inst.get("ports", {})]
+    if missing:
+        drifts.append("例化未连接: " + ", ".join("." + p for p in missing))
+    return drifts
+
+
 def _vlas_export(proj: dict, out_dir: str) -> dict | None:
     """Native discovery export: rtl.elaborate -top T -vlas <dir>/ produces
     vla.cfg / vio.cfg / vla_identity.json (GUI-equivalent of the export the
@@ -172,7 +267,13 @@ def cmd_status(args: list) -> None:
     discovery — .hqip contract, RTL instantiation cross-check, insight.check
     verdict when a routed XPN exists, optional native -vlas export."""
     export = "-export" in args
-    args = [a for a in args if a != "-export"]
+    rest = [a for a in args if a != "-export"]
+    unknown = [a for a in rest if not a.endswith(".hqprj")]
+    if unknown:
+        print(f"Error: unknown -vla -status option: {' '.join(unknown)} "
+              "(supported: [<.hqprj>] [-export])")
+        sys.exit(1)
+    args = rest
     hqprj_arg = next((a for a in args if a.endswith(".hqprj")), None)
     if hqprj_arg is None:
         matches = sorted(glob.glob("*.hqprj"))
@@ -197,6 +298,10 @@ def cmd_status(args: list) -> None:
         print("VLA IP  : (none) — 工程树内没有联合 VLA .hqip（先 -vla -gen）")
         sys.exit(1)
     for c in ips:
+        if c.get("broken"):
+            print(f"VLA IP  : {c['path']}")
+            print(f"  [FAIL] 契约解析失败: {c['broken']}")
+            continue
         print(f"VLA IP  : {c['path']}")
         print(f"  module: {c['module']}   device: {c['device']}   LA_NUM: {c['la_num']}")
         la = c["la"]
@@ -214,21 +319,34 @@ def cmd_status(args: list) -> None:
                 print(f"          {p['name']} [{p['width']}b] init={p['init']}")
         else:
             print("  VIO   : (none) — 纯 LA IP")
-        # RTL cross-check: is the module instantiated with the probe ports?
+        # RTL cross-check: is the module instantiated with the probe ports,
+        # and does the wizard .v still match the .hqip contract (R3-D2)?
         inst = _scan_instantiation(prj, c["module"])
         if not inst["instance"]:
             print(f"  RTL   : (未例化) — 没有在 FILE_SRC 中找到 {c['module']} 的实例")
         else:
             print(f"  RTL   : {inst['file']}  实例 {inst['instance']}")
-            for port in ("probe0", "probe_in0", "probe_out0"):
+            for port in ("probe0", "ref_clk", "probe_in0", "probe_out0"):
                 if port in inst["ports"]:
                     print(f"          .{port}({inst['ports'][port]})")
-            missing = [p for p in ("probe0", "probe_in0", "probe_out0")
-                       if (p not in inst["ports"]) ==
-                       (p != "probe0" and not vio)]
-            if vio and any(p not in inst["ports"]
-                           for p in ("probe0", "probe_in0", "probe_out0")):
-                print("  [WARN] 联合 IP 的 probe 端口未全部连接（LA/VIO 读数会悬空）")
+            v_file = None
+            if c["path"].endswith(".hqip"):
+                cand = c["path"][:-2] + ".v"
+                if os.path.isfile(cand):
+                    v_file = cand
+            if v_file is None:
+                v_file = next((f for f in prj["sources"]
+                               if os.path.isfile(f) and
+                               re.search(rf"\bmodule\s+{re.escape(c['module'])}\s*\(",
+                                         open(f, encoding="utf-8",
+                                              errors="replace").read(1 << 22))), None)
+            drifts = _crosscheck_rtl_contract(c, v_file, inst) if v_file else \
+                ["找不到联合 IP 的 .v 定义文件——契约无法与 RTL 互证"]
+            if drifts:
+                for dft in drifts:
+                    print(f"  [WARN] 契约↔RTL 不一致: {dft}")
+            else:
+                print("  [ ok ] 契约↔RTL 互证一致（端口宽度/属性/连接）")
 
     # accepted-build verdict: insight.check runs IN-FLOW during -vla -build
     # (post-route design in memory); a side-session xpn.read gives a
@@ -238,8 +356,12 @@ def cmd_status(args: list) -> None:
         try:
             m = json.load(open(mp, "r", encoding="utf-8"))
             vc = m.get("outputs", {}).get("vla_check", {})
-            print(f"Build   : {m.get('build_id')}（已验收，bin "
-                  f"{(m.get('outputs', {}).get('bin') or '?').rsplit('/', 1)[-1]}）")
+            version = _version()
+            inputs_now = buildman.compute_inputs(proj, version, [], {})
+            fresh, diffs = buildman.inputs_match(m, inputs_now)
+            stale = "" if fresh else                 f"  [WARN] 输入已变化（清单过期）: {'; '.join(diffs)}"
+            print(f"Build   : {m.get('build_id')}（{'已验收' if fresh else '已过期'}，bin "
+                  f"{(m.get('outputs', {}).get('bin') or '?').rsplit('/', 1)[-1]}）{stale}")
             print(f"  insight.check has_vla={vc.get('vla')} has_vio={vc.get('vio')}"
                   "   (has_vio=0 是 FT111526 已知行为——联合 VIO 判据看"
                   " .hqip VIO 段与 vio_flag)")
@@ -266,8 +388,7 @@ def cmd_build(args: list) -> None:
     insight.check verdict captured from the routed design.  The accepted
     build manifest lands in OUT_DIR/.build_manifest.json and gates -gui."""
     hqprj_arg = next((a for a in args if a.endswith(".hqprj")), None)
-    force = "--force" in args
-    args = [a for a in args if not a.endswith(".hqprj") and a != "--force"]
+    args = [a for a in args if not a.endswith(".hqprj")]
     unknown = [a for a in args if a not in ("-build",)]
     if unknown:
         print(f"Error: unknown -vla -build option: {' '.join(unknown)}")
@@ -293,7 +414,14 @@ def cmd_build(args: list) -> None:
     if not ips:
         print("Error: 工程树内没有联合 VLA .hqip——先 -vla -gen 生成并例化。")
         sys.exit(1)
-    ip = ips[0]
+    broken = [c for c in ips if c.get("broken")]
+    usable = [c for c in ips if not c.get("broken")]
+    for c in broken:
+        print(f"[FAIL] 联合 IP 契约解析失败: {c['path']}")
+        print(f"       {c['broken']}")
+    if not usable:
+        sys.exit(1)
+    ip = usable[0]
     inst = _scan_instantiation(prj, ip["module"])
     if not inst["instance"]:
         print(f"Error: 联合 IP {ip['module']} 未在 FILE_SRC 中例化——先在 RTL 里接线。")
@@ -329,7 +457,7 @@ def cmd_build(args: list) -> None:
         vc = outputs.get("vla_check", {})
         print(f"     insight.check: has_vla={vc.get('vla')} has_vio={vc.get('vio')} "
               f"(联合 VIO 判据: .hqip VIO={'有' if ip['vio'] else '无'})")
-        print("Tip: 联合 GUI 用 -vla -gui；板级读写用 C 包命令（-vla -vio-read/-write/...）。")
+        print("Tip: 联合调试用 -vla -gui（原生窗口，LA+VIO）；CLI 板级读写将在下个版本交付。")
 
 
 # --- -gui -------------------------------------------------------------------
@@ -353,7 +481,10 @@ def cmd_gui(args: list) -> None:
     prj = parse_hqprj(hqprj_abs)
 
     # compatibility gate: an accepted VLA build manifest whose bin hash
-    # matches the file on disk
+    # matches the file on disk.  The manifest records the absolute bin path
+    # from build time — after copying a project that path still points at
+    # the ORIGINAL project's bin, so the LOCAL out_dir bin takes precedence
+    # and must itself hash-match (R3-D1).
     mp = os.path.join(prj["out_dir_abs"], ".build_manifest.json")
     if not os.path.isfile(mp):
         print("Error: 没有已验收的 VLA 构建清单（hq_run/.build_manifest.json）——")
@@ -361,14 +492,30 @@ def cmd_gui(args: list) -> None:
         sys.exit(1)
     manifest = json.load(open(mp, "r", encoding="utf-8"))
     out = manifest.get("outputs", {})
-    bin_path = out.get("bin")
-    if not bin_path or not os.path.isfile(bin_path):
-        print(f"Error: 已验收位流不存在: {bin_path}——重新 -vla -build。")
-        sys.exit(1)
+    recorded = out.get("bin") or ""
     import hashlib
-    h = hashlib.sha256(open(bin_path, "rb").read()).hexdigest()
-    if h != out.get("bin_sha256"):
-        print(f"Error: 位流内容与清单不符（{bin_path}）——重新 -vla -build。")
+    expected = out.get("bin_sha256")
+    local = os.path.join(prj["out_dir_abs"], os.path.basename(recorded)) \
+        if recorded else None
+    # the LOCAL out_dir bin is this project's accepted artifact: when present
+    # it must hash-match — falling back to the build-time absolute path
+    # (which still points into the ORIGINAL project after a copy) would
+    # silently bless a tampered local copy (R3-D1b)
+    if local and os.path.isfile(local):
+        h = hashlib.sha256(open(local, "rb").read()).hexdigest()
+        if h != expected:
+            print(f"Error: 位流内容与清单不符: {local}")
+            print(f"       sha256={h[:16]}... != 清单 {str(expected)[:16]}...")
+            print("       下载被拒：重新 -vla -build 生成并验收新位流。")
+            sys.exit(1)
+    elif recorded and os.path.isfile(recorded):
+        h = hashlib.sha256(open(recorded, "rb").read()).hexdigest()
+        if h != expected:
+            print(f"Error: 位流内容与清单不符: {recorded}")
+            sys.exit(1)
+    else:
+        print(f"Error: 已验收位流不存在: {local or recorded or '(清单未记录)'}"
+              "——重新 -vla -build。")
         sys.exit(1)
 
     version = _version()
@@ -395,7 +542,7 @@ def run_vla(args: list) -> None:
               " [--config <x.hqip>]")
         print("       hqbuddy -vla -status [<.hqprj>] [-export]   联合 IP 发现/契约/"
               "insight.check/-vlas 导出")
-        print("       hqbuddy -vla -build [<.hqprj>] [--force]  联合实现（分阶段验收，"
+        print("       hqbuddy -vla -build [<.hqprj>]            联合实现（分阶段验收，"
               "hq_run/.build_manifest.json 记账）")
         print("       hqbuddy -vla -gui [<.hqprj>]              原生联合调试 GUI"
               "（需已验收构建）")
