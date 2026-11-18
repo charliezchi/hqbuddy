@@ -148,6 +148,11 @@ Project:
   -vla -vio-write <probe>=<val>[,...]   Drive combined VIO outputs (-is_vla_mode True;
                                         ALL outputs required, chain shifts as a whole)
   -vla -trig <probe> EQ <val>           Arm the combined LA trigger (relocated ddf)
+  -vla -hier-build --la <inst> [--vio-in <inst>[:hi:lo]]
+                                        Per-instance cross-hierarchy probing (release
+                                        gate): reuses -insight instrumentation,
+                                        generates the derived top adapter, endpoint
+                                        map recorded in the build manifest
   -vla -capture [-force] [-timeout N] [-o prefix]
                                         Capture the combined LA waveform (VCD verified;
                                         default timeout 60s; overflow tail-window dumps

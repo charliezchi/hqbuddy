@@ -191,7 +191,8 @@ def build_stage_tcl(flow_tcl: str, out_path: str, bin_target_abs: str | None,
 
 
 def write_derived_project(proj: dict, build_dir: str,
-                          main_mode: bool = False) -> str:
+                          main_mode: bool = False,
+                          file_src_override: list | None = None) -> str:
     """Generate the build project (hqins_impl.hqprj / build.hqprj) inside
     build_dir.
 
@@ -202,7 +203,13 @@ def write_derived_project(proj: dict, build_dir: str,
     $WORK_DIR$-relative paths would resolve wrong) and BGEN_1/BGEN_2 are
     forced on so a .bin is always produced.  The user's original .hqprj is
     never written (P0 acceptance)."""
-    if main_mode:
+    if file_src_override:
+        # cross-hierarchy derived build: FILE_SRC is the generated adapter
+        # (derived top + submodule sources + combined IP .v), decided by the
+        # caller — absolutized verbatim below
+        override = [_tcl_path(f) for f in file_src_override]
+    elif main_mode:
+        override = None
         src_lines = open(proj["hqprj"], "r", encoding="utf-8",
                          errors="replace").read().splitlines()
     else:
@@ -227,7 +234,9 @@ def write_derived_project(proj: dict, build_dir: str,
 
     prj = parse_hqprj(proj["hqprj"])
     out_lines = []
-    for ln in src_lines:
+    for ln in (src_lines if not file_src_override
+               else open(proj["hqprj"], "r", encoding="utf-8",
+                         errors="replace").read().splitlines()):
         stripped = ln.strip()
         if stripped.startswith("BGEN_1=false"):
             out_lines.append("BGEN_1=true")
@@ -264,6 +273,13 @@ def write_derived_project(proj: dict, build_dir: str,
             out_lines.append(f"RTL_9={_tcl_path(prj['include_dir'])}")
             continue
         out_lines.append(ln)
+    if override is not None:
+        # replace all FILE_SRC lines with the override set
+        out_lines = [ln for ln in out_lines
+                     if not ln.startswith(("FILE_SRC=", "FILE_SRC_DISABLED="))]
+        for f in override:
+            out_lines.append(f"FILE_SRC={f}")
+        out_lines.append(f"FILE_TIME={int(time.time())}")
     if main_mode:
         for f in prj["tc"] + prj["pc"]:
             if os.path.isfile(f):
@@ -282,7 +298,8 @@ def write_derived_project(proj: dict, build_dir: str,
 
 def run_stage_build(proj: dict, hqfpga_exe: str, build_id: str,
                     require_bin: bool = True, main_mode: bool = False,
-                    post_route_check: bool = False) -> dict:
+                    post_route_check: bool = False,
+                    file_src_override: list | None = None) -> dict:
     """Run the full staged build in a private directory.  Returns the outputs
     dict for the manifest.  Exits nonzero on any stage failure, preserving the
     previous artifacts and leaving a failed_build_<id>/ reproduction dir.
@@ -331,7 +348,8 @@ def run_stage_build(proj: dict, hqfpga_exe: str, build_id: str,
         print("[FAIL] staged build")
         sys.exit(1)
 
-    der_prj = write_derived_project(proj, build_dir, main_mode=main_mode)
+    der_prj = write_derived_project(proj, build_dir, main_mode=main_mode,
+                                    file_src_override=file_src_override)
 
     # 1. official hqprj2tcl -> standard flow TCL (cwd=build_dir, output relative)
     gen_tcl = os.path.join(build_dir, "_gen.tcl")

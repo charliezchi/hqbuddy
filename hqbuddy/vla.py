@@ -552,6 +552,8 @@ def run_vla(args: list) -> None:
               "（须覆盖全部输出）")
         print("       hqbuddy -vla -trig <probe> EQ <val>       布防联合 LA 触发")
         print("       hqbuddy -vla -capture [-force] [-timeout N] [-o prefix] 抓取联合波形")
+        print("       hqbuddy -vla -hier-build --la <实例路径> [--vio-in <实例路径>[:hi:lo]]"
+              "  按实例路径跨层次联合插桩（发布条件）")
         sys.exit(1)
     first = args[0]
     if first == "-gen":
@@ -581,6 +583,9 @@ def run_vla(args: list) -> None:
         return
     if first == "-capture":
         cmd_capture(args[1:])
+        return
+    if first == "-hier-build":
+        cmd_hier_build(args[1:])
         return
     print(f"Error: unknown -vla option: {first} (supported: -gen/-status/-build/"
           "-gui/-program/-vio-read/-vio-write/-trig/-capture)")
@@ -1035,3 +1040,264 @@ def _session_ctx(args: list, need_vio: bool = False) -> tuple:
         sys.exit(1)
     session = _ensure_session(proj, c)
     return proj, c, session
+
+
+# --- D: per-instance cross-hierarchy probing (release gate) -----------------
+
+def _load_signal_inf(proj: dict) -> list:
+    """Parse hqins_run/hq_import/signal.inf: '<sig>:<generated_suffix>::<inst_path>'
+    lines — the instance-path to generated-net mapping produced by the
+    -insight instrumentation (board-validated by the combo_derived prototype)."""
+    path = os.path.join(proj["hqins_dir"], "hq_import", "signal.inf")
+    out = []
+    if not os.path.isfile(path):
+        return out
+    for ln in open(path, "r", encoding="utf-8", errors="replace"):
+        ln = ln.strip()
+        if not ln or ln.count(":") < 2:
+            continue
+        sig, rest = ln.split(":", 1)
+        suffix, _, inst = rest.rpartition("::")
+        out.append({"signal": sig, "suffix": suffix, "inst": inst})
+    return out
+
+
+def _hier_derive_top(proj: dict, bscan_path: str, la_sel: dict,
+                     vio_sel: dict, c: dict) -> tuple:
+    """Generate the derived top module (automated combo_derived prototype):
+    strip the pure-INSIGHT instance and its JTAG ports, instantiate the
+    combined IP wired to the SELECTED instances' probe nets.  Returns
+    (derived_v_path, endpoint_map)."""
+    txt = open(bscan_path, "r", encoding="utf-8", errors="replace").read()
+    before, sep, rest = txt.partition("endmodule")
+    if not sep or f"module {proj['top']}" not in before[:400]:
+        print(f"Error: bscan 网表顶层不是 {proj['top']}（格式变化？）: {bscan_path}")
+        sys.exit(1)
+
+    # 1. strip the pure-INSIGHT JTAG ports
+    header = before.replace(",HQINS__TMS,HQINS__TCK,HQINS__TDI,HQINS__TDO", "")
+    header = re.sub(r"^\s*(input|output)\s+HQINS__(TMS|TCK|TDI|TDO);\n", "",
+                    header, flags=re.M)
+
+    # 2. resolve selections to generated nets via signal.inf
+    inf = _load_signal_inf(proj)
+    def _resolve(sel: dict) -> dict:
+        for e in inf:
+            if e["inst"] == sel["inst"] and e["signal"] == sel["signal"]:
+                return {**sel, "net": f"{e['signal']}__INS_{e['suffix']}__INS0"}
+        return None
+    la_res = _resolve(la_sel)
+    vio_res = _resolve(vio_sel) if vio_sel else None
+    if la_res is None:
+        print(f"Error: LA 选择未命中 signal.inf: {la_sel['inst']}/{la_sel['signal']}——"
+              f"先 -insight -add/-refresh（映射表条目: "
+              f"{[e['inst'] + '/' + e['signal'] for e in inf]}）")
+        sys.exit(1)
+
+    vio = c["vio"]
+    out_w = 0
+    if vio and vio["outputs"]:
+        out_w = sum(p["width"] for p in vio["outputs"])
+    in_w = 0
+    if vio and vio["inputs"]:
+        in_w = sum(p["width"] for p in vio["inputs"])
+    slice_w = in_w - out_w
+
+    # 3. adapter: combined IP wired per selection; VIO out loops through a
+    #    2FF synchronizer into the declared debug entry (probe_in0 high bits)
+    sync_decl = ""
+    vio_conn = ""
+    if vio and vio_res:
+        sync_decl = (f"  wire [{out_w - 1}:0] control;\n"
+                     f"  reg [{out_w - 1}:0] control_meta;\n"
+                     f"  reg [{out_w - 1}:0] control_sync;\n\n"
+                     "  always @(posedge clk) begin\n"
+                     "      control_meta <= control;\n"
+                     "      control_sync <= control_meta;\n"
+                     "  end\n\n")
+        if slice_w > 0:
+            hi = vio_res.get("msb", slice_w - 1)
+            lo = vio_res.get("lsb", 0)
+            if (hi - lo + 1) < slice_w:
+                print(f"Error: VIO 输入切片 [{hi}:{lo}] 宽度 {hi - lo + 1} 不足 "
+                      f"{slice_w}（契约 in {in_w}b - out {out_w}b）。")
+                sys.exit(1)
+            vio_conn = (f"      .probe_in0({{\\{vio_res['net']} [{hi}:{lo}], "
+                        f"control_sync}}),\n")
+        else:
+            vio_conn = "      .probe_in0(control_sync),\n"
+    elif vio:
+        vio_conn = "      .probe_in0({{%d'b0}}),\n" % in_w
+
+    la_net = la_res["net"]
+    la_w = next((p["width"] for p in c["la"]["probes"]), 8)
+    adapter = (
+        sync_decl +
+        f"  debug_combo u_debug (\n"
+        f"      .ref_clk(clk),\n"
+        f"      .probe0(\\{la_net} ),\n"
+        f"{vio_conn}"
+        f"      .probe_out0(control)\n"
+        f"  );\n")
+
+    # 4. replace the pure-INSIGHT instance
+    header, n = re.subn(r"\bINSIGHT\s+u_insight\s*\([\s\S]*?\.TDO\s*\(HQINS__TDO\)\s*\);",
+                        lambda _: adapter, header)
+    if n != 1:
+        print(f"Error: 未能在 bscan 顶层定位纯 INSIGHT 实例（匹配 {n} 处）——"
+              "网表格式变化？")
+        sys.exit(1)
+    if "HQINS__" in header:
+        print("Error: 派生顶层仍残留 HQINS__ 端口—— stripping 不完整。")
+        sys.exit(1)
+
+    # 5. endpoint map (instance paths, the release-gate deliverable)
+    endpoint_map = {
+        "la": {"inst": la_res["inst"], "signal": la_res["signal"],
+               "net": la_net, "width": la_w,
+               "probe": "probe0"},
+        "vio_in": ({**vio_res, "probe": "probe_in0"} if vio_res else None),
+        "vio_out": {"loop": "control -> 2FF sync -> control_sync -> probe_in0",
+                    "width": out_w},
+        "contract": {"module": c["module"], "path": c["path"]},
+    }
+
+    out_path = os.path.join(proj["work_dir"], "hqvla_vio", "derived_top.v")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", encoding="ascii", newline="") as f:
+        f.write(header + sep + rest)
+    return out_path, endpoint_map
+
+
+def cmd_hier_build(args: list) -> None:
+    """Handle 'hqbuddy -vla -hier-build --la <inst_path> [--vio-in <inst_path>[:hi:lo]]
+    [<.hqprj>]': per-instance cross-hierarchy probing (P2 release gate).
+
+    Reuses the -insight instrumentation (module-level probe -> per-instance
+    generated nets, mapped via signal.inf), derives the top-level RTL adapter
+    (pure-INSIGHT instance replaced by the combined IP wired to the SELECTED
+    instances), and builds through the staged machinery.  The endpoint map
+    (instance paths + physical net order) lands in the build manifest."""
+    hqprj_arg = next((a for a in args if a.endswith(".hqprj")), None)
+    rest = [a for a in args if not a.endswith(".hqprj")]
+    def _opt(name):
+        if name in rest:
+            i = rest.index(name)
+            if i + 1 >= len(rest):
+                print(f"Error: {name} requires a value")
+                sys.exit(1)
+            v = rest[i + 1]
+            rest.pop(i)
+            rest.pop(i)
+            return v
+        return None
+    la_sel_arg = _opt("--la")
+    vio_sel_arg = _opt("--vio-in")
+    unknown = [a for a in rest if a not in ("-hier-build",)]
+    if unknown:
+        print(f"Error: unknown -vla -hier-build option: {' '.join(unknown)}")
+        sys.exit(1)
+    if hqprj_arg is None:
+        matches = sorted(glob.glob("*.hqprj"))
+        if not matches:
+            print("Error: no .hqprj specified and none found in current directory.")
+            sys.exit(1)
+        hqprj_arg = matches[0]
+    if not la_sel_arg:
+        print("Usage: -vla -hier-build --la <inst_path> [--vio-in <inst_path>[:hi:lo]] [<.hqprj>]")
+        print("       inst_path 为完整实例路径（如 layer_top/u_b），信号取 -insight 已登记的探针；")
+        print("       例：-vla -hier-build --la layer_top/u_b --vio-in layer_top/u_a:3:0")
+        sys.exit(1)
+    hqprj_abs = os.path.abspath(hqprj_arg)
+    prj = parse_hqprj(hqprj_abs)
+    proj = {"hqprj": hqprj_abs, "work_dir": prj["work_dir"],
+            "hqins_dir": os.path.join(prj["work_dir"], "hqins_run"),
+            "top": prj["top"], "die": prj["die"], "family": prj["family"]}
+
+    c = _find_contract(proj)
+    # LA selection: instance path + the probed signal (module-level -insight add)
+    la_inst = la_sel_arg.rstrip("/")
+    inf = _load_signal_inf(proj)
+    la_sig = next((e["signal"] for e in inf if e["inst"].endswith(la_inst)
+                   or la_inst.endswith(e["inst"])), None)
+    if la_sig is None:
+        print(f"Error: 实例路径 {la_inst} 不在 signal.inf 中——先 -insight -add"
+              f"（模块级探针，现有映射: {[e['inst'] + '/' + e['signal'] for e in inf]}）")
+        sys.exit(1)
+    la_sel = {"inst": la_inst if "/" in la_inst else f"{proj['top']}/{la_inst}",
+              "signal": la_sig}
+    vio_sel = None
+    if vio_sel_arg:
+        inst_part, _, rng = vio_sel_arg.partition(":")
+        vio_inst = inst_part.rstrip("/")
+        vio_sig = next((e["signal"] for e in inf if e["inst"].endswith(vio_inst)
+                        or vio_inst.endswith(e["inst"])), None)
+        if vio_sig is None:
+            print(f"Error: VIO 实例路径 {vio_inst} 不在 signal.inf 中。")
+            sys.exit(1)
+        vio_sel = {"inst": vio_inst if "/" in vio_inst
+                   else f"{proj['top']}/{vio_inst}", "signal": vio_sig}
+        if rng:
+            hi, _, lo = rng.partition(":")
+            vio_sel["msb"], vio_sel["lsb"] = int(hi), int(lo)
+
+    # freshness: the bscan netlist must be newer than every elaborated source
+    bscan = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
+    if not os.path.isfile(bscan):
+        print(f"Error: bscan 网表缺失: {bscan}——先 -insight -init/-add/-refresh。")
+        sys.exit(1)
+    stale = [f for f in prj["sources"]
+             if f.endswith(".v") and f != bscan
+             and os.path.isfile(f) and os.path.getmtime(f) > os.path.getmtime(bscan)]
+    if stale:
+        print("Warning: 有源文件比 bscan 网表新——先 -insight -refresh 再 -hier-build: "
+              + ", ".join(os.path.basename(f) for f in stale))
+        sys.exit(1)
+
+    derived, endpoint_map = _hier_derive_top(proj, bscan, la_sel, vio_sel, c)
+    print(f"[OK] 派生顶层已生成: {derived}")
+    print(f"     LA  : {endpoint_map['la']['inst']}/{endpoint_map['la']['signal']} "
+          f"-> probe0 ({endpoint_map['la']['net']})")
+    if endpoint_map["vio_in"]:
+        vi = endpoint_map["vio_in"]
+        rng = f"[{vi.get('msb', '')}:{vi.get('lsb', '')}]" if "msb" in vi else ""
+        print(f"     VIO : {vi['inst']}/{vi['signal']}{rng} -> probe_in0")
+
+    # derived_top.v IS the whole flattened netlist (top + submodules +
+    # everything FILE_SRC contributed, including the combined IP module) —
+    # listing ANY original .v again trips SFE-E-58.  The override set is the
+    # derived file alone.
+    override = [derived]
+
+    version = _combined_version()
+    build_id = buildman.new_build_id()
+    with __import__("hqbuddy.jtag", fromlist=["build_lock"]).build_lock(proj):
+        outputs = stageflow.run_stage_build(
+            proj, version["hqfpga_path"], build_id,
+            main_mode=True, require_bin=True, post_route_check=True,
+            file_src_override=override)
+
+        inputs = buildman.compute_inputs(proj, version, [], {})
+        inputs["hier"] = {"la": la_sel, "vio_in": vio_sel,
+                          "endpoint_map": endpoint_map,
+                          "bscan": bscan.replace(os.sep, "/")}
+        outputs["vla"] = {"hqip": c["path"], "module": c["module"],
+                          "has_vla": outputs.get("vla_check", {}).get("vla"),
+                          "has_vio": outputs.get("vla_check", {}).get("vio"),
+                          "hier": True}
+        manifest = {"version": 1, "kind": "vla-hier", "build_id": build_id,
+                    "time": time.time(), "inputs": inputs, "outputs": outputs}
+        mp = os.path.join(prj["out_dir_abs"], ".build_manifest.json")
+        with open(mp, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=False)
+
+        print(f"[OK] Hier build done (build {build_id}, {outputs['elapsed_s']}s)")
+        print(f"     bin: {outputs.get('bin')}")
+        if outputs.get("bin"):
+            print(f"     sha256: {outputs['bin_sha256']}")
+        vc = outputs.get("vla_check", {})
+        print(f"     insight.check: has_vla={vc.get('vla')} has_vio={vc.get('vio')}")
+        print(f"     endpoint map 已固化于清单（实例路径 + 物理探针序）:")
+        print(f"       LA probe0 = {endpoint_map['la']['inst']}/{endpoint_map['la']['signal']}")
+        print("Tip: -vla -program 下载；LA 抓波用 -vla -trig/-capture（探针名 probe0）；"
+              "VIO 读写用 -vla -vio-read/-vio-write。")
