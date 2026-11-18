@@ -213,6 +213,7 @@ def write_derived_project(proj: dict, build_dir: str,
         src_lines = open(proj["hqprj"], "r", encoding="utf-8",
                          errors="replace").read().splitlines()
     else:
+        override = None
         netlist = os.path.join(proj["hqins_dir"], "hq_import", "hq_import_with_bscan.v")
         insight_ip = os.path.join(proj["hqins_dir"], "hq_import", "insight_ip.v")
         for f in (netlist, insight_ip):
