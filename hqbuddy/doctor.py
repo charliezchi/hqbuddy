@@ -111,7 +111,18 @@ def run_doctor(args: list) -> None:
         fails.append(f"FILE_TIME_CST 条目数({n_timecst}) != FILE_TC+PC 数({n_cst})"
                      f"——用 hqbuddy -refresh_time 修复")
     if n_time == n_src and n_timecst == n_cst and n_src:
-        oks.append(f"时间戳条目一致 (FILE_TIME x{n_time}, FILE_TIME_CST x{n_timecst})")
+        # report enabled/total explicitly when disabled entries exist — the
+        # raw counts otherwise read as inconsistent with the header (R12-D03)
+        det = []
+        if n_dis_src:
+            det.append(f"源文件 启用 {len(file_src)}/总 {n_src}"
+                       f"（禁用 {n_dis_src}）")
+        if n_dis_cst:
+            det.append(f"约束 启用 {len(file_tc) + len(file_pc)}/总 {n_cst}"
+                       f"（禁用 {n_dis_cst}）")
+        suffix = ("；" + "，".join(det)) if det else ""
+        oks.append(f"时间戳条目一致 (FILE_TIME x{n_time}, "
+                   f"FILE_TIME_CST x{n_timecst}{suffix})")
 
     # -- 5. device legality --------------------------------------------------
     part = fields.get("DEVICE", "")
