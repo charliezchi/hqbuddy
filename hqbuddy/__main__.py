@@ -162,8 +162,13 @@ Project:
   -netlist_build <a.edif> --upc <u.upc> --sdc <s.sdc>
      [-o <file>] [-device <part>]       Netlist P&R + bitgen (flatten before pack;
                                         needs .upc/.sdc, else bitgen BIT-11)
-  -add <file1> [<file2> ...] [<.hqprj>] Add source/constraint files to project
-                                        (explicit .hqprj target optional; else cwd)
+  -add <file1> [<file2> ...] [<.hqprj>] Add files to project, GUI-spec FILE blocks
+                                        (.v/.vh->FILE_SRC .sdc->FILE_TC .upc->FILE_PC
+                                         .f expanded; FILE_TIME/FILE_TIME_CST re-laid
+                                         out and validated after every op)
+  -remove <file...> [<.hqprj>]         Remove files from the project
+  -disable <file...> [<.hqprj>]        Disable files (FILE_*_DISABLED, GUI parity)
+  -enable <file...> [<.hqprj>]         Re-enable disabled files
   -refresh_time [<.hqprj>]             Rebuild FILE_TIME/FILE_TIME_CST entries
   -copy_prj <src.hqprj> <dst_dir>      Copy project+sources to dst, rewrite FILE paths to $WORK_DIR$
   -doctor [<.hqprj>] [--json]          Project health check: files/modules/timestamps/
@@ -694,204 +699,127 @@ def cmd_new_prj(args):
     print(f"Project created: {output} (device: {device})")
 
 
-def cmd_add(args):
-    """Add source/constraint files to the .hqprj project."""
-    if not args:
-        print("Error: -add requires at least one file")
-        print("Usage: hqbuddy -add <file1> [<file2> ...] [<.hqprj>]")
-        print("  .v / .vh / .f  → add to FILE_SRC")
-        print("  .sdc           → set FILE_TC")
-        print("  .upc           → set FILE_PC")
-        print("  .hqprj         → target project (default: auto-detect in cwd)")
-        sys.exit(1)
+def _pf_ops(args, op):
+    """Spec-compliant .hqprj FILE-block operations (GUI-serialization parity).
 
-    # Optional explicit project: first *.hqprj argument; rest are files.
+    op: add | remove | disable | enable.  Usage:
+      -add <file...> [<.hqprj>]     (.v/.vh -> FILE_SRC, .sdc -> FILE_TC,
+                                     .upc -> FILE_PC, .f expanded)
+      -remove <file...> [<.hqprj>]
+      -disable <file...> [<.hqprj>]
+      -enable <file...> [<.hqprj>]
+    After every operation the FILE blocks are re-laid out per the GUI
+    serializer (block order / NONE placeholders / FILE_TIME & FILE_TIME_CST
+    counts and mtimes) and validated."""
+    from . import projectfile as pf
+    from .hqprj_parser import parse_hqprj
     hqprj_arg = next((a for a in args if a.lower().endswith(".hqprj")), None)
     file_args = [a for a in args if a is not hqprj_arg]
-    if not file_args:
-        print("Error: -add requires at least one file")
-        sys.exit(1)
     if hqprj_arg:
-        hqprj_path = hqprj_arg
+        hqprj = os.path.abspath(hqprj_arg)
     else:
-        hqprj_path = _find_hqprj()
-    if not hqprj_path:
-        print("Error: no .hqprj file found in current directory.")
+        hqprj = _find_hqprj()
+    if not hqprj or not os.path.isfile(hqprj):
+        print("Error: no .hqprj found" + (": " + hqprj_arg if hqprj_arg else
+                                          " in current directory"))
         sys.exit(1)
-    hqprj_abs = os.path.abspath(hqprj_path)
+    hqprj = os.path.abspath(hqprj)
+    work_dir = os.path.dirname(hqprj)
+    lines = pf.read_lines(hqprj)
 
-    added_src = []
-    added_tc = None
-    added_pc = None
-
-    # Read existing file
-    with open(hqprj_abs, "r", encoding="utf-8", errors="replace") as f:
-        lines = f.readlines()
-
-    existing_src = set()
-    existing_tc = None
-    existing_pc = None
-    tc_line_idx = -1
-    pc_line_idx = -1
-    src_none_idx = -1
-    tc_none_idx = -1
-    pc_none_idx = -1
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("FILE_SRC="):
-            existing_src.add(stripped)
-            if stripped == "FILE_SRC=NONE":
-                src_none_idx = i
-        elif stripped.startswith("FILE_TC="):
-            existing_tc = stripped
-            tc_line_idx = i
-            if stripped == "FILE_TC=NONE":
-                tc_none_idx = i
-        elif stripped.startswith("FILE_PC="):
-            existing_pc = stripped
-            pc_line_idx = i
-            if stripped == "FILE_PC=NONE":
-                pc_none_idx = i
-
-    now = str(int(time.time()))
-    ft_lines = []
-
-    def add_src(entry):
-        nonlocal src_none_idx
-        if entry in existing_src:
-            return False
-        if src_none_idx >= 0:
-            lines[src_none_idx] = entry + "\n"
-            existing_src.discard("FILE_SRC=NONE")
-            existing_src.add(entry)
-            src_none_idx = -1
-            return True
-        lines.append(entry + "\n")
-        existing_src.add(entry)
-        return True
-
-    def set_tc(entry):
-        nonlocal tc_line_idx, existing_tc, tc_none_idx
-        if existing_tc == entry:
-            return False
-        if tc_none_idx >= 0:
-            lines[tc_none_idx] = entry + "\n"
-            existing_tc = entry
-            tc_none_idx = -1
-            return True
-        if tc_line_idx >= 0:
-            lines[tc_line_idx] = entry + "\n"
+    adds = []
+    for f in file_args:
+        if op != "add":
+            # match against any kind by lookup
+            adds.append((os.path.abspath(f), None))
+            continue
+        ext = os.path.splitext(f)[1].lower()
+        ap = os.path.abspath(f)
+        if ext == ".f":
+            fl = os.path.join(work_dir, f) if not os.path.isabs(f) else f
+            if not os.path.isfile(fl):
+                print(f"Error: filelist not found: {f}")
+                sys.exit(1)
+            for ln in open(fl, encoding="utf-8", errors="replace"):
+                ln = ln.strip()
+                if ln and not ln.startswith("#"):
+                    ap2 = ln if os.path.isabs(ln) else os.path.abspath(
+                        os.path.join(os.path.dirname(fl), ln))
+                    adds.append((ap2, "src"))
+        elif ext in (".v", ".vh", ".sdc", ".upc"):
+            if not os.path.isfile(ap):
+                print(f"Error: 文件不存在: {f}")
+                sys.exit(1)
+            adds.append((ap, {"v": "src", "vh": "src",
+                              "sdc": "tc", "upc": "pc"}[ext.lstrip(".")]))
         else:
-            lines.append(entry + "\n")
-        existing_tc = entry
-        return True
+            print(f"Error: unsupported file type: {f} (.v/.vh/.f/.sdc/.upc)")
+            sys.exit(1)
 
-    def set_pc(entry):
-        nonlocal pc_line_idx, existing_pc, pc_none_idx
-        if existing_pc == entry:
-            return False
-        if pc_none_idx >= 0:
-            lines[pc_none_idx] = entry + "\n"
-            existing_pc = entry
-            pc_none_idx = -1
-            return True
-        if pc_line_idx >= 0:
-            lines[pc_line_idx] = entry + "\n"
-        else:
-            lines.append(entry + "\n")
-        existing_pc = entry
-        return True
+    add_pairs = [(p, k) for p, k in adds if k] if op == "add" else []
+    match_pairs = []
+    for p, _k in (adds if op != "add" else []):
+        # a bare filename may have been given relative to the PROJECT dir
+        if not os.path.isfile(p):
+            cand = os.path.join(work_dir, os.path.basename(p))
+            if os.path.isfile(cand):
+                p = cand
+        hit = None
+        pf_parsed = pf.parse(lines, work_dir)
+        for kind in ("src", "tc", "pc"):
+            for e in pf_parsed[kind]:
+                if e.path == pf._norm(p):
+                    hit = kind
+                    break
+            if hit:
+                break
+        if not hit:
+            print(f"Error: 文件不在工程中: {os.path.basename(p)}")
+            sys.exit(1)
+        match_pairs.append((p, hit))
 
-    supported_src = ('.v', '.vh')
-    errors = []
+    kw = {"add": dict(adds=add_pairs, removes=[], disable=[], enable=[]),
+          "remove": dict(adds=[], removes=match_pairs, disable=[], enable=[]),
+          "disable": dict(adds=[], removes=[], disable=match_pairs, enable=[]),
+          "enable": dict(adds=[], removes=[], disable=[], enable=match_pairs)}[op]
 
-    # Process each file argument
-    for file_arg in file_args:
-        ext = os.path.splitext(file_arg)[1].lower()
+    out, report = pf.add_remove_disable(lines, work_dir, **kw)
+    ok, problems, out = pf.validate(out, work_dir, fix=True)
+    pf.write_lines(hqprj, out)
+    for ln in report:
+        print("  " + ln)
+    if ok:
+        print(f"[OK] .hqprj FILE 区块符合 GUI 序列化规范: {hqprj}")
+    else:
+        print(f"[OK] .hqprj 已更新并按规范重排: {hqprj}")
+        for pr in problems:
+            print(f"  [FIX] {pr}")
+    print(pf.summary(pf.read_lines(hqprj), work_dir))
 
-        if ext == '.f':
-            # Filelist: read and expand
-            flist_path = os.path.abspath(file_arg)
-            if not os.path.isfile(flist_path):
-                errors.append(f"filelist not found: {file_arg}")
-                continue
-            flist_dir = os.path.dirname(flist_path)
-            try:
-                with open(flist_path, "r", encoding="utf-8") as f:
-                    flines = f.readlines()
-            except Exception as e:
-                errors.append(f"cannot read filelist {file_arg}: {e}")
-                continue
-            for fline in flines:
-                fpath = fline.strip()
-                if not fpath or fpath.startswith('#'):
-                    continue
-                fext = os.path.splitext(fpath)[1].lower()
-                if fext not in supported_src:
-                    errors.append(f"unsupported suffix in filelist: {fpath}")
-                    continue
-                # Resolve relative to filelist directory
-                resolved = fpath if os.path.isabs(fpath) else os.path.normpath(os.path.join(flist_dir, fpath))
-                if not os.path.isfile(resolved):
-                    errors.append(f"file not found: {fpath}")
-                    continue
-                rel = os.path.relpath(resolved, os.getcwd()).replace("\\", "/")
-                entry = f"FILE_SRC=$WORK_DIR${rel}"
-                if add_src(entry):
-                    added_src.append(rel)
-        elif ext in supported_src:
-            src_path = os.path.abspath(file_arg)
-            if not os.path.isfile(src_path):
-                errors.append(f"file not found: {file_arg}")
-                continue
-            rel = os.path.relpath(src_path, os.getcwd()).replace("\\", "/")
-            entry = f"FILE_SRC=$WORK_DIR${rel}"
-            if add_src(entry):
-                added_src.append(rel)
-        elif ext == '.sdc':
-            sdc_path = os.path.abspath(file_arg)
-            if not os.path.isfile(sdc_path):
-                errors.append(f"file not found: {file_arg}")
-                continue
-            rel = os.path.relpath(sdc_path, os.getcwd()).replace("\\", "/")
-            if set_tc(f"FILE_TC=$WORK_DIR${rel}"):
-                added_tc = rel
-        elif ext == '.upc':
-            upc_path = os.path.abspath(file_arg)
-            if not os.path.isfile(upc_path):
-                errors.append(f"file not found: {file_arg}")
-                continue
-            rel = os.path.relpath(upc_path, os.getcwd()).replace("\\", "/")
-            if set_pc(f"FILE_PC=$WORK_DIR${rel}"):
-                added_pc = rel
-        else:
-            errors.append(f"unsupported file type: {file_arg}")
 
-    # Append FILE_TIME lines (after all FILE_SRC) and FILE_TIME_CST lines (at bottom)
-    for _ in added_src:
-        lines.append(f"FILE_TIME={now}\n")
-    if added_tc:
-        lines.append(f"FILE_TIME_CST={now}\n")
-    if added_pc:
-        lines.append(f"FILE_TIME_CST={now}\n")
+def cmd_remove(args):
+    """Remove source/constraint files from the .hqprj project."""
+    if not args:
+        print("Usage: hqbuddy -remove <file...> [<.hqprj>]")
+        sys.exit(1)
+    _pf_ops(args, "remove")
 
-    # Write back
-    with open(hqprj_abs, "w", encoding="utf-8") as f:
-        f.writelines(lines)
 
-    # Report
-    for f in added_src:
-        print(f"  [ADD] FILE_SRC: {f}")
-    if added_tc:
-        print(f"  [ADD] FILE_TC: {added_tc}")
-    if added_pc:
-        print(f"  [ADD] FILE_PC: {added_pc}")
-    for e in errors:
-        print(f"  [WARN] {e}")
-    if not added_src and not added_tc and not added_pc and not errors:
-        print("Nothing to add.")
-    elif added_src or added_tc or added_pc:
-        print(f"Updated: {hqprj_abs}")
+def cmd_disable(args):
+    """Disable files (kept in the project but excluded from synthesis:
+    FILE_SRC_DISABLED lines, GUI-serialization parity)."""
+    if not args:
+        print("Usage: hqbuddy -disable <file...> [<.hqprj>]")
+        sys.exit(1)
+    _pf_ops(args, "disable")
+
+
+def cmd_enable(args):
+    """Re-enable disabled files."""
+    if not args:
+        print("Usage: hqbuddy -enable <file...> [<.hqprj>]")
+        sys.exit(1)
+    _pf_ops(args, "enable")
 
 
 def cmd_copy_prj(args):
@@ -1965,7 +1893,20 @@ def main():
 
     # Add files
     if first == '-add':
-        cmd_add(args[1:])
+        _pf_ops(args[1:], "add")
+        return
+
+    # Remove files
+    if first == '-remove':
+        cmd_remove(args[1:])
+        return
+
+    # Disable / enable files
+    if first == '-disable':
+        cmd_disable(args[1:])
+        return
+    if first == '-enable':
+        cmd_enable(args[1:])
         return
 
     # Refresh timestamps

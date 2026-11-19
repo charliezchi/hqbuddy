@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.51.7
+3.52.0
 
 ## 功能特点
 
@@ -14,6 +14,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 - **路径解析**：自动将 `$WORK_DIR$` 替换为 `.hqprj` 文件所在目录的绝对路径
 - **Flow TCL 生成**：通过 `hqprj2tcl` 生成实现流程 TCL（只生成不执行，用 `-cmd` 执行），支持 `-looptdo` 与 `-bin_only` 模式
 - **XPN 生成**：从布线后的设计生成 XPN 文件（生成后自动打开；`-no_open` 静默）。前置条件：**对应实现流的布线结果必须已存在，且两条流的库不通用**——普通模式读产品流 `hq_run`（先 `-build`），`-ins` 模式读 insight 流 `hqins_impl`（先 `-insight -run`）；`-ins -from_src` 源码直达：布线结果缺失时自动补跑 insight 实现（一条命令源码到 XPN）
+- **工程文件增删禁用规范化（3.52.0）**：`-add`/`-remove`/`-disable`/`-enable` 完全按官方 GUI 的 .hqprj 序列化规范写入（FILE_TC/FILE_PC/FILE_SRC 区块序、`FILE_SRC=NONE`/`FILE_TC=NONE` 占位、`FILE_*_DISABLED` 交替方案、FILE_TIME 数量=源文件数且与文件 mtime 一致、FILE_TIME_CST 数量=约束数且 TC 组在前 PC 组在后、CRLF），每次操作后自动校验并在必要时自愈历史损坏（短时间戳列表等）；非 FILE 行原样保留。已用官方 GUI 重开验证：文件列表、TOP 模块、器件识别正确且综合/布局布线/比特流生成全流程通过
 - **HqInsight 在线调试**：从零初始化/选信号/插桩/触发/抓波形全 CLI 闭环（`-insight`）；触发支持算术比较、开闭区间范围、边沿（含 BOTH）、NOT 取反与任意 N 条件 AND/OR 链（同信号条件自动折叠）；插桩产物校验；改 RTL/IP 后 `-refresh` 原地重建插桩产物（总是重插桩刷新信号库，RTL 逻辑/属性改动可靠带入；保留信号选择与触发条件，等价 GUI 保存）；`-capture` 支持自定义超时与输出前缀
 - **VLA 联合模式（3.49.0）**：一个官方 VLA IP 同时承载 LA 与 VIO（`use VIO with VLA`）。`-vla -status` 从 .hqip 契约+RTL 例化+已验收裁决三个来源做设计发现；`-vla -build` 复用分阶段验收机制构建联合位流并采集 insight.check；`-vla -gui` 以验收清单为门槛启动原生 `hq_ins --ipmode` 联合调试窗口；`-vla -gen --config` 支持从既有 .hqip 契约隔离重生成。联合 VIO 能力以 .hqip VIO 段 + vio_flag 为判据（insight.check has_vio=0 是 FT111526 已知行为）
 - **插桩实现可靠性（3.48.0）**：`-insight -run` 统一新鲜度入口——构建清单对源文件顺序/内容、include、IP 依赖、器件、工具版本、探针选择与采样参数做内容指纹，任一变化自动重插桩再实现；实现走私有构建目录分阶段验收（synth/pack/place/route/bitgen 逐段 `@STAGE` 标记 + 产物核对），全通过才发布到 `hqins_impl`，失败保留上次可用结果与失败现场；位流头与工程比对防旧/伪产物发布；全程不弹下载器窗口（旧官方流程用 `--legacy` 兜底）。`-program` 显式下载已验收位流（清单 hash 校验 + 时序违例门槛 + 编程记录）；`-capture` 校验 TDO 一致性并对 VCD 自证（样本连续、触发位置与布防偏移一致）；采样时钟周期自动从 SDC 对齐到 DDF/.hqins（VCD 时间轴按真实时钟标注，可用 `-sample-period` 显式指定）；探针端点表 `probe_map.json` 固化实例路径/位序/采样域
@@ -617,7 +618,9 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-vla -trig <probe> EQ <val>` / `-vla -capture [...]` | 联合 LA 布防与抓波：会话目录 `hqvla_vio/`（重定位 ddf 由 .hqip 契约生成，采样周期从 SDC 对齐），复用 -insight 的三文件布防与全链 VCD 自证（板测：probe0 EQ 0x96 触发@128 精确命中）；overflow 尾窗下触发标记为写出端按布防偏移注入（R4 板测定标），自证结论如实区分标记位置与硬件触发样本位置；capture 会重置板上 VIO 输出寄存器，完成后自动重放上次驱动值或契约初值（R6 板测定标） |
 | `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族；`-o` 目录不存在时自动创建） |
 | `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11；报告/日志统一落 `netlist_run/`，不散落在 .edif 目录） |
-| `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测） |
+| `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测）；按 GUI 序列化规范重排 FILE 区块并校验 |
+| `-remove <files...> [<.hqprj>]`     | 从工程移除文件（连同其 FILE_TIME/FILE_TIME_CST 行） |
+| `-disable <files...> [<.hqprj>]` / `-enable <files...>` | 禁用/启用文件（GUI 交替方案：`FILE_*_DISABLED` 行与启用行按位置交错，禁用文件保留 FILE_TIME；全部源文件禁用时按 GUI 行为输出 `FILE_SRC=NONE` 并清空 `TOP_MODULE`） |
 | `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
 | `-synopt [<src.hqprj>] [-set k=<value>] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等开关；`fsm_encoding=auto\|onehot\|binary\|gray\|johnson` → `fsm.set -encoding`；`postsyn_areaopt=tiny..extreme\|none\|auto` → 综合后自动跑 `postsyn.areaopt`；cdc_sync=on\|off\|<N>` → 综合后自动 `lo.cdc_sync_reg.insert`（⚠️ FT110126 实测：无跨域目标时静默无效果，含真实跨域时**使构建崩溃**——不可用，RTL 手写同步链）；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL，postsyn 段注入 design.rtlsyn 之后） |
 | `-analyze [<.hqprj>] [--routed <布线后.xpn>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]` | 设计分析（实现前体检）：综合一次（不 P&R），报告落 `<工程根>/analysis/`（clocks/fanout/clkdom/hier/power/loop.rpt，重跑清空重建）并打印摘要；`--routed <布线后.xpn>` 对布线后数据库分析（功耗出真数据、层次报告可用，3 秒级）；`-n` 扇出排行条数（缺省 20），`-detail` 扇出与时钟域附逐 net 明细，`-o` 自定义报告目录（重跑只覆盖本工具的 .rpt，目录内其他文件保留）；功耗需布线后数据、层次报告在本版本无输出（均优雅降级并在摘要注明）；源文件缺失/综合失败提前明确报错 |
