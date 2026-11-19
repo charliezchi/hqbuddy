@@ -1,0 +1,33 @@
+[General]
+LA_NUM:1
+VLA_0={
+probe_num:1
+sample_depth:1024
+window_num:1
+add_reg:True
+trig_pos:128
+ram_full:False
+generate_net:False
+trigger_level:1
+probe_port_0:16:Sample and Trigger
+ }
+
+VIO={
+input_count=1
+output_count=1
+
+probe_in={
+probe_in0:9
+ }
+
+probe_out={
+probe_out0:5:5'h00
+ }
+ }
+
+[File]
+output_module=dual_debug_ip
+
+[IP]
+device=SA5Z-30-D0-8U324C
+meta_file=@HQFPGA_ROOT@/build/ipcreator/sup_files/ipdepot/vla/vla/VLA.xml
