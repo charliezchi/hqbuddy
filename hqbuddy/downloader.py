@@ -302,43 +302,50 @@ class DownloaderGUI(tk.Tk):
         t.start()
 
     def _download_worker(self, rel):
-        try:
-            # Detect per download: the board may have been swapped mid-session
-            self._log("[i] 探测板上型号 ...")
-            r = subprocess.run([self.cable_path, '--detect_model'],
-                               capture_output=True, text=True, errors='replace',
-                               timeout=60, creationflags=_no_window_flags())
-            m = re.search(r'Device Model\s*:\s*(\S+)', r.stdout or '')
-            if not m:
-                self._log("[FAIL] 未能探测到板上型号，下载中止。cable 输出：")
-                self._log((r.stdout or '').strip() or '(无输出)')
-                self._finish(rel, False)
-                return
-            self.model = m.group(1)
-            self._log(f"[OK] 板上型号: {self.model}")
+        from . import jtag
 
-            bin_abs = os.path.join(self.root_dir, rel)
-            cmd = [self.cable_path, '--sealion', bin_abs, '--model', self.model, '--Burst']
-            self._log(f"[*] 下载 {rel} ...")
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True,
-                                    errors='replace',
-                                    creationflags=_no_window_flags())
-            self.current_proc = proc
-            output = []
-            for line in proc.stdout:
-                output.append(line)
-                self._log(line.rstrip())
-            proc.wait()
-            self.current_proc = None
-            # cable.exe prints errors like "Error : The file ID is unmatched"
-            # but still exits 0 — scan the output, don't trust the exit code
-            has_error = any(re.search(r'\b(error|fail(?:ed)?)\b\s*[:：]', ln, re.I)
-                            for ln in output)
-            ok = proc.returncode == 0 and not has_error
-            self._log(f"[{'OK' if ok else 'FAIL'}] {rel} 下载{'成功' if ok else '失败'}"
-                      f" (exit {proc.returncode})")
-            self._finish(rel, ok)
+        try:
+            with jtag.jtag_lock({"cable_path": self.cable_path}):
+                jtag.combined_program_record(clear=True)
+                # Detect per download: the board may have been swapped mid-session
+                self._log("[i] 探测板上型号 ...")
+                r = subprocess.run([self.cable_path, '--detect_model'],
+                                   capture_output=True, text=True, errors='replace',
+                                   timeout=60, creationflags=_no_window_flags())
+                m = re.search(r'Device Model\s*:\s*(\S+)', r.stdout or '')
+                if not m:
+                    self._log("[FAIL] 未能探测到板上型号，下载中止。cable 输出：")
+                    self._log((r.stdout or '').strip() or '(无输出)')
+                    self._finish(rel, False)
+                    return
+                self.model = m.group(1)
+                self._log(f"[OK] 板上型号: {self.model}")
+
+                bin_abs = os.path.join(self.root_dir, rel)
+                cmd = [self.cable_path, '--sealion', bin_abs, '--model', self.model, '--Burst']
+                self._log(f"[*] 下载 {rel} ...")
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT, text=True,
+                                        errors='replace',
+                                        creationflags=_no_window_flags())
+                self.current_proc = proc
+                output = []
+                for line in proc.stdout:
+                    output.append(line)
+                    self._log(line.rstrip())
+                proc.wait()
+                self.current_proc = None
+                # cable.exe prints errors like "Error : The file ID is unmatched"
+                # but still exits 0 — scan the output, don't trust the exit code
+                has_error = any(re.search(r'\b(error|fail(?:ed)?)\b\s*[:：]', ln, re.I)
+                                for ln in output)
+                ok = proc.returncode == 0 and not has_error
+                self._log(f"[{'OK' if ok else 'FAIL'}] {rel} 下载{'成功' if ok else '失败'}"
+                          f" (exit {proc.returncode})")
+                self._finish(rel, ok)
+        except SystemExit:
+            self._log(f"[FAIL] {rel}: JTAG 正在使用，下载未启动。")
+            self._finish(rel, False)
         except Exception as e:
             self._log(f"[FAIL] {rel}: {e}")
             self._finish(rel, False)

@@ -148,7 +148,8 @@ Project:
   -vla -vio-write <probe>=<val>[,...]   Drive combined VIO outputs (-is_vla_mode True;
                                         ALL outputs required, chain shifts as a whole)
   -vla -trig <probe> EQ <val>           Arm the combined LA trigger (relocated ddf)
-  -vla -hier-build --la <inst> [--vio-in <inst>[:hi:lo]]
+  -vla -hier-build --la <signal>[hi:lo] [--vio-in <signal>[hi:lo]]
+                                        [--vio-out <top_wire>] [--period-ns <ns>]
                                         Per-instance cross-hierarchy probing (release
                                         gate): reuses -insight instrumentation,
                                         generates the derived top adapter, endpoint
@@ -1642,7 +1643,12 @@ def cmd_cable(args):
                 sys.exit(1)
             if detected:
                 print(f"[OK] 板上型号校验通过: {detected}")
-    launcher.launch_tool(version, 'cable', args)
+    from . import jtag
+    with jtag.jtag_lock(version):
+        if any(a.split('=', 1)[0] in ('--sealion', '--svf', '--initFPGA', '--tcl', '--cmd')
+               for a in args):
+            jtag.combined_program_record(clear=True)
+        launcher.launch_tool(version, 'cable', args)
 
 
 def cmd_wave(args):

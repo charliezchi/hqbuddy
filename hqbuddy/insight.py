@@ -1096,6 +1096,7 @@ def _verify_vcd(vcd_path: str, offset: int, force: bool,
     pending = False
 
     xsnap = 0
+    unknown_probe_samples = {code: 0 for code in codes if code not in (clk_code, trig_code)}
 
     def _snap():
         nonlocal xsnap
@@ -1108,6 +1109,9 @@ def _verify_vcd(vcd_path: str, offset: int, force: bool,
         if any(v is not None and "x" in v.lower() for v in
                (values.get(clk_code), values.get(trig_code))):
             xsnap += 1
+        for code in unknown_probe_samples:
+            if any(bit in values.get(code, "x").lower() for bit in "xz"):
+                unknown_probe_samples[code] += 1
 
     for line in lines[i:]:
         line = line.strip()
@@ -1130,7 +1134,10 @@ def _verify_vcd(vcd_path: str, offset: int, force: bool,
 
     verdict = {"vcd": vcd_path, "samples": len(times),
                "trigger_offset_expected": offset, "force": force,
-               "verified": False, "reason": None}
+               "verified": False, "reason": None,
+               "unknown_probe_samples": {codes[code]: count
+                                         for code, count in unknown_probe_samples.items()
+                                         if count}}
 
     if len(times) < 2:
         verdict["reason"] = f"样本数不足 ({len(times)})"
@@ -1190,6 +1197,8 @@ def _verify_vcd(vcd_path: str, offset: int, force: bool,
             sys.exit(1)
 
     verdict["verified"] = True
+    for name, count in verdict["unknown_probe_samples"].items():
+        print(f"[WARN] VCD 探针 {name} 有 {count}/{len(times)} 个样本含 X/Z。")
     if overflow:
         # the marker is writer-synthesized at the armed offset; in an
         # overflow tail-window it does NOT identify the hardware trigger
@@ -1209,7 +1218,8 @@ def _verify_vcd(vcd_path: str, offset: int, force: bool,
     return verdict
 
 
-def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = None) -> None:
+def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = None,
+                *, prepare_svf=None) -> None:
     """Handle 'hqbuddy -insight -capture': arm trigger, wait, read waveform, dump VCD."""
 
 
@@ -1386,6 +1396,8 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         f"{gen}.la_reset {common}",
         f"{gen}.write",
     ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
+    if prepare_svf:
+        prepare_svf(svf("arm.svf"))
     _play_svf(cable_exe, svf("arm.svf"), session=session, label="arm")
     print("[OK] Trigger armed.")
 
@@ -1397,6 +1409,8 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         f"{gen}.write",
     ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
 
+    if prepare_svf:
+        prepare_svf(svf("status.svf"))
     overflow, pointer = False, 0
     if force:
         print("[OK] Force trigger, capturing immediately.")
@@ -1426,6 +1440,8 @@ def run_capture(proj: dict, timeout: int, force: bool, out_prefix: str | None = 
         f"{gen}.la_waveform {common} -limit {limit}",
         f"{gen}.write",
     ], cwd=proj["hqins_dir"])  # la_set_trig_cond resolves probe values relative to cwd; must be hqins_run (GUI convention)
+    if prepare_svf:
+        prepare_svf(svf("dump.svf"))
     tdo = _play_svf(cable_exe, svf("dump.svf"), session=session, label="dump")
 
     # TDO lines: the first two are status words (short hex), the rest are
@@ -1871,6 +1887,7 @@ def run_program(proj: dict, allow_violation: bool = False) -> None:
 
     session = jtag.session_dir(proj, "program")
     with jtag.jtag_lock(version):
+        jtag.combined_program_record(clear=True)
         # board model detection (per download: the board may have been swapped)
         try:
             r = subprocess.run([cable_exe, "--detect_model"],

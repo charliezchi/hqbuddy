@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.52.4
+3.52.5
 
 ## 功能特点
 
@@ -614,8 +614,8 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-vla -program [--allow-violation]` | 下载已验收联合位流（清单 hash 门 + 时序门）；下载后自动写 VIO 输出初值（对齐原生 GUI 启动行为，板测：下载后寄存器为 0，GUI 启动即写初值） |
 | `-vla -vio-read [-loop N] [-interval s]` | 实时读联合 VIO 输入探针（`vio_read -bit_length <契约位宽>`；板测校准：读回位序与 RTL 拼接一致） |
 | `-vla -vio-write <probe>=<val>[,...]` | 联合写 VIO 输出（`-is_vla_mode True`，板测：5 位输出 → 15 位 SDR，由生成器内部扩展）；必须覆盖全部输出探针（联合链整链移位，拒绝独立 VIO 的静默清零行为） |
-| `-vla -hier-build --la <实例路径> [--vio-in <实例路径>[:hi:lo]]` | **按实例路径跨层次联合插桩（发布条件）**：复用 -insight 插桩（模块级探针 → 按实例生成网名，signal.inf 映射实例路径），自动生成派生顶层适配层（移除纯 INSIGHT 实例与 JTAG 端口，联合 IP 按所选实例接线，VIO 输出经 2FF 同步回环），分阶段构建并把端点映射（实例路径+物理探针序）固化进清单。板测定标：双参数化兄弟实例同名 8 位计数器（+1/+3），LA 抓波 1023 样本步进全部 +3 零 +1（probe0=u_b 无串位），VIO 切片段位于高位（位段取决于契约 in宽-out宽，样例 [8:5]）、低 5 位为回环控制；insight.check has_vla=0 为派生适配层下的检测口径现象（JTAG=1、LA 核心路径齐全，板级功能为准） |
-| `-vla -trig <probe> EQ <val>` / `-vla -capture [...]` | 联合 LA 布防与抓波：会话目录 `hqvla_vio/`（重定位 ddf 由 .hqip 契约生成，采样周期从 SDC 对齐），复用 -insight 的三文件布防与全链 VCD 自证（板测：probe0 EQ 0x96 触发@128 精确命中）；overflow 尾窗下触发标记为写出端按布防偏移注入（R4 板测定标），自证结论如实区分标记位置与硬件触发样本位置；capture 会重置板上 VIO 输出寄存器，完成后自动重放上次驱动值或契约初值（R6 板测定标） |
+| `-vla -hier-build --la <信号路径>[hi:lo] [--vio-in <信号路径>[hi:lo]] [--vio-out <顶层wire>] [--period-ns <ns>]` | 复用 `-insight -add/-refresh` 的实际采样时钟和逐实例引线。完整信号路径可精确指定探针，实例路径只有唯一候选时才可简写。切片越界、位宽不符和歧义均在综合前报错。联合 IP 使用 .hqip 中的模块名。端点和周期写入构建清单。 |
+| `-vla -trig <probe> EQ <val>` / `-vla -capture [...]` | 联合 LA 布防与抓波：会话目录 `hqvla_vio/`（重定位 ddf 由 .hqip 契约生成，采样周期从 SDC 对齐），复用 -insight 的三文件布防与全链 VCD 自证（板测：probe0 EQ 0x96 触发@128 精确命中）；overflow 尾窗下触发标记为写出端按布防偏移注入（R4 板测定标），自证结论如实区分标记位置与硬件触发样本位置；采集期间联合 CLI 通过完整 JTAG 命令帧将 VIO 输出置零，完成后重放上次驱动值或契约初值 |
 | `-edf2v <a.edif> [-o <file>]`       | 第三方 EDIF 网表转 Verilog（`-device` 缺省 SA5Z-50-D0-7F484C，Seal 族；`-o` 目录不存在时自动创建） |
 | `-netlist_build <a.edif> --upc <u> --sdc <s>` | 第三方网表 P&R+出 bin（`-o`/`-device`；缺 `.upc` 报 BIT-11；报告/日志统一落 `netlist_run/`，不散落在 .edif 目录） |
 | `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测）；按 GUI 序列化规范重排 FILE 区块并校验 |
@@ -646,3 +646,23 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-serv`（交互 REPL）/ `-serv -f <file.tcl>` | 常驻 hqfpga 会话（eval server 单连接生命周期内多命令、状态持久、错误后健康；吞吐 2.7x 于逐条 `-cmd -e`；命令仅限 ASCII，中文内容用 -f + ANSI/GBK 文件） |
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本（flow 生成的脚本比工程旧时警告重新 `-flow`）；缺省时进入 hqfpga 交互式 CLI |
 | `-regression [--offline] [base_dir]` | 一键回归套件；`--offline` 自包含（%TEMP% 自建迷你工程跑 doctor/filelist/--hook/synopt/bitinfo/-analyze/错误路径 9 项，无需基线目录/板卡）；缺省板卡模式需 r21a 基线（base_dir）
+
+### VLA + VIO 复位与参数调试
+
+在设计中声明与 `probe_out0` 同宽的顶层 `wire`，保持无其它驱动，接到设计已有的同步、复位或参数锁存逻辑。
+向导可将 VIO Input Port Count 设为 0，只保留 VIO 驱动，用 VLA 观察效果。
+例如在完成 `-insight -add/-refresh` 后执行：
+
+```powershell
+hqbuddy -vla -hier-build --la 'top/u_ctrl/status[7:0]' --vio-out debug_control --period-ns 8 my.hqprj
+hqbuddy -vla -program my.hqprj
+hqbuddy -vla -vio-write probe_out0=0x12 my.hqprj
+hqbuddy -vla -capture -force my.hqprj
+```
+
+联合 CLI 在单 LA、单窗口模式下补齐布防、查询及读波形所用的 JTAG 命令帧，将 VIO 输出置为 0。
+复位与参数控制入口应把全零设计成空闲，需跨采集生效的参数在用户逻辑中锁存。
+采集完成后 CLI 重放上次驱动值，触发超时或中断时也会尝试恢复。原生 GUI 使用自己的 JTAG 命令。
+CLI 通过最后一次 `-vla -program` 的位流哈希记录校验会话。纯 HqInsight 下载和 `-cable` 编程会使记录失效。
+使用原生 GUI 或外部下载器切换位流后，回到联合 CLI 时重新执行 `-vla -program`。
+记录无法检测绕过 hqbuddy 的下载或同型号换板。纯 HqInsight 的原生 GUI 入口仍可独立使用。

@@ -4,10 +4,9 @@ Two lock scopes (P0-A7):
 - build lock: one per workspace (hqins_run/.build.lock) — serializes
   instrument/implementation runs so two hqbuddy processes cannot interleave
   a rebuild with a capture;
-- JTAG lock: one per cable installation (next to cable.exe's shared svf.log,
-  falling back to %TEMP%) — covers every SVF play from arm through the final
-  TDO read, so a concurrent GUI/hqbuddy user cannot interleave JTAG
-  transactions and corrupt the shared svf.log.
+- JTAG lock: shared across current-user hqbuddy processes in %TEMP%.
+  The combined runtime holds it across each complete transaction.
+  Vendor GUI and external cable processes do not participate.
 
 Stale locks (holder pid no longer alive) are reported and reclaimed.  Every
 JTAG transaction gets a session directory with the SVFs played, cable output,
@@ -24,6 +23,8 @@ import subprocess
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
+from threading import local
 
 
 def _pid_alive(pid: int) -> bool:
@@ -95,14 +96,42 @@ def build_lock(proj: dict) -> Lock:
     return Lock(os.path.join(proj["hqins_dir"], ".build.lock"), "build")
 
 
-def jtag_lock(version: dict) -> Lock:
-    cable_dir = os.path.dirname(version.get("cable_path") or "")
-    if cable_dir and os.access(cable_dir, os.W_OK):
-        path = os.path.join(cable_dir, ".hqbuddy_jtag.lock")
-    else:
-        d = os.path.join(tempfile.gettempdir(), "hqbuddy")
-        path = os.path.join(d, "jtag.lock")
-    return Lock(path, "jtag")
+_jtag_owner = local()
+
+
+@contextmanager
+def jtag_lock(version: dict):
+    """Serialize the entire transaction, including nested SVF calls."""
+    if getattr(_jtag_owner, "held", False):
+        yield
+        return
+    directory = os.path.join(tempfile.gettempdir(), "hqbuddy")
+    with Lock(os.path.join(directory, "jtag.lock"), "jtag"):
+        _jtag_owner.held = True
+        try:
+            yield
+        finally:
+            _jtag_owner.held = False
+
+
+def combined_program_record(bin_hash: str | None = None, *, clear: bool = False) -> str | None:
+    """Track the last combined FPGA download performed through hqbuddy."""
+    path = os.path.join(tempfile.gettempdir(), "hqbuddy", "combined_programmed")
+    if clear:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        return None
+    if bin_hash is not None:
+        with open(path, "w", encoding="ascii") as f:
+            f.write(bin_hash)
+        return bin_hash
+    try:
+        with open(path, encoding="ascii") as f:
+            return f.read().strip()
+    except (OSError, UnicodeError):
+        return None
 
 
 def session_dir(proj: dict, op: str) -> str:
