@@ -92,8 +92,16 @@ def run_doctor(args: list) -> None:
                 fails.append(f"{kind} 文件不存在: {p}")
     if not file_pc:
         warns.append("无管脚约束（FILE_PC=NONE）——bitgen 会报 BIT-11")
-    n_src = len(file_src)
-    n_cst = len(file_tc) + len(file_pc)
+    # disabled entries ALSO carry a FILE_TIME / FILE_TIME_CST line (GUI's
+    # alternating scheme) — count them, or a legitimately disabled project
+    # reads as corrupt (R11-D03)
+    n_dis_src = sum(1 for f in (info.get("disabled") or [])
+                    if f.lower().endswith((".v", ".vh", ".edf", ".edif",
+                                           ".edn", ".edi")))
+    n_dis_cst = sum(1 for f in (info.get("disabled") or [])
+                    if f.lower().endswith((".sdc", ".upc")))
+    n_src = len(file_src) + n_dis_src
+    n_cst = len(file_tc) + len(file_pc) + n_dis_cst
     n_time = len(info["times"])
     n_timecst = len(info["times_cst"])
     if n_time != n_src:

@@ -928,11 +928,23 @@ def cmd_refresh_time(args):
         print(f"Error: file not found: {hqprj_path}")
         sys.exit(1)
     hqprj_abs = os.path.abspath(hqprj_path)
-
-    src_count, cst_count = soc.refresh_hqprj_times(hqprj_abs)
-
-    print(f"  [SET] FILE_TIME x{src_count} (FILE_SRC x{src_count})")
-    print(f"  [SET] FILE_TIME_CST x{cst_count} (FILE_TC+FILE_PC x{cst_count})")
+    work_dir = os.path.dirname(hqprj_abs)
+    from . import projectfile as pf
+    lines = pf.read_lines(hqprj_abs)
+    parsed = pf.parse(lines, work_dir)
+    # spec writer: re-lays the FILE_* blocks and re-stats every mtime while
+    # keeping disabled entries (and their FILE_TIME) intact (R11-D2)
+    out = pf.relayout(lines, work_dir, parsed=parsed)
+    _ok, problems, out = pf.validate(out, work_dir, fix=True)
+    pf.write_lines(hqprj_abs, out)
+    n_src = len(parsed["src"])
+    n_cst = len(parsed["tc"]) + len(parsed["pc"])
+    dis_src = sum(1 for e in parsed["src"] if e.disabled)
+    dis_cst = sum(1 for e in parsed["tc"] + parsed["pc"] if e.disabled)
+    print(f"  [SET] FILE_TIME x{n_src}（含禁用 {dis_src}）")
+    print(f"  [SET] FILE_TIME_CST x{n_cst}（含禁用 {dis_cst}）")
+    for pr in problems:
+        print(f"  [FIX] {pr}")
     print(f"Updated: {hqprj_abs}")
 
 

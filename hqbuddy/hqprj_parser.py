@@ -70,6 +70,9 @@ def parse_hqprj(hqprj_path: str) -> dict:
             elif key == "FILE_SRC_DISABLED":
                 if not _is_none(value):
                     disabled.append(_resolve(value, work_dir))
+            elif key in ("FILE_TC_DISABLED", "FILE_PC_DISABLED"):
+                if not _is_none(value):
+                    disabled.append(_resolve(value, work_dir))
             elif key == "FILE_TC":
                 if not _is_none(value):
                     tc.append(_resolve(value, work_dir))

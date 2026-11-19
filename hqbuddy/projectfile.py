@@ -154,6 +154,9 @@ def validate(lines: list, work_dir: str, fix: bool = False) -> tuple:
         problems.append("缺少 FILE_SRC 行（含 NONE 占位）")
     lines_out = lines
     if problems and fix:
+        # relayout re-stats every mtime and re-emits block layout — this is
+        # what turns the [FIX] reports into actual file content (R11-D01:
+        # a fresh project with empty time lists must not be left at 0)
         lines_out = relayout(lines, work_dir)
         ok = not validate(lines_out, work_dir)[1]
     else:
@@ -255,6 +258,11 @@ def relayout(lines: list, work_dir: str, parsed: dict | None = None) -> list:
         tail = ins["tc"] + ins["pc"] + ins["src"] + ins["time"]
         out = kept + tail
         return [ln.rstrip("\r\n") + "\n" for ln in out]
+    if time_anchor is None:
+        # project has FILE blocks but no time block yet (fresh -new_prj:
+        # FILE_SRC/TC/PC exist, FILE_TIME was never written) — the time block
+        # goes at EOF per the GUI layout
+        time_anchor = len(kept)
 
     # anchors refer to positions in `kept`; applying from the last anchor
     # backwards keeps earlier anchors valid
