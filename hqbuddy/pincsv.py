@@ -29,6 +29,7 @@ phycst.pin.set lines only (vccio.set etc. are out of the CSV round-trip).
 import csv
 import glob
 import os
+import re
 import subprocess
 import sys
 
@@ -436,6 +437,18 @@ def run_ucf2upc(args: list) -> None:
         print(f"Error: ucf2upc 未产出 UPC（厂商命令静默失败?）：{out_path}")
         print("       检查 UCF 语法（NET \"信号\" LOC = \"球\" | IOSTANDARD = ...;）")
         sys.exit(1)
+    # The vendor's own constraint templates use IO_TYPE=; a UCF carrying
+    # IOSTANDARD= comes through verbatim and the flow rejects it with
+    # ERROR(PHY-CST-084): Unknown ATTR iostandard (P&R fails, no bitstream).
+    # Normalize to the accepted attribute name (R12-D01, board-verified).
+    txt = open(out_path, encoding="utf-8", errors="replace").read()
+    fixed, n_fix = re.subn(r"\bIOSTANDARD\s*=", "IO_TYPE=", txt,
+                           flags=re.IGNORECASE)
+    if n_fix:
+        with open(out_path, "w", encoding="utf-8", newline="") as f:
+            f.write(fixed)
+        print(f"[i] 已把 {n_fix} 处 IOSTANDARD= 规范化为 IO_TYPE="
+              "（厂商模板属性名；否则流程报 PHY-CST-084 且布局布线失败）")
     n_pins = sum(1 for ln in open(out_path, encoding="utf-8", errors="replace")
                  if ln.strip().startswith("phycst.pin.set"))
     if n_pins == 0:

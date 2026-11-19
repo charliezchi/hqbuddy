@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.52.1
+3.52.2
 
 ## 功能特点
 
@@ -599,7 +599,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-get_pin_bank <pin> [-device <part>]` | 查询引脚所属 IO bank（器件缺省取当前目录`.hqprj`）                |
 | `-pin2csv [<.hqprj>] [-o <out.csv>]` | UPC→CSV 管脚表：UPC 按 TCL 求值（条件分支取实际值）+ 器件封装表 join，全量管脚 CSV（utf-8-sig，Excel 直接编辑）；输出缺省 `<工程名>_pins.csv`（已存在则报错，`-o` 覆盖） |
 | `-csv2upc <in.csv> [-o <out.upc>] [-device <part>\|<.hqprj>]` | CSV→UPC 管脚表：消费 `-pin2csv` 表头格式（Signal Name + Pin Name 列，其余非常规列回写为 `-attr`）；器件可解析时先校验全部球名；输出缺省与 CSV 同目录同名 `.upc` |
-| `-ucf2upc <in.ucf> [-o <out.upc>]` | Xilinx UCF 管脚约束转 UPC（厂商 ucf2upc 封装，FT110126 实测可用；无需设计；总线位输出为 名称<位> 形式需人工核对；输出已存在则报错，`-o` 覆盖） |
+| `-ucf2upc <in.ucf> [-o <out.upc>]` | Xilinx UCF 管脚约束转 UPC（厂商 ucf2upc 封装，FT110126 实测可用；无需设计；总线位输出为 名称<位> 形式需人工核对；输出已存在则报错，`-o` 覆盖；`IOSTANDARD=` 自动规范化为厂商模板要求的 `IO_TYPE=`，否则流程报 PHY-CST-084 并失败） |
 | `-udev [<part>\|<.hqprj>] [--arch\|--iotype\|--pkg]` | 原生器件报告：tile 架构图（`--fmt html\|csv\|text`，默认 html 着色地图）/ IO 类型表 / 封装管脚（+CSV）；无需设计，目标缺省先探测 `.hqprj` 再进交互选择 |
 | `-new_prj <name> [-device <part>]`  | 从模板创建`.hqprj` 工程                                              |
 | `-new_soc <name> [-core cm3\|star] [-preset <ex>]` | 从 Demo 预设生成 SoC 工程（FPGA+MCU 全套）             |
@@ -621,7 +621,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-add <files...> [<.hqprj>]`        | 添加`.v` / `.vh` / `.sdc` / `.upc` / `.f` 文件到工程（`.hqprj` 可省略，自动探测）；按 GUI 序列化规范重排 FILE 区块并校验 |
 | `-remove <files...> [<.hqprj>]`     | 从工程移除文件（连同其 FILE_TIME/FILE_TIME_CST 行） |
 | `-disable <files...> [<.hqprj>]` / `-enable <files...>` | 禁用/启用文件（GUI 交替方案：`FILE_*_DISABLED` 行与启用行按位置交错，禁用文件保留 FILE_TIME；全部源文件禁用时按 GUI 行为输出 `FILE_SRC=NONE` 并清空 `TOP_MODULE`） |
-| `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致） |
+| `-refresh_time [<.hqprj>]`          | 重建 `FILE_TIME`/`FILE_TIME_CST` 时间戳条目（修复数目不一致）：值取各文件真实 mtime；保留 `FILE_*_DISABLED` 禁用项及其时间戳；按 GUI 序列化规范重排 FILE 区块 |
 | `-synopt [<src.hqprj>] [-set k=<value>] [-show] [-clear]` | 工程级综合选项覆盖（infer_ram/fsm_opt 等开关；`fsm_encoding=auto\|onehot\|binary\|gray\|johnson` → `fsm.set -encoding`；`postsyn_areaopt=tiny..extreme\|none\|auto` → 综合后自动跑 `postsyn.areaopt`；cdc_sync=on\|off\|<N>` → 综合后自动 `lo.cdc_sync_reg.insert`（⚠️ FT110126 实测：无跨域目标时静默无效果，含真实跨域时**使构建崩溃**——不可用，RTL 手写同步链）；路径可省略自动探测、flag 位置无关；-flow/-build 全模式自动注入生成的 TCL，postsyn 段注入 design.rtlsyn 之后） |
 | `-analyze [<.hqprj>] [--routed <布线后.xpn>] [-n N] [-detail] [-toggle_rate X] [-o <dir>]` | 设计分析（实现前体检）：综合一次（不 P&R），报告落 `<工程根>/analysis/`（clocks/fanout/clkdom/hier/power/loop.rpt，重跑清空重建）并打印摘要；`--routed <布线后.xpn>` 对布线后数据库分析（功耗出真数据、层次报告可用，3 秒级）；`-n` 扇出排行条数（缺省 20），`-detail` 扇出与时钟域附逐 net 明细，`-o` 自定义报告目录（重跑只覆盖本工具的 .rpt，目录内其他文件保留）；功耗需布线后数据、层次报告在本版本无输出（均优雅降级并在摘要注明）；源文件缺失/综合失败提前明确报错 |
 | `-autosdc <src.hqprj> [--detect] [-period ns] [-o out.sdc]` | 时钟约束 SDC：`--detect` 模式（FT110126 可用）综合后 `nl.clock.detect` → 端口时钟出 create_clock 骨架、内部/衍生时钟转注释待人工确认（周期为占位值需复核）；不带 --detect 的 tc.autogen 路径在该版本不可用。
