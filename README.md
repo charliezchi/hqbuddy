@@ -649,7 +649,7 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 
 ### VLA + VIO 复位与参数调试
 
-已有参数可以直接修改 [.hqip 模板](templates/vla/vla_vio.hqip)，并按 [命令行生成方法](templates/vla/README.md) 无界面生成 IP。
+已有参数可以直接修改 [.hqip 模板](skills/ipcreator/assets/vla_vio.hqip)，并按 [ipcreator 技能中的生成方法](skills/ipcreator/references/vla-vio.md) 无界面生成 IP。
 
 在设计中声明与 `probe_out0` 同宽的顶层 `wire`，保持无其它驱动，接到设计已有的同步、复位或参数锁存逻辑。
 向导可将 VIO Input Port Count 设为 0，只保留 VIO 驱动，用 VLA 观察效果。
