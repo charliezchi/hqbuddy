@@ -6,7 +6,7 @@ An all-in-one command-line toolkit for XiST HqFpga, covering the entire FPGA dev
 
 ## 当前版本
 
-3.52.3
+3.52.4
 
 ## 功能特点
 
@@ -444,7 +444,7 @@ hqbuddy -add test.v D:\prj\demo.hqprj   :: 显式指定目标工程（可跨目�
 
 ### 刷新时间戳条目
 
-重建 `.hqprj` 中的 `FILE_TIME` / `FILE_TIME_CST` 条目，使其数量与 `FILE_SRC` / `FILE_TC`+`FILE_PC` 一致（GUI 要求两者数目相等，否则打开工程会失败）。条目不足则补、多余则删，时间戳取当前时刻：
+重建 `.hqprj` 中的 `FILE_TIME` / `FILE_TIME_CST` 条目，使其数量与 `FILE_SRC` / `FILE_TC`+`FILE_PC` 一致（GUI 要求两者数目相等，否则打开工程会失败）。条目不足则补、多余则删，时间戳取各文件真实 mtime（与 GUI 保存行为一致），并保留 `FILE_*_DISABLED` 禁用项及其时间戳、按 GUI 序列化规范重排 FILE 区块：
 
 ```bat
 hqbuddy -refresh_time [<.hqprj>]

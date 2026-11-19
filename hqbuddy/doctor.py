@@ -6,6 +6,7 @@ modules, R15 five-defect takeover, R25 mixed signals, R29 path carry-over,
 R32/R43 depth mismatch) into one read-only diagnostic.  Exit 1 on any FAIL.
 """
 import glob
+import json
 import os
 import re
 import sys
@@ -14,6 +15,34 @@ import tempfile
 from . import device as device_mod
 from .hqprj_parser import parse_hqprj
 from .ipmgr import list_ip_files
+
+
+def _clock_capable_balls(version_root, family, die, package):
+    """ball -> pad site for a die/package, from the vendor's plain-JSON .pdev.
+
+    Clock-capable (P-side) sites are the PT* pads; PB* are the B side.  This
+    is the authoritative source — ball letters carry no side information
+    (H4 -> PT79A is a legal clock ball), so a ball-letter heuristic produces
+    false failures on every legal project (R13-D01).  None = data missing."""
+    if not version_root:
+        return None
+    parts = die.split("-")
+    if len(parts) < 3 or not package:
+        return None
+    pkg_key = f"{parts[2]}-{package}"
+    path = os.path.join(version_root, "build", "common", "device", "xist",
+                        (family or "SEAL").lower(), f"{'-'.join(parts[:2])}.pdev")
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+        pkg = (data.get("package") or {}).get(pkg_key)
+        if not pkg:
+            return None
+        return pkg.get("pad") or None
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def run_doctor(args: list) -> None:
@@ -211,17 +240,35 @@ def run_doctor(args: list) -> None:
                     if not os.path.isfile(s):
                         continue
                     for ln in open(s, encoding="utf-8", errors="replace"):
-                        m3 = re.search(r'get_ports\s+\{?([A-Za-z_][\w\[\]:]*)', ln)
+                        m3 = re.search(r'get_ports\s+\{?([^\s}\]]+)', ln)
                         if m3 and re.match(r'\s*create_clock\b', ln):
-                            clk_nets.add(m3.group(1))
-                misplaced = sorted(n for n, b in pins.items()
-                                   if n in clk_nets and legal and b in legal
-                                   and not b.upper().startswith('P'))
-                if misplaced:
-                    fails.append(f"时钟脚未放在 P 侧球（build 会报 PHY-CHK-030）: "
-                                 f"{', '.join(f'{n}({pins[n]})' for n in misplaced)}")
-                elif clk_nets & set(pins):
-                    oks.append("时钟脚均在 P 侧球")
+                            # [get_ports clk] / [get_ports {clk}] / [get_ports
+                            # clk[0]] — the captured token must not keep the
+                            # SDC bracket, or the set never matches pin names
+                            # and the whole check silently no-ops (R13-D01)
+                            clk_nets.add(m3.group(1).strip('{}'))
+                pad = _clock_capable_balls(version.get('path'), family,
+                                           die, pkg)
+                if not pad:
+                    warns.append("时钟脚 P 侧检查跳过：读不到器件 pad 表"
+                                 f"（{die}/{pkg} 的 .pdev）")
+                else:
+                    misplaced, unknown = [], []
+                    for n in sorted(clk_nets & set(pins)):
+                        site = pad.get(pins[n])
+                        if site is None:
+                            unknown.append(f"{n}({pins[n]})")
+                        elif not site.upper().startswith("PT"):
+                            misplaced.append(f"{n}({pins[n]}->{site})")
+                    if misplaced:
+                        fails.append("时钟脚未放在 P 侧时钟球"
+                                     "（build 会报 PHY-CHK-030）: "
+                                     + ", ".join(misplaced))
+                    elif unknown:
+                        warns.append("时钟脚球号不在器件 pad 表中，无法判定 P 侧: "
+                                     + ", ".join(unknown))
+                    else:
+                        oks.append("时钟脚均在 P 侧球")
             except SystemExit:
                 warns.append("HqFPGA 版本未配置，跳过引脚预检（hqbuddy -cfg）")
 
