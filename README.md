@@ -647,13 +647,13 @@ hqbuddy -root        # 显示 HqFPGA 根目录路径
 | `-cmd [<file>]`                     | 通过 hqfpga CLI 执行 TCL 脚本（flow 生成的脚本比工程旧时警告重新 `-flow`）；缺省时进入 hqfpga 交互式 CLI |
 | `-regression [--offline] [base_dir]` | 一键回归套件；`--offline` 自包含（%TEMP% 自建迷你工程跑 doctor/filelist/--hook/synopt/bitinfo/-analyze/错误路径 9 项，无需基线目录/板卡）；缺省板卡模式需 r21a 基线（base_dir）
 
-### VLA + VIO 复位与参数调试
+### VLA + VIO 联合在线调试
 
 已有参数可以直接修改 [.hqip 模板](skills/ipcreator/assets/vla_vio.hqip)，并按 [ipcreator 技能中的生成方法](skills/ipcreator/references/vla-vio.md) 无界面生成 IP。
 
-在设计中声明与 `probe_out0` 同宽的顶层 `wire`，保持无其它驱动，接到设计已有的同步、复位或参数锁存逻辑。
-向导可将 VIO Input Port Count 设为 0，只保留 VIO 驱动，用 VLA 观察效果。
-例如在完成 `-insight -add/-refresh` 后执行：
+联合模式用同一个 VLA IP 抓取设计波形，并允许通过 VIO 读取状态或驱动调试信号。可按需配置 VIO 输入和输出。跨层次插桩可用 `--la` 选择抓波信号，用 `--vio-in` 选择读回信号，或用 `--vio-out` 驱动指定的顶层连线。
+
+例如，要用 VIO 发复位命令或调整运行参数，可以声明与 `probe_out0` 同宽的顶层 `wire`，接入设计已有的同步和控制逻辑。该连线应由 VIO 独占驱动。如果只需通过 VLA 观察效果，可将 VIO 输入端口数设为 0。完成 `-insight -add/-refresh` 后执行以下命令。
 
 ```powershell
 hqbuddy -vla -hier-build --la 'top/u_ctrl/status[7:0]' --vio-out debug_control --period-ns 8 my.hqprj
@@ -663,7 +663,7 @@ hqbuddy -vla -capture -force my.hqprj
 ```
 
 联合 CLI 在单 LA、单窗口模式下补齐布防、查询及读波形所用的 JTAG 命令帧，将 VIO 输出置为 0。
-复位与参数控制入口应把全零设计成空闲，需跨采集生效的参数在用户逻辑中锁存。
+使用 VIO 驱动的调试入口应把全零定义为空闲。需要跨采集保持的状态可由用户逻辑锁存。
 采集完成后 CLI 重放上次驱动值，触发超时或中断时也会尝试恢复。原生 GUI 使用自己的 JTAG 命令。
 CLI 通过最后一次 `-vla -program` 的位流哈希记录校验会话。纯 HqInsight 下载和 `-cable` 编程会使记录失效。
 使用原生 GUI 或外部下载器切换位流后，回到联合 CLI 时重新执行 `-vla -program`。
